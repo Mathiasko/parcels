@@ -1,0 +1,4 @@
+{"item":{"packetId":"Z1234567890","packetStatusId":"4242","packetStatus":"A status Packeta added after we wrote this.",
+ "trackingDetails":[
+  {"text":"Something new happened.","time":"2026-10-20 10:00:00"}
+ ]}}

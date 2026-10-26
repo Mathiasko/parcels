@@ -1,0 +1,6 @@
+{"item":{"packetId":"Z1234567890","packetStatusId":"3","packetStatus":"Your parcel has been delivered.",
+ "trackingDetails":[
+  {"text":"The parcel has been delivered.","time":"2026-10-20 14:05:11"},
+  {"text":"The parcel is on its way to the delivery address.","time":"2026-10-19 07:42:30"},
+  {"text":"The parcel has been handed over to Packeta.","time":"2026-10-17 16:20:00"}
+ ]}}

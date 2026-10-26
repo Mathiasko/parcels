@@ -1,0 +1,6 @@
+{"item":{"packetId":"Z1234567890","packetStatusId":"31","packetStatus":"Your parcel is on the way.",
+ "trackingDetails":[
+  {"text":"Middle event.","time":"2026-10-19 07:42:30"},
+  {"text":"Newest event.","time":"2026-10-20 06:00:00"},
+  {"text":"Oldest event.","time":"2026-10-17 16:20:00"}
+ ]}}
