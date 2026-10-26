@@ -22,6 +22,27 @@ export function slotFor(now: Date): number {
   return Math.min(Math.max(hour - FIRST_HOUR, 0), SLOT_COUNT - 1)
 }
 
+const isTerminal = (p: Parcel): boolean => p.status === 'delivered' || p.status === 'returned'
+
+/** Parcels the carrier is about to hand over (or hold only briefly) are polled every slot, whatever their age. */
+function isUrgent(p: Parcel, now: Date): boolean {
+  if (p.status === 'out_for_delivery' || p.status === 'ready_for_pickup') return true
+  if (p.retainedTill) {
+    const untilDeadline = p.retainedTill.getTime() - now.getTime()
+    if (untilDeadline >= 0 && untilDeadline <= 2 * DAY) return true
+  }
+  return false
+}
+
+/**
+ * A parcel that has never produced a single event in 30 days: no longer polled, and worth surfacing to
+ * the user. Derived here, not stored, so the poller and the UI cannot disagree about it.
+ */
+export function isDormant(p: Parcel, now: Date): boolean {
+  return !isTerminal(p) && !isUrgent(p, now)
+    && p.lastChangedAt === undefined && now.getTime() - p.firstSeenAt.getTime() > 30 * DAY
+}
+
 /**
  * Whether `p` should be polled now (spec section 9). The idle clock runs from the last carrier
  * movement; `lastChangedAt` is only ever set when an event is seen, so its absence means the parcel
@@ -35,15 +56,11 @@ export function slotFor(now: Date): number {
  * stays in the signature as part of the contract; the every-slot tiers need no gap check.
  */
 export function isDue(p: Parcel, now: Date, _slot: number): boolean {
-  if (p.status === 'delivered' || p.status === 'returned') return false
-  if (p.status === 'out_for_delivery' || p.status === 'ready_for_pickup') return true
-  if (p.retainedTill) {
-    const untilDeadline = p.retainedTill.getTime() - now.getTime()
-    if (untilDeadline >= 0 && untilDeadline <= 2 * DAY) return true
-  }
+  if (isTerminal(p)) return false
+  if (isUrgent(p, now)) return true
+  if (isDormant(p, now)) return false
 
   const idle = now.getTime() - (p.lastChangedAt ?? p.firstSeenAt).getTime()
-  if (p.lastChangedAt === undefined && idle > 30 * DAY) return false   // dormant: never had an event
   if (idle <= 2 * DAY) return true
 
   const lastTried = Math.max(p.lastPolledAt?.getTime() ?? -Infinity, p.lastAttemptedAt?.getTime() ?? -Infinity)

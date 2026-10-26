@@ -28,6 +28,8 @@ export interface PollDeps {
    * forced refresh can never become a retry storm against a broken carrier.
    */
   forceAll?: boolean
+  /** Restricts the run to these parcels (a single-parcel refresh). Every other rule still applies. */
+  parcelIds?: number[]
   /** Wired by email ingest (Task 18); not consumed yet. */
   ingest?: unknown
 }
@@ -83,6 +85,7 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   const health = new Map(carrierHealth(db).map(h => [h.carrier, h]))
   const byCarrier = new Map<CarrierId, Parcel[]>()
   for (const p of listActive(db)) {
+    if (deps.parcelIds && !deps.parcelIds.includes(p.id)) continue
     if (!deps.forceAll && !isDue(p, now, slot)) continue
     // Deterministic: the carrier rejected this exact postcode and would reject it identically for
     // ever, so do not ask. The flag is NOT cleared here: clearing at selection would unflag a

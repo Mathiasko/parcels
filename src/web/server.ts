@@ -1,16 +1,39 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import type { Config } from '../core/config.js'
+import type { CarrierId } from '../core/types.js'
 import type { Database } from '../db/index.js'
 import { latestEvent, listEvents } from '../db/events.js'
 import { getParcel, listActive } from '../db/parcels.js'
+import type { CarrierAdapter, HttpClient } from '../core/types.js'
+import { createHttpClient } from '../core/http.js'
+import { isDormant } from '../core/backoff.js'
+import { runPoll } from '../core/poll.js'
+import { allAdapters } from '../carriers/registry.js'
+import { createNotifier } from '../notify/send.js'
+import type { Notifier } from '../notify/types.js'
+import { listDelivered, setLabel, setPostalCode } from '../db/parcels.js'
+import { carrierHealth } from '../db/health.js'
+import { addParcel, cleanPostcode } from './actions.js'
+import {
+  deliveryStats, getUnparsedMessage, listUnparsedMessages, rawResponsesFor,
+} from './queries.js'
 import type { Html } from './views/html.js'
+import { addPage } from './views/add.js'
+import { attentionPage, type AttentionError } from './views/attention.js'
+import { healthPage } from './views/health.js'
+import { historyPage } from './views/history.js'
 import { indexPage, type RefreshNote } from './views/index.js'
 import { parcelPage } from './views/parcel.js'
-import { rawResponsesFor } from './queries.js'
+import { DateTime } from 'luxon'
 
 export interface WebDeps {
   db: Database
   config: Config
+  /** The remaining dependencies exist so tests can run a refresh without the network or a real banner. */
+  http?: HttpClient
+  adapters?: CarrierAdapter[]
+  notifier?: Notifier
+  now?: () => Date
 }
 
 /**
@@ -37,7 +60,7 @@ export function refreshNote(query: Record<string, string | undefined>): RefreshN
 }
 
 export function buildServer(deps: WebDeps): FastifyInstance {
-  const { db } = deps
+  const { db, config } = deps
   const app = Fastify({ logger: false })
 
   // Without authentication, a page the user happens to visit must not be able to drive this server:
@@ -69,6 +92,113 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       parcel, listEvents(db, parcel.id), rawResponsesFor(db, parcel.id, parcel.carrier),
       refreshNote(req.query as Record<string, string>),
     ))
+  })
+
+  const now = () => (deps.now ?? (() => new Date()))()
+  const notFound = (reply: FastifyReply) => reply.code(404).type('text/plain').send('not found')
+  const form = (req: { body: unknown }): Record<string, string> => (req.body ?? {}) as Record<string, string>
+  const text = (v: string | undefined) => (v ?? '').trim()
+  const parcelFor = (id: string) => (/^\d+$/.test(id) ? getParcel(db, Number(id)) : undefined)
+
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
+    done(null, Object.fromEntries(new URLSearchParams(body as string)))
+  })
+
+  app.get('/history', async (req, reply) => {
+    const q = req.query as Record<string, string | undefined>
+    const filters = {
+      carrier: q.carrier || undefined, q: q.q?.trim() || undefined, from: q.from || undefined, to: q.to || undefined,
+    }
+    const day = (v: string | undefined, end: boolean) => {
+      if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined
+      const d = DateTime.fromISO(v, { zone: 'Europe/Bratislava' })
+      return d.isValid ? (end ? d.endOf('day') : d.startOf('day')).toJSDate() : undefined
+    }
+    const parcels = listDelivered(db, {
+      carrier: filters.carrier as CarrierId | undefined, q: filters.q, from: day(filters.from, false), to: day(filters.to, true),
+    })
+    return send(reply, historyPage(parcels, deliveryStats(db), filters))
+  })
+
+  app.get('/health', async (_req, reply) => send(reply, healthPage(carrierHealth(db))))
+
+  const attention = (reply: FastifyReply, error?: AttentionError, status = 200) =>
+    send(reply, attentionPage(
+      listUnparsedMessages(db), listActive(db).filter(p => isDormant(p, now())), now(), error,
+    ), status)
+  app.get('/attention', async (_req, reply) => attention(reply))
+
+  app.get('/add', async (_req, reply) => send(reply, addPage()))
+
+  app.post('/add', async (req, reply) => {
+    const f = form(req)
+    const values = { number: text(f.number), carrier: text(f.carrier), label: text(f.label), postcode: text(f.postcode) }
+    const result = addParcel(db, config, { ...values, source: 'manual' })
+    if (result.ok) return reply.redirect(`/parcel/${result.id}`, 303)
+    return send(reply, addPage(result.message, values), result.status)
+  })
+
+  app.post<{ Params: { messageId: string } }>('/attention/:messageId/assign', async (req, reply) => {
+    const messageId = Number(req.params.messageId)
+    const message = Number.isInteger(messageId) ? getUnparsedMessage(db, messageId) : undefined
+    if (!message) return notFound(reply)
+    const f = form(req)
+    const values = { number: text(f.number), carrier: text(f.carrier), label: text(f.label), postcode: text(f.postcode) }
+    const link = (parcelId: number) => db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = ? WHERE id = ?').run(parcelId, messageId)
+    const result = db.transaction(() => {
+      const r = addParcel(db, config, { ...values, source: 'email', sourceMessageId: message.messageId })
+      // The email is about a parcel we already track: resolve it against that parcel rather than leave it waiting.
+      if (r.ok) link(r.id)
+      else if (r.status === 409) link(r.existingId)
+      return r
+    })()
+    if (result.ok) return reply.redirect(`/parcel/${result.id}`, 303)
+    if (result.status === 409) return reply.redirect(`/parcel/${result.existingId}`, 303)
+    return attention(reply, { messageId, message: result.message, values }, result.status)
+  })
+
+  app.post<{ Params: { id: string } }>('/parcel/:id/label', async (req, reply) => {
+    const parcel = parcelFor(req.params.id)
+    if (!parcel) return notFound(reply)
+    setLabel(db, parcel.id, text(form(req).label).slice(0, 200))
+    return reply.redirect(`/parcel/${parcel.id}`, 303)
+  })
+
+  app.post<{ Params: { id: string } }>('/parcel/:id/postcode', async (req, reply) => {
+    const parcel = parcelFor(req.params.id)
+    if (!parcel) return notFound(reply)
+    setPostalCode(db, parcel.id, cleanPostcode(form(req).postcode).slice(0, 12))
+    return reply.redirect(`/parcel/${parcel.id}`, 303)
+  })
+
+  // A real poll, run from this process. It deliberately passes no force flag: the per-parcel backoff,
+  // the gated-carrier throttle and the needs_postcode skip all apply, so clicking cannot hammer a
+  // broken carrier. A notifier is passed so a status change found here is announced, not consumed.
+  let refreshing = false
+  app.post('/refresh', async (req, reply) => {
+    const target = text(form(req).parcel)
+    let back = '/'
+    let parcelIds: number[] | undefined
+    if (target !== '') {
+      const parcel = parcelFor(target)
+      if (!parcel) return notFound(reply)
+      parcelIds = [parcel.id]
+      back = `/parcel/${parcel.id}`
+    }
+    if (refreshing) return reply.redirect(`${back}?busy=1`, 303)   // a double click must not poll twice
+    refreshing = true
+    try {
+      const report = await runPoll({
+        db, config, parcelIds,
+        http: deps.http ?? createHttpClient(),
+        adapters: deps.adapters ?? allAdapters(),
+        notifier: deps.notifier ?? createNotifier(config.notifier),
+        now: now(),
+      })
+      return reply.redirect(`${back}?refreshed=${report.polled}&failures=${report.failures.length}`, 303)
+    } finally {
+      refreshing = false
+    }
   })
 
   return app

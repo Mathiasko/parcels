@@ -226,3 +226,30 @@ export function setLabel(db: Database, id: number, label: string): void {
 export function setPostalCode(db: Database, id: number, postalCode: string): void {
   db.prepare('UPDATE parcels SET postal_code = ? WHERE id = ?').run(postalCode === '' ? null : postalCode, id)
 }
+
+export interface DeliveredFilter {
+  carrier?: CarrierId
+  /** Matches the label, merchant or tracking number, case-insensitively for ASCII. */
+  q?: string
+  /** Inclusive bounds on `delivered_at` (UTC instants). */
+  from?: Date
+  to?: Date
+}
+
+/** Delivered parcels, archived or not, newest delivery first. */
+export function listDelivered(db: Database, f: DeliveredFilter = {}): Parcel[] {
+  const where = ["status = 'delivered'"]
+  const args: (string | number)[] = []
+  if (f.carrier) { where.push('carrier = ?'); args.push(f.carrier) }
+  if (f.q) {
+    const like = `%${f.q.replace(/[\\%_]/g, '\\$&')}%`
+    where.push("(label LIKE ? ESCAPE '\\' OR merchant LIKE ? ESCAPE '\\' OR tracking_number LIKE ? ESCAPE '\\')")
+    args.push(like, like, like)
+  }
+  if (f.from) { where.push('delivered_at >= ?'); args.push(f.from.toISOString()) }
+  if (f.to) { where.push('delivered_at <= ?'); args.push(f.to.toISOString()) }
+  const rows = db.prepare(
+    `SELECT * FROM parcels WHERE ${where.join(' AND ')} ORDER BY delivered_at IS NULL, delivered_at DESC, id DESC`,
+  ).all(...args) as Row[]
+  return rows.map(toParcel)
+}
