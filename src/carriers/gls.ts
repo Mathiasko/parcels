@@ -40,19 +40,22 @@ const POSTCODE_MISMATCH = 'E609'
 interface RawHistory {
   date: string
   time: string
-  address?: { city?: string }
+  address?: { city?: string } | string
   evtDscr?: string
+  evtNo?: string
 }
-interface RawShop { name?: string; street?: string; city?: string; zipCode?: string; latitude?: unknown; longitude?: unknown }
+interface RawAddress {
+  name?: string; blockNo1?: string; postalCode?: string; city?: string; latitude?: unknown; longitude?: unknown
+}
 interface RawItem {
   tuNo?: string
   progressBar?: { statusInfo?: string }
-  parcelShop?: RawShop
-  addresses?: { latitude?: unknown; longitude?: unknown }[]
+  parcelShop?: { parcelShopID?: string }
+  addresses?: RawAddress[]
   history?: RawHistory[]
-  exceptionCode?: string
 }
-interface RawBody { tuStatus?: RawItem[]; exceptionCode?: string }
+/** Errors carry their code in `lastError` (verified live); a 403 has none, and a 400 lists `fieldExceptions`. */
+interface RawBody { tuStatus?: RawItem[]; lastError?: string }
 
 /** What one endpoint call amounted to, before any status is derived. */
 type Answer =
@@ -73,19 +76,17 @@ function coordinate(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
+/** `parcelShop` only says a shop is involved (`parcelShopID`); where it is lives in `addresses[]`. */
 function toPickup(item: RawItem): PickupPoint | undefined {
-  const shop = item.parcelShop
-  if (!shop || typeof shop !== 'object') return undefined
-  // Coordinates live on `addresses[]`; the shop object itself is only a fallback.
-  const located = (item.addresses ?? []).find(
+  if (!item.parcelShop || typeof item.parcelShop !== 'object') return undefined
+  const where = (item.addresses ?? []).find(
     a => coordinate(a?.latitude) !== undefined && coordinate(a?.longitude) !== undefined,
   )
-  const lat = coordinate(located?.latitude ?? shop.latitude)
-  const lon = coordinate(located?.longitude ?? shop.longitude)
+  if (!where) return { kind: 'parcelshop' }
   return {
     kind: 'parcelshop',
-    name: shop.name, street: shop.street, city: shop.city, postalCode: shop.zipCode,
-    ...(lat !== undefined && lon !== undefined && { lat, lon }),
+    name: where.name, street: where.blockNo1, city: where.city, postalCode: where.postalCode,
+    lat: coordinate(where.latitude), lon: coordinate(where.longitude),
   }
 }
 
@@ -108,8 +109,9 @@ function toResult(number: string, item: RawItem): FetchResult {
     occurredAtTz: e.tz,
     occurredAt: e.at,
     status: i === entries.length - 1 ? status : 'unknown',
+    code: e.h.evtNo,
     description: e.h.evtDscr ?? '',
-    location: e.h.address?.city,
+    location: typeof e.h.address === 'string' ? e.h.address : e.h.address?.city,
   }))
 
   const result: FetchResult = { ok: true, number, status, statusRaw: statusInfo, events, raw: item }
@@ -135,8 +137,10 @@ async function ask(url: string, http: HttpClient): Promise<Answer> {
     return { kind: 'failed', reason: 'transport' }
   }
   const item = body?.tuStatus?.[0]
-  const code = body?.exceptionCode ?? item?.exceptionCode
-  if (typeof code === 'string') return { kind: 'code', code }
+  if (typeof body?.lastError === 'string') return { kind: 'code', code: body.lastError }
+  // An empty `tuStatus` with no error code is deliberately `transport`, NOT `not_found`: that shape
+  // has never been observed, and "not found" is silent while "transport" surfaces. Do not change it
+  // without a captured response showing GLS really answers that way for an unknown parcel.
   if (res.status !== 200 || !item || typeof item !== 'object') return { kind: 'failed', reason: 'transport' }
   // The dummy-parcel trap: HTTP 200 and a fabricated parcel carrying every event code. It would
   // parse cleanly and report a nonsense status with full confidence, so it is refused.
@@ -151,9 +155,6 @@ const withCommon = () => `caller=${CALLER}&millis=${Date.now()}`
 async function fetchOne({ number, postalCode }: FetchInput, http: HttpClient): Promise<FetchResult> {
   const transport: FetchResult = { ok: false, number, reason: 'transport' }
   const postcode = postalCode?.trim()
-  // Deterministic: without a postcode rstt028 cannot be asked. No placeholder, no default; the
-  // orchestrator remembers the rejection and does not ask again until the postcode changes.
-  if (!postcode) return { ok: false, number, reason: 'needs_postcode' }
 
   const finish = (answer: Answer): FetchResult => {
     if (answer.kind === 'item') return toResult(number, answer.item)
@@ -161,13 +162,19 @@ async function fetchOne({ number, postalCode }: FetchInput, http: HttpClient): P
     return NOT_FOUND_CODES.has(answer.code) ? { ok: false, number, reason: 'not_found' } : transport
   }
 
+  const overview = () => ask(`${BASE}/rstt029?match=${encodeURIComponent(number)}&${withCommon()}`, http)
+
   try {
+    // rstt029 needs no postcode and still gives the authoritative status, so a missing postcode
+    // degrades to status-only (no history) rather than `needs_postcode`: the orchestrator would stop
+    // polling such a parcel altogether. No placeholder or default postcode is ever invented.
+    if (!postcode) return finish(await overview())
     const detail = await ask(
       `${BASE}/rstt028/${encodeURIComponent(number)}?postalCode=${encodeURIComponent(postcode)}&${withCommon()}`, http,
     )
     if (detail.kind === 'code' && detail.code === POSTCODE_MISMATCH) {
       // The postcode is wrong but the parcel exists: rstt029 needs none and still gives the status.
-      return finish(await ask(`${BASE}/rstt029?match=${encodeURIComponent(number)}&${withCommon()}`, http))
+      return finish(await overview())
     }
     return finish(detail)
   } catch {

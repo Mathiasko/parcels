@@ -83,13 +83,30 @@ test('falls back to rstt029 for status only when E609 postcode mismatch is retur
   expect(calls[1]!.url.searchParams.has('postalCode')).toBe(false)
 })
 
-test('returns needs_postcode when no postal code is available', async () => {
+test('with no postal code it degrades to rstt029 status-only instead of returning needs_postcode', async () => {
+  // needs_postcode would make the orchestrator stop polling a parcel that can in fact be tracked
   for (const postalCode of [null, '', '   ']) {
-    // neither endpoint has an answer, so any request at all would fail the test
-    const { r, calls } = await fetchOne({}, postalCode)
-    expect(r).toEqual({ ok: false, number: NUMBER, reason: 'needs_postcode' })
-    expect(calls).toHaveLength(0)
+    const { r, calls } = await fetchOne({ rstt029: { body: fixture('rstt029-delivered.json') } }, postalCode)
+    const res = ok(r)
+    expect(res.status).toBe('delivered')
+    expect(res.statusRaw).toBe('DELIVERED')
+    expect(res.events).toEqual([])
+    expect(calls).toHaveLength(1)   // rstt028 has no answer in the stub, so calling it would throw
+    expect(calls[0]!.url.pathname).toBe('/app/service/open/rest/SK/sk/rstt029')
+    expect(calls[0]!.url.searchParams.get('match')).toBe(NUMBER)
+    expect(calls[0]!.url.searchParams.has('postalCode')).toBe(false)
   }
+})
+
+test('the adapter never returns needs_postcode, whatever GLS says', async () => {
+  const answers = [
+    { rstt029: { body: fixture('e000.json'), status: 404 } },
+    { rstt029: { body: fixture('forbidden-403.json'), status: 403 } },
+    { rstt029: { body: fixture('gated.html') } },
+    { rstt029: { body: 'garbage' } },
+  ]
+  for (const a of answers) expect((await fetchOne(a, null)).r).toMatchObject({ ok: false })
+  for (const a of answers) expect((await fetchOne(a, null)).r).not.toMatchObject({ reason: 'needs_postcode' })
 })
 
 test('maps progressBar.statusInfo DELIVERED to delivered', async () => {
@@ -177,21 +194,33 @@ test('an HTML body from the rstt029 fallback is gated too', async () => {
 })
 
 test('a 403 maps to gated, not not_found', async () => {
-  const { r } = await fetchOne({ rstt028: { status: 403, body: '' } })
+  // the live 403 body carries an exceptionText and NO lastError, so gating cannot depend on one
+  const { r } = await fetchOne({ rstt028: { status: 403, body: fixture('forbidden-403.json') } })
   expect(r).toEqual({ ok: false, number: NUMBER, reason: 'gated' })
 })
 
 test('E000, E206, E800 and E801 map to not_found', async () => {
   for (const code of ['E000', 'E206', 'E800', 'E801']) {
     const body = fixture('e000.json').replace('E000', code)
-    const { r, calls } = await fetchOne(detail(body))
+    const { r, calls } = await fetchOne({ rstt028: { status: 404, body } })
     expect(r, code).toEqual({ ok: false, number: NUMBER, reason: 'not_found' })
     expect(calls, code).toHaveLength(1)   // only E609 triggers the rstt029 fallback
   }
 })
 
 test('an unrecognised error code is a transport failure, not not_found', async () => {
-  const { r } = await fetchOne(detail(fixture('e000.json').replace('E000', 'E999')))
+  const { r } = await fetchOne({ rstt028: { status: 404, body: fixture('e000.json').replace('E000', 'E999') } })
+  expect(r).toEqual({ ok: false, number: NUMBER, reason: 'transport' })
+})
+
+test('a 400 field-validation body has no error code and is a transport failure', async () => {
+  const body = '{"fieldExceptions":[{"attribute":"zipcode","exceptionText":"Neplatné PSČ"}],"exceptionText":"Neplatný vstup"}'
+  const { r } = await fetchOne({ rstt028: { status: 400, body } })
+  expect(r).toEqual({ ok: false, number: NUMBER, reason: 'transport' })
+})
+
+test('an empty tuStatus with no error code stays transport, not not_found (shape unverified)', async () => {
+  const { r } = await fetchOne(detail('{"tuStatus":[]}'))
   expect(r).toEqual({ ok: false, number: NUMBER, reason: 'transport' })
 })
 
@@ -213,6 +242,7 @@ test('history is reversed to oldest-first', async () => {
     '2026-10-20 15:30:00', '2026-10-21 22:47:10', '2026-10-22 06:02:41', '2026-10-22 09:14:03',
   ])
   expect(r.events.map(e => e.location)).toEqual(['Praha', 'Senec', 'Bratislava', 'Bratislava'])
+  expect(r.events.map(e => e.code)).toEqual(['1.0', '2.0', '2.1', '3.0'])
 })
 
 test('event times are parsed as Europe/Bratislava', async () => {
@@ -236,7 +266,7 @@ test('extracts parcelShop with latitude and longitude as a parcelshop pickup poi
   expect(r.pickup).toEqual({
     kind: 'parcelshop',
     name: 'GLS ParcelShop Papiernictvo Ruzinov',
-    street: 'Ruzinovska 12',
+    street: 'Ruzinovska 12',   // addresses[].blockNo1
     city: 'Bratislava',
     postalCode: '81101',
     lat: 48.1486,
