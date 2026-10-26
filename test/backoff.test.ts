@@ -14,7 +14,7 @@ const ahead = (ms: number) => new Date(NOW.getTime() + ms)
 function parcel(over: Partial<Parcel> = {}): Parcel {
   return {
     id: 1, carrier: 'posta', trackingNumber: 'RA123456785SK', status: 'in_transit',
-    firstSeenAt: ago(60 * DAY), lastChangedAt: ago(HOUR), source: 'manual', needsPostcode: false, ...over,
+    firstSeenAt: ago(60 * DAY), lastChangedAt: ago(HOUR), source: 'manual', ...over,
   }
 }
 

@@ -2,7 +2,7 @@
 // bookkeeping, raw-response pruning, and containment of a carrier whose result cannot be stored.
 import { test, expect, describe } from 'vitest'
 import { runPoll } from '../src/core/poll.js'
-import { findParcel, updateParcelState } from '../src/db/parcels.js'
+import { findParcel, setNeedsPostcode, updateParcelState } from '../src/db/parcels.js'
 import type { HttpClient } from '../src/core/types.js'
 import { carrierHealth } from '../src/db/health.js'
 import { unnotifiedEvents } from '../src/db/events.js'
@@ -147,43 +147,86 @@ test('a chunk that throws still fails the carrier when a sibling chunk succeeded
   expect(carrierHealth(db)[0]).toMatchObject({ lastErrorKind: 'parse', consecutiveFailures: 1 })
 })
 
-test('needs_postcode flags the parcel, keeps its carrier detail, is not a health answer, and stops calling the carrier', async () => {
+test('a needs_postcode rejection records the postcode and stops the carrier being called at all', async () => {
   const db = memDb()
-  const id = addParcel(db, 'gls', '31217533227')
+  // Every parcel gets config.defaultPostalCode at creation (cli `add`), so "has a postcode" can
+  // never be what decides this: only a CHANGED postcode may make the carrier worth asking again.
+  const id = addParcel(db, 'gls', '31217533227', '81101')
   updateParcelState(db, id, { status: 'in_transit', statusRaw: 'IT', statusDetail: 'D1' })
-  const gls = stubAdapter('gls', ins => ins.map(i => failResult(i.number, 'needs_postcode')))
-  const deps = { db, http: bodyHttp(), adapters: [gls], config, now: NOW }
+  let requests = 0
+  const counting: HttpClient = (url, init) => { requests++; return bodyHttp()(url, init) }
+  const gls = stubAdapter('gls', async (ins, http) => {
+    await http('https://gls.example/track')
+    return ins.map(i => failResult(i.number, 'needs_postcode'))
+  })
+  const deps = { db, http: counting, adapters: [gls], config }
 
-  const first = await runPoll(deps)
+  const first = await runPoll({ ...deps, now: NOW })
   expect(first.failures).toEqual([])
   expect(findParcel(db, 'gls', '31217533227')).toMatchObject({
-    status: 'in_transit', statusRaw: 'IT', statusDetail: 'D1', needsPostcode: true,
+    status: 'in_transit', statusRaw: 'IT', statusDetail: 'D1', needsPostcode: '81101',
   })
   expect(findParcel(db, 'gls', '31217533227')?.lastPolledAt).toBeUndefined()
   expect(carrierHealth(db)).toEqual([])   // neither a fresh lastOkAt nor a failure
 
-  await runPoll(deps)
-  await runPoll({ ...deps, now: new Date(NOW.getTime() + 3_600_000) })
-  expect(gls.calls).toHaveLength(1)   // flagged and still without a postcode: never asked again
+  // The parcel stays in the every-slot tier, so only the rejection can keep it off the wire.
+  for (const h of [1, 2, 3, 24]) await runPoll({ ...deps, now: new Date(NOW.getTime() + h * HOUR) })
+  expect(gls.calls).toHaveLength(1)
+  expect(requests).toBe(1)
 })
 
-test('setting a postcode clears the needs_postcode flag and the parcel is polled again', async () => {
+test('only a changed postcode clears the rejection: none -> set, then set -> different', async () => {
   const db = memDb()
-  const id = addParcel(db, 'gls', '31217533227')
+  const id = addParcel(db, 'gls', '31217533227')   // no postcode stored at all
   let answer: 'needs_postcode' | 'ok' = 'needs_postcode'
   const gls = stubAdapter('gls', ins => ins.map(i =>
     answer === 'ok' ? okResult(i.number, [ev('2026-10-26 09:00:00', 'in_transit')]) : failResult(i.number, 'needs_postcode')))
-  const deps = { db, http: bodyHttp(), adapters: [gls], config, now: NOW }
-  await runPoll(deps)
-  expect(findParcel(db, 'gls', '31217533227')?.needsPostcode).toBe(true)
+  const run = (h: number) => runPoll({
+    db, http: bodyHttp(), adapters: [gls], config, now: new Date(NOW.getTime() + h * HOUR),
+  })
+  const parcel = () => findParcel(db, 'gls', '31217533227')!
+  const setPostcode = (zip: string) => db.prepare('UPDATE parcels SET postal_code = ? WHERE id = ?').run(zip, id)
 
-  db.prepare('UPDATE parcels SET postal_code = ? WHERE id = ?').run('81101', id)
-  answer = 'ok'
-  await runPoll(deps)
+  await run(0)
+  expect(parcel().needsPostcode).toBe('')   // rejected with nothing stored
 
+  setPostcode('81101')
+  await run(1)
   expect(gls.calls).toHaveLength(2)
   expect(gls.calls[1]).toEqual([{ number: '31217533227', postalCode: '81101' }])
-  expect(findParcel(db, 'gls', '31217533227')).toMatchObject({ needsPostcode: false, status: 'in_transit' })
+  expect(parcel().needsPostcode).toBe('81101')   // re-flagged with the postcode just rejected
+
+  await run(2)
+  expect(gls.calls).toHaveLength(2)   // same postcode, same deterministic answer: not asked
+
+  setPostcode('04001')
+  answer = 'ok'
+  await run(3)
+  expect(gls.calls).toHaveLength(3)
+  expect(gls.calls[2]).toEqual([{ number: '31217533227', postalCode: '04001' }])
+  expect(parcel().status).toBe('in_transit')
+  expect(parcel().needsPostcode).toBeUndefined()   // answered: the flag is gone
+})
+
+test('a flagged parcel is not unflagged by a carrier that never actually polls it', async () => {
+  const db = memDb()
+  // Both rejections name an OLDER postcode than the parcel now has, so neither parcel is skipped
+  // at selection: each one reaches its carrier, where nothing is sent for a different reason.
+  const noAdapter = addParcel(db, 'dpd', '09876543210', '82000')
+  const throttled = addParcel(db, 'gls', '31217533227', '82000')
+  setNeedsPostcode(db, noAdapter, '81101')
+  setNeedsPostcode(db, throttled, '81101')
+  db.prepare(`INSERT INTO carrier_health (carrier, last_error_at, last_error_kind, consecutive_failures)
+              VALUES ('gls', ?, 'gated', 1)`).run(new Date(NOW.getTime() - 0.5 * HOUR).toISOString())
+  const gls = stubAdapter('gls', ins => ins.map(i => okResult(i.number, [])))
+
+  const report = await runPoll({ db, http: bodyHttp(), adapters: [gls], config, now: NOW })
+
+  expect(gls.calls).toEqual([])   // gated window still open: not even a canary
+  expect(report.failures).toEqual([{ carrier: 'dpd', reason: 'no adapter registered' }])
+  expect(findParcel(db, 'dpd', '09876543210')?.needsPostcode).toBe('81101')
+  expect(findParcel(db, 'gls', '31217533227')?.needsPostcode).toBe('81101')
+  expect(db.prepare('SELECT COUNT(*) AS n FROM parcels WHERE last_attempted_at IS NOT NULL').get()).toEqual({ n: 0 })
 })
 
 const HOUR = 3_600_000
@@ -206,6 +249,33 @@ test('a failing parcel in the slow tier backs off like a healthy one instead of 
   await run(hoursAfter(19))
   expect(packeta.calls).toHaveLength(1)
   await run(hoursAfter(20))
+  expect(packeta.calls).toHaveLength(2)
+})
+
+test('a carrier whose transaction rolled back still has its attempt stamped', async () => {
+  const db = memDb()
+  const id = addParcel(db, 'packeta', 'Z0000000001')
+  db.prepare('UPDATE parcels SET last_changed_at = ? WHERE id = ?')
+    .run(new Date(NOW.getTime() - 10 * 24 * HOUR).toISOString(), id)   // slow tier: 20h between tries
+  const unstorable = { ...ev('x', 'in_transit'), occurredAt: new Date(NaN) }   // toISOString() throws
+  const packeta = stubAdapter('packeta', ins => ins.map(i => okResult(i.number, [unstorable])))
+  const run = (h: number) => runPoll({
+    db, http: bodyHttp(), adapters: [packeta], config, now: new Date(NOW.getTime() + h * HOUR),
+  })
+
+  const report = await run(0)
+
+  expect(report.failures).toEqual([expect.objectContaining({ carrier: 'packeta' })])
+  // The in-transaction stamp rolled back with the rest of the carrier's writes, so without the
+  // re-stamp outside the transaction this parcel would be retried every single slot for ever.
+  expect(findParcel(db, 'packeta', 'Z0000000001')).toMatchObject({ lastAttemptedAt: NOW })
+  expect(findParcel(db, 'packeta', 'Z0000000001')?.lastPolledAt).toBeUndefined()
+  expect(db.prepare('SELECT COUNT(*) AS n FROM events').get()).toEqual({ n: 0 })
+
+  await run(1)
+  await run(19)
+  expect(packeta.calls).toHaveLength(1)   // backed off on the strength of the stamp alone
+  await run(20)
   expect(packeta.calls).toHaveLength(2)
 })
 

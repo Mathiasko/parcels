@@ -49,6 +49,14 @@ type Fetched =
 
 const describe = (err: unknown) => (err instanceof Error ? `${err.name}: ${err.message}` : String(err))
 
+/**
+ * Whether a recorded `needs_postcode` rejection still applies: it does while the parcel's postcode
+ * is the very one that was rejected (a parcel with no postcode is recorded as `''`). Anything else
+ * - a different postcode, or one finally supplied - is a genuine change worth asking about.
+ */
+const rejectionStands = (p: Parcel): boolean =>
+  p.needsPostcode !== undefined && p.needsPostcode === (p.postalCode ?? '')
+
 function* chunks<T>(items: T[], size: number): Generator<T[]> {
   for (let i = 0; i < items.length; i += size) yield items.slice(i, i + size)
 }
@@ -68,11 +76,10 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   const byCarrier = new Map<CarrierId, Parcel[]>()
   for (const p of listActive(db)) {
     if (!isDue(p, now, slot)) continue
-    if (p.needsPostcode) {
-      // Deterministic: the carrier will answer the same until a postcode exists, so do not ask.
-      if (!p.postalCode) continue
-      setNeedsPostcode(db, p.id, false)
-    }
+    // Deterministic: the carrier rejected this exact postcode and would reject it identically for
+    // ever, so do not ask. The flag is NOT cleared here: clearing at selection would unflag a
+    // parcel whose carrier has no adapter or is throttled, i.e. one that never gets polled at all.
+    if (rejectionStands(p)) continue
     byCarrier.set(p.carrier, [...(byCarrier.get(p.carrier) ?? []), p])
   }
 
@@ -143,6 +150,9 @@ function applyCarrier(
 
   for (const f of fetched) {
     markAttempted(db, f.chunk.map(p => p.id), now)
+    // Every parcel here really was sent, so a rejection recorded against an older postcode is now
+    // spent. A fresh `needs_postcode` answer below re-flags it with the postcode just rejected.
+    for (const p of f.chunk) if (p.needsPostcode !== undefined) setNeedsPostcode(db, p.id, null)
     if ('error' in f) {
       outcomes.push({ ...f.error, thrown: true })
       for (const body of f.bodies) storeRaw(db, rawOwner(f.chunk), carrier, body, now)
@@ -170,9 +180,10 @@ function applyCarrier(
       } else if (r.reason === 'gated' || r.reason === 'transport') {
         outcomes.push({ kind: r.reason, detail: `${r.reason} for ${p.trackingNumber}` })
       } else if (r.reason === 'needs_postcode') {
-        // The parcel is not being tracked: flag it for the UI. The carrier's own statusDetail is
-        // left alone and lastPolledAt stays put, since nothing was actually polled.
-        setNeedsPostcode(db, p.id, true)
+        // The parcel is not being tracked: record WHICH postcode was rejected, so it is never sent
+        // again under that postcode. The carrier's own statusDetail is left alone and lastPolledAt
+        // stays put, since no tracking information was actually obtained.
+        setNeedsPostcode(db, p.id, p.postalCode ?? '')
         outcomes.push({ kind: 'neutral' })
       } else {
         // not_found (a freshly announced parcel) is normal, not an alarm.

@@ -13,8 +13,8 @@ export const config: Config = { dbPath: ':memory:', port: 0, defaultPostalCode: 
 export const memDb = (): Database => openDb(':memory:')
 
 /** Inserts a parcel first seen at NOW, so the tests do not depend on the wall clock. */
-export function addParcel(db: Database, carrier: CarrierId, trackingNumber: string): number {
-  const id = insertParcel(db, { carrier, trackingNumber, source: 'manual' })
+export function addParcel(db: Database, carrier: CarrierId, trackingNumber: string, postalCode?: string): number {
+  const id = insertParcel(db, { carrier, trackingNumber, postalCode, source: 'manual' })
   db.prepare('UPDATE parcels SET first_seen_at = ? WHERE id = ?').run(NOW.toISOString(), id)
   return id
 }

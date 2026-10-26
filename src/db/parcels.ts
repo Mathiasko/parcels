@@ -26,7 +26,14 @@ export interface Parcel {
   firstSeenAt: Date
   lastPolledAt?: Date
   lastAttemptedAt?: Date
-  needsPostcode: boolean
+  /**
+   * The postal code a carrier rejected with `needs_postcode` (`''` when the parcel had none),
+   * or undefined when the parcel is not flagged. Storing the rejected value, not a boolean, is
+   * what makes the skip deterministic: the rejection only stands while `postalCode` still
+   * equals it, so changing the postcode (including none -> set) is what makes the parcel
+   * askable again.
+   */
+  needsPostcode?: string
   lastChangedAt?: Date
   deliveredAt?: Date
   source: 'email' | 'manual'
@@ -84,7 +91,7 @@ function toParcel(r: Row): Parcel {
     firstSeenAt: new Date(r.first_seen_at as string),
     lastPolledAt: date(r.last_polled_at),
     lastAttemptedAt: date(r.last_attempted_at),
-    needsPostcode: r.needs_postcode === 1,
+    needsPostcode: opt(r.needs_postcode as string | null),
     lastChangedAt: date(r.last_changed_at),
     deliveredAt: date(r.delivered_at),
     source: r.source as 'email' | 'manual',
@@ -181,8 +188,13 @@ export function markAttempted(db: Database, ids: number[], at: Date): void {
   db.transaction(() => { for (const id of ids) mark.run(iso, id) })()
 }
 
-export function setNeedsPostcode(db: Database, id: number, needs: boolean): void {
-  db.prepare('UPDATE parcels SET needs_postcode = ? WHERE id = ?').run(needs ? 1 : 0, id)
+/**
+ * Flags the parcel with the postal code the carrier rejected (`''` when it had none), or clears the
+ * flag with `null`. The stored value is compared against the parcel's current `postal_code`, so a
+ * rejection cannot be undone by anything other than a real postcode change.
+ */
+export function setNeedsPostcode(db: Database, id: number, rejected: string | null): void {
+  db.prepare('UPDATE parcels SET needs_postcode = ? WHERE id = ?').run(rejected, id)
 }
 
 export function setArchived(db: Database, id: number, at: Date): void {

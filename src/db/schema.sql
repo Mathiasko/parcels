@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS parcels (
   first_seen_at   TEXT NOT NULL,
   last_polled_at  TEXT,              -- last REAL answer from the carrier (ok / not_found)
   last_attempted_at TEXT,            -- last attempt, answered or not; backoff gaps key on the later of the two
-  needs_postcode  INTEGER NOT NULL DEFAULT 0,  -- carrier cannot be queried until postal_code is set
+  needs_postcode  TEXT,              -- the postal code the carrier REJECTED ('' = none was stored);
+                                     -- NULL means not flagged. The carrier is not queried again
+                                     -- while postal_code still equals this value.
   last_changed_at TEXT,
   delivered_at    TEXT,
   source          TEXT NOT NULL,     -- 'email' | 'manual'
