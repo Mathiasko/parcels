@@ -1,0 +1,6 @@
+{"results":[
+  {"number":"12345","status":"invalid_format"},
+  {"number":"RA987654326SK","status":"ok","events":[
+    {"localDate":"2016-07-14T06:45:30","stateCode":"transit","description":"Zasielka je na ceste"}
+  ]}
+],"status":"ok"}

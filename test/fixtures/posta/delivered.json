@@ -1,0 +1,5 @@
+{"results":[{"number":"RA123456785SK","status":"ok","events":[
+  {"localDate":"2016-07-15T10:21:00","stateCode":"delivered","detailCode":"OKP","description":"Zasielka bola dorucena"},
+  {"localDate":"2016-07-14T06:45:30","stateCode":"transit","description":"Zasielka je na ceste"},
+  {"localDate":"2016-07-13T15:08:08","stateCode":"received","description":"Zasielka bola prijata"}
+]}],"status":"ok"}

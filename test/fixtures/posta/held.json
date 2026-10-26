@@ -1,0 +1,6 @@
+{"results":[{"number":"RA123456785SK","status":"ok","events":[
+  {"localDate":"2016-07-15T08:30:00","stateCode":"notified","retainedTill":"2016-07-22","description":"Zasielka je ulozena na poste",
+   "postOffice":{"name":"Posta Bratislava 1","street":"Namestie SNP 35","city":"Bratislava","zip":"81000","lat":48.1456,"lon":17.1077}},
+  {"localDate":"2016-07-14T06:45:30","stateCode":"transit","description":"Zasielka je na ceste"},
+  {"localDate":"2016-07-13T15:08:08","stateCode":"received","description":"Zasielka bola prijata"}
+]}],"status":"ok"}
