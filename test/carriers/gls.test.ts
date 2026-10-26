@@ -213,10 +213,27 @@ test('an unrecognised error code is a transport failure, not not_found', async (
   expect(r).toEqual({ ok: false, number: NUMBER, reason: 'transport' })
 })
 
-test('a 400 field-validation body has no error code and is a transport failure', async () => {
-  const body = '{"fieldExceptions":[{"attribute":"zipcode","exceptionText":"Neplatné PSČ"}],"exceptionText":"Neplatný vstup"}'
-  const { r } = await fetchOne({ rstt028: { status: 400, body } })
+const ZIP_400 = '{"fieldExceptions":[{"attribute":"zipcode","exceptionText":"Neplatné PSČ"}],"exceptionText":"Neplatný vstup"}'
+
+test('a 400 on zipcode (malformed postcode) degrades to rstt029 status-only and rstt028 is not retried', async () => {
+  const { r, calls } = await fetchOne({
+    rstt028: { status: 400, body: ZIP_400 },
+    rstt029: { body: fixture('rstt029-delivered.json') },
+  }, '8210')
+  const res = ok(r)
+  expect(res.status).toBe('delivered')
+  expect(res.events).toEqual([])
+  expect(calls.map(c => c.url.pathname)).toEqual([
+    `/app/service/open/rest/SK/sk/rstt028/${NUMBER}`, '/app/service/open/rest/SK/sk/rstt029',
+  ])
+  expect(calls[1]!.url.searchParams.has('postalCode')).toBe(false)
+})
+
+test('a 400 on any other attribute stays a transport failure and does not fall back', async () => {
+  const body = '{"fieldExceptions":[{"attribute":"match","exceptionText":"Neplatné číslo"}],"exceptionText":"Neplatný vstup"}'
+  const { r, calls } = await fetchOne({ rstt028: { status: 400, body } })
   expect(r).toEqual({ ok: false, number: NUMBER, reason: 'transport' })
+  expect(calls).toHaveLength(1)
 })
 
 test('an empty tuStatus with no error code stays transport, not not_found (shape unverified)', async () => {

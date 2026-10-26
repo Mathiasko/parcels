@@ -55,12 +55,17 @@ interface RawItem {
   history?: RawHistory[]
 }
 /** Errors carry their code in `lastError` (verified live); a 403 has none, and a 400 lists `fieldExceptions`. */
-interface RawBody { tuStatus?: RawItem[]; lastError?: string }
+interface RawBody {
+  tuStatus?: RawItem[]
+  lastError?: string
+  fieldExceptions?: { attribute?: string }[]
+}
 
 /** What one endpoint call amounted to, before any status is derived. */
 type Answer =
   | { kind: 'item'; item: RawItem }
   | { kind: 'code'; code: string }
+  | { kind: 'bad_postcode' }   // HTTP 400 naming `zipcode`: the postcode is malformed
   | { kind: 'failed'; reason: 'gated' | 'transport' }
 
 function mapStatus(statusInfo: string): CanonicalStatus {
@@ -79,6 +84,8 @@ function coordinate(v: unknown): number | undefined {
 /** `parcelShop` only says a shop is involved (`parcelShopID`); where it is lives in `addresses[]`. */
 function toPickup(item: RawItem): PickupPoint | undefined {
   if (!item.parcelShop || typeof item.parcelShop !== 'object') return undefined
+  // GUESS pending a captured INPICKUP record: the `type` values of addresses[] are undocumented, so
+  // the first entry that carries coordinates is taken to be the shop.
   const where = (item.addresses ?? []).find(
     a => coordinate(a?.latitude) !== undefined && coordinate(a?.longitude) !== undefined,
   )
@@ -137,10 +144,17 @@ async function ask(url: string, http: HttpClient): Promise<Answer> {
     return { kind: 'failed', reason: 'transport' }
   }
   const item = body?.tuStatus?.[0]
+  // Only a `zipcode` complaint counts: a 400 about any other attribute (e.g. a malformed `match`)
+  // is a different problem with no evidence behind it, so it stays `transport` below.
+  if (res.status === 400 && Array.isArray(body?.fieldExceptions)
+      && body.fieldExceptions.some(f => f?.attribute?.toLowerCase() === 'zipcode')) {
+    return { kind: 'bad_postcode' }
+  }
   if (typeof body?.lastError === 'string') return { kind: 'code', code: body.lastError }
   // An empty `tuStatus` with no error code is deliberately `transport`, NOT `not_found`: that shape
   // has never been observed, and "not found" is silent while "transport" surfaces. Do not change it
   // without a captured response showing GLS really answers that way for an unknown parcel.
+  // (Contrast the postcode problems, which are known and handled as one policy: see fetchOne.)
   if (res.status !== 200 || !item || typeof item !== 'object') return { kind: 'failed', reason: 'transport' }
   // The dummy-parcel trap: HTTP 200 and a fabricated parcel carrying every event code. It would
   // parse cleanly and report a nonsense status with full confidence, so it is refused.
@@ -159,21 +173,24 @@ async function fetchOne({ number, postalCode }: FetchInput, http: HttpClient): P
   const finish = (answer: Answer): FetchResult => {
     if (answer.kind === 'item') return toResult(number, answer.item)
     if (answer.kind === 'failed') return { ok: false, number, reason: answer.reason }
+    if (answer.kind === 'bad_postcode') return transport   // only reachable if rstt029 itself complained
     return NOT_FOUND_CODES.has(answer.code) ? { ok: false, number, reason: 'not_found' } : transport
   }
 
   const overview = () => ask(`${BASE}/rstt029?match=${encodeURIComponent(number)}&${withCommon()}`, http)
 
   try {
-    // rstt029 needs no postcode and still gives the authoritative status, so a missing postcode
-    // degrades to status-only (no history) rather than `needs_postcode`: the orchestrator would stop
-    // polling such a parcel altogether. No placeholder or default postcode is ever invented.
+    // One deliberate policy for every postcode problem: ABSENT, MISMATCHED (E609) and MALFORMED
+    // (HTTP 400 on `zipcode`) all degrade to rstt029, which needs no postcode and still gives the
+    // authoritative status; only history[] is lost. Never `needs_postcode` (the orchestrator would
+    // stop polling a parcel we can track) and never `transport` for a deterministic failure (it would
+    // be retried identically forever). No placeholder or default postcode is ever invented.
     if (!postcode) return finish(await overview())
     const detail = await ask(
       `${BASE}/rstt028/${encodeURIComponent(number)}?postalCode=${encodeURIComponent(postcode)}&${withCommon()}`, http,
     )
-    if (detail.kind === 'code' && detail.code === POSTCODE_MISMATCH) {
-      // The postcode is wrong but the parcel exists: rstt029 needs none and still gives the status.
+    if (detail.kind === 'bad_postcode' || (detail.kind === 'code' && detail.code === POSTCODE_MISMATCH)) {
+      // rstt028 is not retried: the postcode is wrong, but the parcel itself can still be tracked.
       return finish(await overview())
     }
     return finish(detail)
