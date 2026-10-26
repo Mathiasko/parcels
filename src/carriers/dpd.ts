@@ -1,4 +1,6 @@
 import { randomBytes } from 'node:crypto'
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { parseNaive } from '../core/time.js'
 import type {
   CanonicalStatus, CarrierAdapter, FetchInput, FetchResult, HttpClient, HttpResponse, ParcelEvent, PickupPoint,
@@ -75,21 +77,81 @@ export function createTokenCache(): TokenCache {
 /**
  * Module-level on purpose: the orchestrator wraps the HttpClient afresh for every chunk, so anything keyed
  * on the client object would never hit. Both the access token and the Basic credential behind it live here.
+ * Behind this in-memory layer sits an optional file (see `setDpdAuthStore`), because the poller exits after
+ * every run and would otherwise start cold, with a new Firebase installation id, every hour.
  */
 const tokenCache = createTokenCache()
 let credential: { value: string; at: number } | undefined
 const inflight = new WeakMap<TokenCache, Promise<string>>()
 
-/** Forgets the cached credential and token, so the next call runs the whole chain. For tests, and for a 401. */
+let storePath: string | undefined
+let storeLoaded = false
+
+/**
+ * Where the last-known-good Basic credential and access token are kept between runs, or undefined for
+ * memory only (the default, and what tests get). The entry points call this with a path derived from the
+ * database location: launchd runs with an arbitrary working directory, so nothing here relies on cwd.
+ */
+export function setDpdAuthStore(path: string | undefined): void {
+  storePath = path
+  storeLoaded = false
+}
+
+/** `dpd-auth.json` next to the database, or undefined for an in-memory database. */
+export function authStorePathFor(dbPath: string): string | undefined {
+  return dbPath === ':memory:' ? undefined : join(dirname(dbPath), 'dpd-auth.json')
+}
+
+/** Forgets the cached credential and token (memory only; the file is untouched). For tests. */
 export function clearDpdCaches(): void {
   credential = undefined
   tokenCache.set('', 0)
   inflight.delete(tokenCache)
+  storeLoaded = false
 }
 
+/** Fills the empty in-memory layer from the file, once. Never throws: a bad file is just a cold start. */
+function loadStore(): void {
+  if (!storePath || storeLoaded) return
+  storeLoaded = true
+  try {
+    const stored = parseJson(readFileSync(storePath, 'utf8'))
+    if (!isObject(stored)) throw new Error('not a JSON object')
+    const c = stored.credential
+    if (!credential && isObject(c) && asString(c.value) && Number.isFinite(c.at)) {
+      credential = { value: c.value as string, at: c.at as number }
+    }
+    const t = stored.token
+    if (!tokenCache.get()?.token && isObject(t) && asString(t.token) && Number.isFinite(t.expiresAt)) {
+      tokenCache.set(t.token as string, t.expiresAt as number)
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn(`dpd: ignoring unreadable auth store ${storePath}: ${message(err)}`)
+    }
+  }
+}
+
+/** Writes the in-memory layer to the file (mode 600, via a rename so a crash cannot leave half a file). */
+function saveStore(): void {
+  if (!storePath) return
+  try {
+    const token = tokenCache.get()
+    const body = JSON.stringify({ credential, token: token?.token ? token : undefined })
+    mkdirSync(dirname(storePath), { recursive: true })
+    const tmp = `${storePath}.${process.pid}.tmp`
+    writeFileSync(tmp, body, { mode: 0o600 })
+    renameSync(tmp, storePath)
+  } catch (err) {
+    console.warn(`dpd: could not write auth store ${storePath}: ${message(err)}`)
+  }
+}
+
+/** Drops a credential or token DPD refused, in memory and in the file, so the next run does not reload it. */
 function forget(cache: TokenCache): void {
   credential = undefined
   cache.set('', 0)
+  if (cache === tokenCache) saveStore()
 }
 
 /** 400/401/403 from Firebase mean our app identity or the project moved; anything else is DPD or Google being down. */
@@ -149,6 +211,7 @@ async function runChain(http: HttpClient): Promise<{ token: string; expiresAt: n
   if (basic === undefined) {
     basic = await fetchCredential(http)
     credential = { value: basic, at: Date.now() }
+    saveStore()
   }
   let res = await requestToken(http, basic)
   if ((res.status === 400 || res.status === 401) && cachedCredential) {
@@ -156,6 +219,7 @@ async function runChain(http: HttpClient): Promise<{ token: string; expiresAt: n
     credential = undefined
     basic = await fetchCredential(http)
     credential = { value: basic, at: Date.now() }
+    saveStore()
     cachedCredential = false
     res = await requestToken(http, basic)
   }
@@ -175,12 +239,13 @@ async function runChain(http: HttpClient): Promise<{ token: string; expiresAt: n
  * Concurrent callers share one run. Throws a classified `ChainError` when the chain fails.
  */
 export function getAccessToken(http: HttpClient, cache: TokenCache = tokenCache): Promise<string> {
+  if (cache === tokenCache) loadStore()
   const hit = cache.get()
   if (hit && Date.now() < hit.expiresAt - EXPIRY_MARGIN_MS) return Promise.resolve(hit.token)
   let running = inflight.get(cache)
   if (!running) {
     running = runChain(http)
-      .then(t => { cache.set(t.token, t.expiresAt); return t.token })
+      .then(t => { cache.set(t.token, t.expiresAt); if (cache === tokenCache) saveStore(); return t.token })
       .finally(() => { inflight.delete(cache) })
     inflight.set(cache, running)
   }
@@ -229,6 +294,17 @@ function warnUnmapped(kind: string, value: string): void {
 
 const array = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
 
+/**
+ * DPD lists newest first, so entries sharing a timestamp come in reverse order; flipping them on a tie keeps
+ * the sequence deterministic, which matters because a notice takes the status of the event before it.
+ */
+function sortOldestFirst<T extends { at: Date }>(list: T[]): T[] {
+  return list
+    .map((item, i) => ({ item, i }))
+    .sort((a, b) => a.item.at.getTime() - b.item.at.getTime() || b.i - a.i)
+    .map(x => x.item)
+}
+
 /** Coarse milestones, each with the zone DPD supplied for it. Sorted oldest-first. */
 function milestones(body: Record<string, unknown>) {
   const list = array(body.parcelHistory).filter(isObject).map(h => {
@@ -239,7 +315,7 @@ function milestones(body: Record<string, unknown>) {
     const { at, tz } = parseWhen(raw, asString(m.eventDateAndTimeZoneId) ?? FALLBACK_ZONE)
     return { description, raw, at, tz, city: asString(m.city) }
   })
-  return list.sort((a, b) => a.at.getTime() - b.at.getTime())
+  return sortOldestFirst(list)
 }
 
 function milestoneEvents(list: ReturnType<typeof milestones>): ParcelEvent[] {
@@ -266,12 +342,12 @@ function scanEvents(scans: RawScan[], zoneId: string): ParcelEvent[] {
     const { at, tz } = parseWhen(`${date}T${time}`, asString(s.eventDateAndTimeZoneId) ?? zoneId)
     return { s, code, raw: `${date} ${time}`, at, tz }
   })
-  parsed.sort((a, b) => a.at.getTime() - b.at.getTime())
+  const ordered = sortOldestFirst(parsed)
 
   // A notice is not a stage: it carries the status already in force (or unknown before any), so it can
   // neither start a notification nor move the parcel.
   let current: CanonicalStatus = 'unknown'
-  return parsed.map((p): ParcelEvent => {
+  return ordered.map((p): ParcelEvent => {
     let status = current
     if (!isNoticeCode(p.code)) {
       const mapped = scanCodeStatus(p.code)
@@ -322,8 +398,16 @@ function toResult(number: string, body: Record<string, unknown>): FetchResult {
   if (!top || !description) return { ok: false, number, reason: 'transport' }
   const topZone = asString(top.eventDateAndTimeZoneId) ?? FALLBACK_ZONE
 
-  const history = milestones(body)
   const scans = array(body.parcelEvents).filter(isObject) as RawScan[]
+  // Scans are preferred when present. The milestones are then only consulted for the PARCEL_HANDED rule, so
+  // one malformed entry among them must not discard an otherwise good answer.
+  let history: ReturnType<typeof milestones>
+  try {
+    history = milestones(body)
+  } catch (err) {
+    if (scans.length === 0) throw err
+    history = []
+  }
   const events = scans.length > 0 ? scanEvents(scans, topZone) : milestoneEvents(history)
 
   // The parcel's status is DPD's own top-level `status`, never the newest event. `PARCEL_HANDED` is judged
@@ -395,11 +479,11 @@ async function fetchOne({ number, postalCode }: FetchInput, http: HttpClient): P
     }
 
     if (res.status === 401 || res.status === 403) return { ok: false, number, reason: 'gated' }   // 403: Cloudflare reached the API path
-    if (res.status === 404) return { ok: false, number, reason: 'not_found' }
-    if (res.status === 400) {
-      // Three different 400s: only the discriminator tells them apart.
+    if (res.status === 400 || res.status === 404) {
+      // Three different 400s: only the discriminator tells them apart. A 404 needs it too: without it the
+      // answer came from a gateway or a moved path, not from DPD about this parcel.
       if (exceptionType(res) === 'PARCEL_NOT_FOUND') return { ok: false, number, reason: 'not_found' }
-      console.warn(`dpd: 400 for ${number} with exceptionType ${JSON.stringify(exceptionType(res))}`)
+      console.warn(`dpd: ${res.status} for ${number} with exceptionType ${JSON.stringify(exceptionType(res))}`)
       return transport
     }
     if (res.status !== 200) return transport   // 503 means DPD is down, not an answer about the parcel

@@ -2,6 +2,7 @@ import { createHttpClient } from './core/http.js'
 import { loadRuntimeConfig } from './core/config.js'
 import { runPoll, summarize } from './core/poll.js'
 import { allAdapters } from './carriers/registry.js'
+import { authStorePathFor, setDpdAuthStore } from './carriers/dpd.js'
 import { openDb } from './db/index.js'
 
 /**
@@ -11,6 +12,7 @@ import { openDb } from './db/index.js'
  */
 async function main(): Promise<void> {
   const config = loadRuntimeConfig(process.argv[2])
+  setDpdAuthStore(authStorePathFor(config.dbPath))   // the poller exits every run; DPD's token must outlive it
   const db = openDb(config.dbPath)
   try {
     const report = await runPoll({

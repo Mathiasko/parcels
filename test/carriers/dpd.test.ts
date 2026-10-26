@@ -1,11 +1,14 @@
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test, expect, vi, beforeEach, afterEach } from 'vitest'
-import { dpdAdapter, getAccessToken, createTokenCache, clearDpdCaches } from '../../src/carriers/dpd.js'
+import { dpdAdapter, getAccessToken, createTokenCache, clearDpdCaches, setDpdAuthStore, authStorePathFor } from '../../src/carriers/dpd.js'
+import { captureBodies } from '../../src/core/http.js'
 import type { FetchResult, HttpClient } from '../../src/core/types.js'
 
 // the credential and token caches are module-level, so every test starts without them
-beforeEach(() => { clearDpdCaches() })
-afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
+beforeEach(() => { setDpdAuthStore(undefined); clearDpdCaches() })
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); setDpdAuthStore(undefined) })
 
 const fixtureText = (name: string) =>
   readFileSync(new URL(`../fixtures/dpd/${name}`, import.meta.url), 'utf8')
@@ -244,9 +247,16 @@ test('a 400 PARCEL_NOT_FOUND maps to not_found', async () => {
   expect(detailsCalls()).toHaveLength(1)   // not retried without the postcode: that is only for PROVIDE_ZIP_CODE
 })
 
-test('a 404 also maps to not_found', async () => {
+test('a 404 carrying PARCEL_NOT_FOUND also maps to not_found', async () => {
   const { r } = await lookup(happy(file('not-found.json', 404)))
   expect(r).toEqual({ ok: false, number: NUMBER, reason: 'not_found' })
+})
+
+test('a bare 404 is transport, not a missing parcel: a gateway or a moved path must not look like not_found', async () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  for (const body of ['', '<html>404 Not Found</html>', '{"message":"no such route"}']) {
+    expect((await lookup(happy({ status: 404, body }))).r).toEqual({ ok: false, number: NUMBER, reason: 'transport' })
+  }
 })
 
 test('the three 400s are told apart by exceptionType, so any other 400 is transport', async () => {
@@ -371,7 +381,7 @@ test('scan codes map to canonical statuses and an unlisted code is unknown', asy
   const body = fixtureJson('prealert.json')
   body.status.description = 'OTHER'
   body.parcelHistory = []
-  const codes = ['CNP', 'PKY', 'ORI', 'DLI', 'DLO', 'DEHD', 'DEX', 'DEY', 'ZZZ']
+  const codes = ['CNP', 'PKY', 'LHI', 'DLI', 'DLO', 'DEHD', 'DEX', 'DEY', 'ZZZ']
   body.parcelEvents = codes.map((eventType, i) => ({
     time: '10:00:00', date: `2026-10-${10 + i}`, eventType, translation: eventType, pudoId: null, city: null,
   }))
@@ -381,6 +391,42 @@ test('scan codes map to canonical statuses and an unlisted code is unknown', asy
     'ready_for_pickup', 'failed_attempt', 'delivered', 'unknown',
   ])
   expect(warn).toHaveBeenCalledWith(expect.stringContaining('ZZZ'))
+})
+
+test('ORI and SPL name no stage: they carry the status in force, so one before acceptance is not in_transit', async () => {
+  const body = fixtureJson('prealert.json')
+  body.status.description = 'OTHER'
+  body.parcelHistory = []
+  const codes = ['ORI', 'CNP', 'SPL', 'LHI', 'ORI']
+  body.parcelEvents = codes.map((eventType, i) => ({
+    time: '10:00:00', date: `2026-10-${10 + i}`, eventType, translation: eventType, pudoId: null, city: null,
+  }))
+  const res = ok((await lookup(happy(json(body)), { postalCode: '01001' })).r)
+  expect(res.events.map(e => [e.code, e.status])).toEqual([
+    ['ORI', 'unknown'], ['CNP', 'pre_transit'], ['SPL', 'pre_transit'], ['LHI', 'in_transit'], ['ORI', 'in_transit'],
+  ])
+})
+
+test('scans sharing a timestamp are ordered deterministically: DPD lists newest first, so a tie is flipped', async () => {
+  const body = fixtureJson('prealert.json')
+  body.status.description = 'OTHER'
+  body.parcelHistory = []
+  const scan = (eventType: string) => ({ time: '10:00:00', date: '2026-10-20', eventType, translation: eventType, pudoId: null, city: null })
+  body.parcelEvents = [scan('SPE'), scan('DEHD')]   // newest first: the notice came after the pickup-point scan
+  const res = ok((await lookup(happy(json(body)), { postalCode: '01001' })).r)
+  expect(res.events.map(e => [e.code, e.status])).toEqual([['DEHD', 'ready_for_pickup'], ['SPE', 'ready_for_pickup']])
+})
+
+test('a malformed parcelHistory entry does not discard a verified answer that has scans', async () => {
+  const body = fixtureJson('delivered-verified.json')
+  body.parcelHistory[1].eventDateAndTime = null
+  const res = ok((await lookup(happy(json(body)), { postalCode: '01001' })).r)
+  expect(res.status).toBe('delivered')
+  expect(res.events.map(e => e.code)).toEqual(['CNP', 'PKY', 'LHI', 'SPE', 'DEHD', 'DEYY'])
+  // without scans the same malformed entry is still transport
+  delete body.parcelEvents
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  expect((await lookup(happy(json(body)))).r).toEqual({ ok: false, number: NUMBER, reason: 'transport' })
 })
 
 test('uses eventDateAndTimeZoneId for event timestamps', async () => {
@@ -547,4 +593,143 @@ test('adapter metadata', () => {
   expect(dpdAdapter.id).toBe('dpd')
   expect(dpdAdapter.batchSize).toBe(1)
   expect(dpdAdapter.needsPostalCode).toBe(true)
+})
+
+// ---------------------------------------------------------------------------------------------------
+// The auth store: the poller exits after every run, so the credential and token must outlive the process.
+
+function tempStore() {
+  const dir = mkdtempSync(join(tmpdir(), 'dpd-auth-'))
+  return { dir, path: join(dir, 'dpd-auth.json'), done: () => rmSync(dir, { recursive: true, force: true }) }
+}
+const isFirebase = (u: string) => u === INSTALLATIONS || u === REMOTE_CONFIG
+/** Simulates a new process: memory forgotten, the file (if any) is all that is left. */
+const restart = () => clearDpdCaches()
+
+test('a cold chain is written to the auth store with mode 600', async () => {
+  const store = tempStore()
+  try {
+    setDpdAuthStore(store.path)
+    await lookup(happy(file('prealert.json')))
+    expect(statSync(store.path).mode & 0o777).toBe(0o600)
+    const saved = JSON.parse(readFileSync(store.path, 'utf8'))
+    expect(saved.credential.value).toBe(BASIC_TOKEN)
+    expect(saved.token.token).toBe('FIXTURE-access-token-1')
+  } finally { store.done() }
+})
+
+test('a cold start reads a valid persisted token and makes no firebase or oauth calls', async () => {
+  const store = tempStore()
+  try {
+    setDpdAuthStore(store.path)
+    await lookup(happy(file('prealert.json')))
+    restart()   // the next poller run
+    const { r, urls } = await lookup(happy(file('prealert.json')))
+    expect(ok(r).status).toBe('pre_transit')
+    expect(urls()).toEqual([`details/${NUMBER}`])
+  } finally { store.done() }
+})
+
+test('an expired persisted token triggers only the OAuth step, using the persisted credential', async () => {
+  const store = tempStore()
+  try {
+    setDpdAuthStore(store.path)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-26T08:00:00Z'))
+    await lookup(happy(file('prealert.json')))
+    restart()
+    vi.setSystemTime(new Date('2026-10-26T14:00:00Z'))   // token (5h16m) expired, credential (24h) not
+    const { r, urls, calls } = await lookup(happy(file('prealert.json')))
+    expect(ok(r).status).toBe('pre_transit')
+    expect(urls()).toEqual([OAUTH_PATH, `details/${NUMBER}`])
+    expect(headersOf(calls[0]!).Authorization).toBe(`Basic ${BASIC_TOKEN}`)
+  } finally { store.done() }
+})
+
+test('an expired persisted credential is read from firebase again', async () => {
+  const store = tempStore()
+  try {
+    setDpdAuthStore(store.path)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-26T08:00:00Z'))
+    await lookup(happy(file('prealert.json')))
+    restart()
+    vi.setSystemTime(new Date('2026-10-27T09:00:00Z'))   // more than a day later
+    const { urls } = await lookup(happy(file('prealert.json')))
+    expect(urls().filter(isFirebase)).toHaveLength(2)
+  } finally { store.done() }
+})
+
+test('a corrupt or unreadable store falls back to the full chain without throwing', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const store = tempStore()
+  try {
+    for (const content of ['not json at all {{{', '[]', '{"credential":{"value":"x"},"token":{"token":"t","expiresAt":"soon"}}', '']) {
+      writeFileSync(store.path, content)
+      setDpdAuthStore(store.path)
+      restart()
+      const { r, urls } = await lookup(happy(file('prealert.json')))
+      expect(ok(r).status).toBe('pre_transit')
+      expect(urls().filter(isFirebase)).toHaveLength(2)
+      // and the store is repaired by the successful chain
+      expect(JSON.parse(readFileSync(store.path, 'utf8')).token.token).toBe('FIXTURE-access-token-1')
+    }
+    // the path is a directory: unreadable, and unwritable too, yet the lookup still succeeds
+    const dirPath = join(store.dir, 'a-directory')
+    mkdirSync(dirPath)
+    setDpdAuthStore(dirPath)
+    restart()
+    const { r } = await lookup(happy(file('prealert.json')))
+    expect(ok(r).status).toBe('pre_transit')
+    expect(warn).toHaveBeenCalled()
+  } finally { store.done() }
+})
+
+test('a missing store, and a store in a directory that does not exist yet, are just a cold start', async () => {
+  const store = tempStore()
+  try {
+    setDpdAuthStore(join(store.dir, 'nested', 'deeper', 'dpd-auth.json'))
+    const { r, urls } = await lookup(happy(file('prealert.json')))
+    expect(ok(r).status).toBe('pre_transit')
+    expect(urls().filter(isFirebase)).toHaveLength(2)
+    expect(JSON.parse(readFileSync(join(store.dir, 'nested', 'deeper', 'dpd-auth.json'), 'utf8')).token.token)
+      .toBe('FIXTURE-access-token-1')
+  } finally { store.done() }
+})
+
+test('a token DPD rejects is not reloaded by the next run', async () => {
+  const store = tempStore()
+  try {
+    setDpdAuthStore(store.path)
+    const s = stub({
+      ...happy([file('unauthorized.json', 401), file('prealert.json')]),
+      oauth: [file('oauth-token.json'), json({ ...fixtureJson('oauth-token.json'), access_token: 'FIXTURE-access-token-2' })],
+    })
+    await dpdAdapter.fetch([{ number: NUMBER }], s.client())
+    expect(JSON.parse(readFileSync(store.path, 'utf8')).token.token).toBe('FIXTURE-access-token-2')
+    restart()
+    s.calls.length = 0
+    await dpdAdapter.fetch([{ number: NUMBER }], s.client())
+    expect(headersOf(s.calls[0]!).Authorization).toBe('Bearer FIXTURE-access-token-2')
+  } finally { store.done() }
+})
+
+test('the default store sits next to the database, and an in-memory database has none', () => {
+  expect(authStorePathFor('/Users/me/parcels/data/parcels.db')).toBe('/Users/me/parcels/data/dpd-auth.json')
+  expect(authStorePathFor(':memory:')).toBeUndefined()
+})
+
+test('the basic credential and access token never reach captured bodies', async () => {
+  const s = stub(happy(file('prealert.json')))
+  const capture = captureBodies(s.client())
+  const [r] = await dpdAdapter.fetch([{ number: NUMBER }], capture.http)
+  expect(ok(r as FetchResult).status).toBe('pre_transit')   // the adapter itself still saw every body
+  expect(s.urls()).toHaveLength(4)
+  expect(capture.bodies).toHaveLength(4)
+  const recorded = capture.bodies.join('\n')
+  for (const secret of [BASIC_TOKEN, 'FIXTURE-access-token-1', 'FIXTURE-installations-auth-token', '3_AS3qfwFIXTURErefresh']) {
+    expect(recorded).not.toContain(secret)
+  }
+  expect(capture.bodies.slice(0, 3)).toEqual(['[redacted]', '[redacted]', '[redacted]'])
+  expect(capture.bodies[3]).toContain('ORDER_CREATED')   // the parcel answer is still kept for diagnosis
 })

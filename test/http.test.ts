@@ -1,4 +1,5 @@
 import { test, expect, vi, afterEach } from 'vitest'
+import type { HttpClient } from '../src/core/types.js'
 import { createHttpClient, captureBodies, HttpTransportError, MAX_CAPTURED_BODY_CHARS } from '../src/core/http.js'
 
 afterEach(() => { vi.useRealTimers() })
@@ -141,4 +142,31 @@ test('captureBodies truncates an oversized body in the record but not in the res
   expect(capture.bodies[0]!.startsWith('x'.repeat(MAX_CAPTURED_BODY_CHARS))).toBe(true)
   expect(capture.bodies[0]!.length).toBeLessThan(MAX_CAPTURED_BODY_CHARS + 100)
   expect(capture.bodies[0]).toContain(`[truncated: ${big.length} characters]`)
+})
+
+test('captureBodies records [redacted] for credential-bearing URLs without reading them, and still returns the response', async () => {
+  let read = false
+  const http: HttpClient = async url => ({
+    status: 200, headers: {},
+    text: async () => { read = true; return `secret for ${url}` },
+    json: async <T>() => ({}) as T,
+  })
+  const capture = captureBodies(http)
+  for (const url of [
+    'https://firebaseinstallations.googleapis.com/v1/x', 'https://firebaseremoteconfig.googleapis.com/v1/y',
+    'https://www.dpdgroup.com/concept/webservice/oauth/token?grant_type=client_credentials',
+  ]) {
+    const res = await capture.http(url)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe(`secret for ${url}`)   // the adapter still reads it
+  }
+  expect(capture.bodies).toEqual(['[redacted]', '[redacted]', '[redacted]'])
+  read = false
+  await captureBodies(http).http('https://example.com/a')
+  expect(read).toBe(true)
+  // a custom list replaces the default
+  const custom = captureBodies(http, ['example.com'])
+  await custom.http('https://example.com/a')
+  await custom.http('https://firebaseinstallations.googleapis.com/v1/x')
+  expect(custom.bodies).toEqual(['[redacted]', 'secret for https://firebaseinstallations.googleapis.com/v1/x'])
 })

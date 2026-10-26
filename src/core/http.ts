@@ -84,16 +84,35 @@ export function createHttpClient(opts: HttpClientOptions = {}): HttpClient {
 export const MAX_CAPTURED_BODY_CHARS = 64 * 1024
 
 /**
- * Wraps a client so every response body it returns is also captured, in call order, each cut to
- * `MAX_CAPTURED_BODY_CHARS`. Lets the caller keep the raw text of a response an adapter then failed
- * to parse, or print it. The response handed back to the adapter is never truncated.
+ * Hosts and paths whose responses are live credentials (DPD's Firebase installation and Remote Config
+ * answers carry the app's Basic credential, its OAuth endpoint returns an access token). They are never
+ * recorded, because captured bodies end up in the diagnostics table.
  */
-export function captureBodies(http: HttpClient): { http: HttpClient; bodies: string[] } {
+export const DEFAULT_REDACTED_URLS: readonly string[] = [
+  'firebaseinstallations.googleapis.com',
+  'firebaseremoteconfig.googleapis.com',
+  '/oauth/token',
+]
+export const REDACTED_BODY = '[redacted]'
+
+/**
+ * Wraps a client so every response body it returns is also captured, in call order, each cut to
+ * `MAX_CAPTURED_BODY_CHARS`. A response whose URL contains one of `redactedUrls` is recorded as
+ * `[redacted]` (without being read) instead. Lets the caller keep the raw text of a response an adapter then
+ * failed to parse, or print it. The response handed back to the adapter is never truncated.
+ */
+export function captureBodies(
+  http: HttpClient, redactedUrls: readonly string[] = DEFAULT_REDACTED_URLS,
+): { http: HttpClient; bodies: string[] } {
   const bodies: string[] = []
   return {
     bodies,
     http: async (url, init) => {
       const res = await http(url, init)
+      if (redactedUrls.some(fragment => url.includes(fragment))) {
+        bodies.push(REDACTED_BODY)
+        return res
+      }
       const body = await res.text()
       bodies.push(body.length > MAX_CAPTURED_BODY_CHARS
         ? `${body.slice(0, MAX_CAPTURED_BODY_CHARS)}\n[truncated: ${body.length} characters]`

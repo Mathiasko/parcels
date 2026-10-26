@@ -27,15 +27,14 @@ const AFTER_ACCEPTANCE = new Set([
 
 /**
  * `parcelEvents[].eventType`: Geopost scan codes, preferred over the milestones where present.
- * `ORI` and `SPL` occur on both sides of the origin depot and so name no stage of their own; they are
- * movements, hence in_transit. Anything unlisted is `unknown` and logged.
+ * Anything unlisted is `unknown` and logged. `ORI` and `SPL` are deliberately not here: see STAGELESS_CODES.
  */
 const SCAN_CODES = new Map<string, CanonicalStatus>(Object.entries({
   // registered, then accepted by DPD
   CNP: 'pre_transit', ORDER_CREATED: 'pre_transit',
   PKY: 'pre_transit', DOPKY: 'pre_transit',
   // in transit
-  ORI: 'in_transit', ORS: 'in_transit', SPL: 'in_transit', SPX: 'in_transit', LHI: 'in_transit',
+  ORS: 'in_transit', SPX: 'in_transit', LHI: 'in_transit',
   HUI: 'in_transit', HUS: 'in_transit', DLI: 'in_transit', DLS: 'in_transit', DLQ: 'in_transit',
   CCO: 'in_transit', DODEH: 'in_transit',
   DLO: 'out_for_delivery',
@@ -50,7 +49,14 @@ const SCAN_CODES = new Map<string, CanonicalStatus>(Object.entries({
  */
 const NOTICE_CODES = new Set(['SPE', 'MSDLO', 'MSDLX', 'MIDLI', 'MIA', 'MII', 'ENA'])
 
-export const isNoticeCode = (code: string): boolean => NOTICE_CODES.has(code)
+/**
+ * `ORI` and `SPL` occur on both sides of the origin depot, so they name no stage: seen before acceptance
+ * they must not read as in_transit. They are handled like notices.
+ */
+const STAGELESS_CODES = new Set(['ORI', 'SPL'])
+
+/** Codes that carry the status already in force instead of setting one. */
+export const isNoticeCode = (code: string): boolean => NOTICE_CODES.has(code) || STAGELESS_CODES.has(code)
 
 /** `undefined` for a code that is not a known scan code (the caller logs it). Notices are not looked up here. */
 export const scanCodeStatus = (code: string): CanonicalStatus | undefined => SCAN_CODES.get(code)
