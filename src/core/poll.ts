@@ -22,7 +22,11 @@ export interface PollDeps {
   now: Date
   /** When present, the run's notifications are built and sent; when absent nothing is built at all. */
   notifier?: Notifier
-  /** Poll every active parcel regardless of its backoff tier (set after a long sleep gap). */
+  /**
+   * Poll every active parcel regardless of its per-parcel backoff tier (set after a long sleep gap).
+   * Overrides the tier ONLY: the gated-carrier throttle and the needs_postcode skip still apply, so a
+   * forced refresh can never become a retry storm against a broken carrier.
+   */
   forceAll?: boolean
   /** Wired by email ingest (Task 18); not consumed yet. */
   ingest?: unknown

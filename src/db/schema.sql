@@ -89,10 +89,9 @@ CREATE TABLE IF NOT EXISTS deadline_reminders (
   notified_at TEXT NOT NULL
 );
 
--- The wall-clock / awake-time pair recorded by the previous poll run (always one row, id = 1). The
--- poller is a fresh process each hour, so sleep-gap detection can only compare against stored state.
-CREATE TABLE IF NOT EXISTS poll_clock (
-  id        INTEGER PRIMARY KEY CHECK (id = 1),
-  wall_ms   INTEGER NOT NULL,
-  uptime_ms INTEGER NOT NULL
+-- When the previous poll run completed (always one row, id = 1). Sleep-gap detection asks whether the
+-- machine has woken since then; the poller is a fresh process each hour, so this must live in the DB.
+CREATE TABLE IF NOT EXISTS last_poll (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  polled_at_ms INTEGER NOT NULL
 );

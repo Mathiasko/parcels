@@ -5,7 +5,7 @@ import { allAdapters } from './carriers/registry.js'
 import { authStorePathFor, setDpdAuthStore } from './carriers/dpd.js'
 import { openDb } from './db/index.js'
 import { createNotifier } from './notify/send.js'
-import { checkSleepGap } from './core/sleepgap.js'
+import { checkSleepGap, recordPoll } from './core/sleepgap.js'
 
 /**
  * Poller entry point, run hourly by launchd. A carrier failing is data, not an error: it is
@@ -17,12 +17,15 @@ async function main(): Promise<void> {
   setDpdAuthStore(authStorePathFor(config.dbPath))   // the poller exits every run; DPD's token must outlive it
   const db = openDb(config.dbPath)
   try {
-    // After a long sleep the backoff tiers' idea of "recently polled" is stale: refresh everything.
+    // After a long sleep the backoff tiers' idea of "recently polled" is stale: refresh everything
+    // (tier backoff only; the gated-carrier throttle and needs_postcode skip still apply).
+    const startedMs = Date.now()
     const gap = checkSleepGap(db)
     const report = await runPoll({
       db, http: createHttpClient(), adapters: allAdapters(), config, now: new Date(),
       notifier: createNotifier(config.notifier), forceAll: gap.longGap,
     })
+    recordPoll(db, startedMs)   // only after the run completed: a crash mid-refresh leaves the gap to be retried
     const slept = gap.longGap ? ` [slept ${(gap.sleptMs / 3_600_000).toFixed(1)}h: full refresh]` : ''
     console.log(`${new Date().toISOString()} ${summarize(report)}${slept}`)
   } finally {
