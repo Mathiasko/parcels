@@ -31,11 +31,15 @@ export interface PollReport {
 const RAW_RESPONSES_KEPT = 5
 
 type Failure = Exclude<HealthOutcome, 'ok'>
-interface Outcome { kind: HealthOutcome; detail?: string }
+/** `thrown`: the adapter call itself threw, which no sibling chunk's success may paper over. */
+interface Outcome { kind: HealthOutcome; detail?: string; thrown?: boolean }
 
-/** What one adapter call produced: results, or the reason it threw plus the bodies it had read. */
+/** Value of `parcels.status_detail` for a parcel the carrier cannot look up without a postcode (the UI keys on it). */
+export const NEEDS_POSTCODE = 'needs_postcode'
+
+/** What one adapter call produced (a result list, or the throw), plus the response bodies it read. */
 type Fetched =
-  | { chunk: Parcel[]; results: FetchResult[] }
+  | { chunk: Parcel[]; results: FetchResult[]; bodies: string[] }
   | { chunk: Parcel[]; error: { kind: Failure; detail: string }; bodies: string[] }
 
 const describe = (err: unknown) => (err instanceof Error ? `${err.name}: ${err.message}` : String(err))
@@ -91,7 +95,7 @@ async function fetchCarrier(adapter: CarrierAdapter, parcels: Parcel[], http: Ht
     const capture = captureBodies(http)
     try {
       const inputs = chunk.map(p => ({ number: p.trackingNumber, postalCode: p.postalCode }))
-      out.push({ chunk, results: await adapter.fetch(inputs, capture.http) })
+      out.push({ chunk, results: await adapter.fetch(inputs, capture.http), bodies: capture.bodies })
     } catch (err) {
       // Never let one carrier take the run down. A transport error means no response arrived; any
       // other throw means a response arrived that the adapter could not make sense of.
@@ -110,14 +114,20 @@ function applyCarrier(
 
   for (const f of fetched) {
     if ('error' in f) {
-      outcomes.push(f.error)
-      if (f.error.kind === 'parse') {
-        for (const p of f.chunk) {
-          for (const body of f.bodies) storeRaw(db, p.id, carrier, body, now)
-          updateParcelState(db, p.id, { status: 'unknown', statusRaw: p.statusRaw })
-        }
+      outcomes.push({ ...f.error, thrown: true })
+      for (const body of f.bodies) storeRaw(db, rawOwner(f.chunk), carrier, body, now)
+      // Only a lone parcel is known to be the one that could not be read. A batch failure says
+      // nothing about any single parcel, so their statuses are left exactly as they were.
+      if (f.error.kind === 'parse' && f.chunk.length === 1) {
+        const p = f.chunk[0]!
+        updateParcelState(db, p.id, { status: 'unknown', statusRaw: p.statusRaw })
       }
       continue
+    }
+    // Nothing in the response was usable. The adapter swallowed the problem into per-number
+    // `transport` results, so keep the body that explains it (once per chunk).
+    if (f.results.every(r => !r.ok && r.reason === 'transport')) {
+      for (const body of f.bodies) storeRaw(db, rawOwner(f.chunk), carrier, body, now)
     }
     const byNumber = new Map(f.results.map(r => [r.number, r]))
     for (const p of f.chunk) {
@@ -129,10 +139,18 @@ function applyCarrier(
         outcomes.push({ kind: 'ok' })
       } else if (r.reason === 'gated' || r.reason === 'transport') {
         outcomes.push({ kind: r.reason, detail: `${r.reason} for ${p.trackingNumber}` })
+      } else if (r.reason === 'needs_postcode') {
+        // Not an alarm, but the parcel is not being tracked either: flag it on the row so the UI can
+        // ask for a postcode. lastPolledAt stays put because nothing was actually polled.
+        updateParcelState(db, p.id, { status: p.status, statusRaw: p.statusRaw, statusDetail: NEEDS_POSTCODE })
+        outcomes.push({ kind: 'ok' })
       } else {
-        // not_found (a freshly announced parcel) and needs_postcode are normal, not alarms.
+        // not_found (a freshly announced parcel) is normal, not an alarm.
         updateParcelState(db, p.id, {
-          status: p.status, statusRaw: p.statusRaw, statusDetail: p.statusDetail, lastPolledAt: now,
+          status: p.status,
+          statusRaw: p.statusRaw,
+          statusDetail: p.statusDetail === NEEDS_POSTCODE ? undefined : p.statusDetail,
+          lastPolledAt: now,
         })
         outcomes.push({ kind: 'ok' })
       }
@@ -145,12 +163,15 @@ function applyCarrier(
 }
 
 /**
- * `gated` always wins: the adapter itself is broken. Otherwise one parcel's trouble does not
+ * `gated` always wins: the adapter itself is broken. Next, any adapter call that threw: a sibling
+ * chunk succeeding does not make that carrier healthy. Otherwise one parcel's trouble does not
  * indict the carrier while any other parcel got a real answer; with none, the first failure does.
  */
 function carrierVerdict(outcomes: Outcome[]): Outcome {
   const gated = outcomes.find(o => o.kind === 'gated')
   if (gated) return gated
+  const thrown = outcomes.find(o => o.thrown)
+  if (thrown) return thrown
   if (outcomes.some(o => o.kind === 'ok')) return { kind: 'ok' }
   return outcomes[0] ?? { kind: 'ok' }
 }
@@ -186,15 +207,19 @@ function markAppendedNotified(db: Database, parcelId: number, appended: ParcelEv
   markNotified(db, ids, now)
 }
 
-function storeRaw(db: Database, parcelId: number, carrier: CarrierId, body: string, now: Date): void {
+/** A body from a multi-parcel chunk belongs to no single parcel, so it is stored with a null parcel. */
+const rawOwner = (chunk: Parcel[]): number | null => (chunk.length === 1 ? chunk[0]!.id : null)
+
+function storeRaw(db: Database, parcelId: number | null, carrier: CarrierId, body: string, now: Date): void {
   db.prepare('INSERT INTO raw_responses (parcel_id, carrier, fetched_at, body) VALUES (?, ?, ?, ?)')
     .run(parcelId, carrier, now.toISOString(), body)
+  // Last N per parcel; the parcel-less bodies are bounded the same way, per carrier.
   db.prepare(`
     DELETE FROM raw_responses
-    WHERE parcel_id = ? AND id NOT IN (
-      SELECT id FROM raw_responses WHERE parcel_id = ? ORDER BY id DESC LIMIT ?
+    WHERE carrier = ? AND parcel_id IS ? AND id NOT IN (
+      SELECT id FROM raw_responses WHERE carrier = ? AND parcel_id IS ? ORDER BY id DESC LIMIT ?
     )
-  `).run(parcelId, parcelId, RAW_RESPONSES_KEPT)
+  `).run(carrier, parcelId, carrier, parcelId, RAW_RESPONSES_KEPT)
 }
 
 /** One line for logs: `polled 3 parcels, 2 new events, 1 carrier failed (gls: gated ...)`. */

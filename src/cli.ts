@@ -129,13 +129,17 @@ async function probe(argv: string[], ctx: CliContext): Promise<void> {
   }
 
   const capture = captureBodies(ctx.http ?? createHttpClient())
-  const [result] = await adapter.fetch(
-    [{ number: normalizeNumber(positionals[1]!), postalCode: values.zip ?? ctx.config.defaultPostalCode }],
-    capture.http,
-  )
-  for (const body of capture.bodies) ctx.out(body)
-  // Response bodies go to stdout verbatim; the parsed reading (minus the bulky raw) to stderr.
-  ctx.err(`parsed: ${JSON.stringify(result, (key, value) => (key === 'raw' ? undefined : value))}`)
+  try {
+    const [result] = await adapter.fetch(
+      [{ number: normalizeNumber(positionals[1]!), postalCode: values.zip ?? ctx.config.defaultPostalCode }],
+      capture.http,
+    )
+    // The parsed reading (minus the bulky raw) goes to stderr, apart from the verbatim bodies.
+    ctx.err(`parsed: ${JSON.stringify(result, (key, value) => (key === 'raw' ? undefined : value))}`)
+  } finally {
+    // Printed even when the adapter throws: the body that broke the parser is the evidence probe is for.
+    for (const body of capture.bodies) ctx.out(body)
+  }
 }
 
 /** Runs one command and returns the process exit code. Never throws for user mistakes. */

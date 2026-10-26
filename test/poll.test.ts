@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { runPoll } from '../src/core/poll.js'
 import { carrierHealth } from '../src/db/health.js'
 import { openDb } from '../src/db/index.js'
-import { findParcel, updateParcelState, listActive } from '../src/db/parcels.js'
+import { findParcel, updateParcelState } from '../src/db/parcels.js'
 import { HttpTransportError } from '../src/core/http.js'
 import {
   NOW, config, memDb, addParcel, ev, okResult, failResult, stubAdapter, bodyHttp,
@@ -75,7 +75,8 @@ test('a gated result records carrier health as gated and does not alter the parc
 
 test('a not_found result records health as ok and does not alarm', async () => {
   const db = memDb()
-  addParcel(db, 'posta', 'RA000000001SK')
+  const id = addParcel(db, 'posta', 'RA000000001SK')
+  updateParcelState(db, id, { status: 'in_transit', statusRaw: 'IT', statusDetail: 'D1' })
   const posta = stubAdapter('posta', ins => ins.map(i => failResult(i.number, 'not_found')), 100)
 
   const report = await runPoll({ db, http: bodyHttp(), adapters: [posta], config, now: NOW })
@@ -84,7 +85,7 @@ test('a not_found result records health as ok and does not alarm', async () => {
   expect(carrierHealth(db)).toEqual([expect.objectContaining({
     carrier: 'posta', consecutiveFailures: 0, lastOkAt: NOW, lastErrorKind: undefined,
   })])
-  expect(findParcel(db, 'posta', 'RA000000001SK')).toMatchObject({ status: 'unknown', lastPolledAt: NOW })
+  expect(findParcel(db, 'posta', 'RA000000001SK')).toMatchObject({ status: 'in_transit', statusRaw: 'IT', statusDetail: 'D1', lastPolledAt: NOW })
 })
 
 test('one carrier throwing does not prevent the other carriers from being polled', async () => {
@@ -146,17 +147,20 @@ test('consecutive_failures resets to zero after a successful poll', async () => 
 test('the run commits even when every carrier fails', async () => {
   const path = join(mkdtempSync(join(tmpdir(), 'parcels-')), 'p.db')
   const db = openDb(path)
-  addParcel(db, 'posta', 'RA000000001SK')
-  addParcel(db, 'packeta', 'Z0000000001')
-  const boom = (id: 'posta' | 'packeta') => stubAdapter(id, () => { throw new Error('boom') })
+  const observer = openDb(path)   // a second connection only sees what has really been committed
+  try {
+    addParcel(db, 'posta', 'RA000000001SK')
+    addParcel(db, 'packeta', 'Z0000000001')
+    const boom = (id: 'posta' | 'packeta') => stubAdapter(id, () => { throw new Error('boom') })
 
-  const report = await runPoll({ db, http: bodyHttp(), adapters: [boom('posta'), boom('packeta')], config, now: NOW })
-  db.close()
+    const report = await runPoll({ db, http: bodyHttp(), adapters: [boom('posta'), boom('packeta')], config, now: NOW })
 
-  expect(report.failures).toHaveLength(2)
-  const reopened = openDb(path)   // a rolled-back or uncommitted write would not survive a reopen
-  expect(carrierHealth(reopened).map(h => [h.carrier, h.consecutiveFailures]).sort())
-    .toEqual([['packeta', 1], ['posta', 1]])
-  expect(listActive(reopened)).toHaveLength(2)
-  reopened.close()
+    expect(report.failures).toHaveLength(2)
+    expect(carrierHealth(observer).map(h => [h.carrier, h.consecutiveFailures]).sort())
+      .toEqual([['packeta', 1], ['posta', 1]])
+    expect(db.inTransaction).toBe(false)   // nothing left open for a later close() to roll back
+  } finally {
+    observer.close()
+    db.close()
+  }
 })

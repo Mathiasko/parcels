@@ -2,6 +2,7 @@
 import { test, expect } from 'vitest'
 import { runCli } from '../src/cli.js'
 import type { HttpClient } from '../src/core/types.js'
+import { register } from '../src/carriers/registry.js'
 import { findParcel, insertParcel } from '../src/db/parcels.js'
 import { config, memDb, ev, okResult, stubAdapter, bodyHttp } from './poll-helpers.js'
 
@@ -53,4 +54,19 @@ test('an unknown flag or command is a usage message and exit 1, not a stack trac
   const cmd = await cli(memDb(), ['frobnicate'])
   expect(cmd.code).toBe(1)
   expect(cmd.err).toMatch(/unknown command "frobnicate"/)
+})
+
+test('probe still prints the response body when the adapter throws while parsing it', async () => {
+  const body = '{"results":[{"number":"X","sta'
+  const sps = stubAdapter('sps', async (_ins, http) => {
+    JSON.parse(await (await http('https://sps.example')).text())
+    return []
+  })
+  register(sps)
+
+  const r = await cli(memDb(), ['probe', 'sps', '7031234567890123'], { http: bodyHttp(body) })
+
+  expect(r.code).toBe(1)
+  expect(r.out).toEqual([body])
+  expect(r.err).toMatch(/probe failed/)
 })

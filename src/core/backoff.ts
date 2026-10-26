@@ -1,7 +1,12 @@
 import { DateTime } from 'luxon'
 import type { Parcel } from '../db/parcels.js'
 
-const DAY = 24 * 3_600_000
+const HOUR = 3_600_000
+const DAY = 24 * HOUR
+
+/** The mid tier is "every third slot" and the slow tier "once a day", measured as time since the last poll. */
+const MID_TIER_MIN_GAP = 2.5 * HOUR
+const SLOW_TIER_MIN_GAP = 20 * HOUR
 
 const WINDOW_ZONE = 'Europe/Bratislava'
 const FIRST_HOUR = 7
@@ -18,11 +23,17 @@ export function slotFor(now: Date): number {
 }
 
 /**
- * Whether `p` should be polled in this slot (spec section 9). The idle clock runs from the last
- * carrier movement; `lastChangedAt` is only ever set when an event is seen, so its absence means
- * the parcel has never had one and its age is counted from `firstSeenAt` instead.
+ * Whether `p` should be polled now (spec section 9). The idle clock runs from the last carrier
+ * movement; `lastChangedAt` is only ever set when an event is seen, so its absence means the parcel
+ * has never had one and its age is counted from `firstSeenAt` instead.
+ *
+ * The slower tiers are expressed as time since `lastPolledAt`, not as a position in the slot grid:
+ * this Mac sleeps through whole slots, and a rule keyed on "slot 0" or "slot % 3" would skip a
+ * parcel for a day if the Mac happened not to be awake then. `lastPolledAt` advances only on a real
+ * answer, so a failed poll leaves the parcel due. `slot` stays in the signature as part of the
+ * contract; the every-slot tiers need no gap check.
  */
-export function isDue(p: Parcel, now: Date, slot: number): boolean {
+export function isDue(p: Parcel, now: Date, _slot: number): boolean {
   if (p.status === 'delivered' || p.status === 'returned') return false
   if (p.status === 'out_for_delivery' || p.status === 'ready_for_pickup') return true
   if (p.retainedTill) {
@@ -33,6 +44,7 @@ export function isDue(p: Parcel, now: Date, slot: number): boolean {
   const idle = now.getTime() - (p.lastChangedAt ?? p.firstSeenAt).getTime()
   if (p.lastChangedAt === undefined && idle > 30 * DAY) return false   // dormant: never had an event
   if (idle <= 2 * DAY) return true
-  if (idle <= 7 * DAY) return slot % 3 === 0
-  return slot === 0
+
+  const sincePoll = p.lastPolledAt ? now.getTime() - p.lastPolledAt.getTime() : Infinity
+  return sincePoll >= (idle <= 7 * DAY ? MID_TIER_MIN_GAP : SLOW_TIER_MIN_GAP)
 }
