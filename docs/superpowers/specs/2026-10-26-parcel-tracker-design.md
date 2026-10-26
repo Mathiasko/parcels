@@ -641,9 +641,39 @@ CREATE TABLE deadline_reminders (   -- one row per parcel whose pickup-deadline 
 
 ### Setup (user-performed, documented in the README)
 
-1. Create a dedicated mailbox, e.g. `parcels@<domain>`.
-2. Add a Gmail filter forwarding shipping-looking mail to it.
-3. Put IMAP host, user, and password in a local config file, `chmod 600`, gitignored.
+**Decision (2026-10-26, revised): read the user's main Gmail account directly,
+scoped to a label. No dedicated mailbox, no forwarding.**
+
+1. In Gmail, create a filter whose action is **Apply the label `parcels`** to
+   shipping mail. Nothing is forwarded and nothing leaves the account.
+2. Create an **App Password** (`myaccount.google.com/apppasswords`; requires 2FA).
+   IMAP is on by default on Gmail — the old enable toggle no longer exists.
+3. Put the IMAP settings in `config.json`, `chmod 600`, gitignored, with
+   `mailbox` set to the label name (`parcels`). Gmail exposes labels as IMAP
+   folders by name; nested labels use `parent/child`.
+
+**The ingest MUST be strictly read-only. It must never write IMAP flags.**
+The original design fetched `UNSEEN` and set `\Seen` after a successful commit,
+which is harmless against a throwaway mailbox but would **silently mark the
+user's own email as read** on their main account. Instead, fetch the label's
+messages and deduplicate on the `messages` table's `UNIQUE message_id`. The
+mailbox is never mutated.
+
+**Accepted trade-off:** an App Password is not scope-limited — it grants full
+IMAP read and SMTP send on the whole account, so the label scope is a convention
+the app honours rather than a boundary Google enforces. Mitigations: the
+credential is local, `chmod 600`, gitignored, used by an app that never listens
+externally, and revocable instantly. `gmail.readonly` OAuth would be properly
+scoped, but it is a *restricted* scope, so an unverified personal app stays in
+"Testing" status where **Google expires refresh tokens every 7 days** — which
+defeats an unattended poller. The theoretically safer option is the practically
+worse one here.
+
+**Consequence for extraction:** because nothing is forwarded, the original
+`From` header is always intact, so carrier detection reads it directly. The
+`---------- Forwarded message ----------` wrapper only appears for mail the user
+forwards by hand, so wrapper parsing becomes a fallback rather than the primary
+path. Both shapes must be handled and tested.
 
 ### Pipeline
 
