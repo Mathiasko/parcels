@@ -212,3 +212,17 @@ export function markAnnounced(db: Database, id: number, status: CanonicalStatus,
   db.prepare('UPDATE parcels SET last_announced_status = ?, pickup_announced = pickup_announced OR ? WHERE id = ?')
     .run(status, pickupAnnounced ? 1 : 0, id)
 }
+
+/** An empty label clears it, so the parcel falls back to its merchant or tracking number. */
+export function setLabel(db: Database, id: number, label: string): void {
+  db.prepare('UPDATE parcels SET label = ? WHERE id = ?').run(label === '' ? null : label, id)
+}
+
+/**
+ * Changes the postal code used for GLS/DPD lookups. A parcel flagged `needs_postcode` is NOT unflagged
+ * here: the poller compares the flag against this value, so any change (including none -> set) makes
+ * the parcel askable again, and the next poll that sends it clears the flag.
+ */
+export function setPostalCode(db: Database, id: number, postalCode: string): void {
+  db.prepare('UPDATE parcels SET postal_code = ? WHERE id = ?').run(postalCode === '' ? null : postalCode, id)
+}

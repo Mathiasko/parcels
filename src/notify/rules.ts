@@ -12,7 +12,7 @@ const STALE_AFTER_FAILURES = 3
 const DEADLINE_WINDOW_MS = 48 * 3_600_000
 const DISPLAY_ZONE = 'Europe/Bratislava'
 
-const STATUS_TITLE: Record<CanonicalStatus, string> = {
+export const STATUS_TITLE: Record<CanonicalStatus, string> = {
   pre_transit: 'Registered',
   in_transit: 'In transit',
   out_for_delivery: 'Out for delivery',
@@ -25,7 +25,7 @@ const STATUS_TITLE: Record<CanonicalStatus, string> = {
   unknown: 'Status unknown',
 }
 
-const CARRIER_NAME: Record<CarrierId, string> = {
+export const CARRIER_NAME: Record<CarrierId, string> = {
   posta: 'Slovenská pošta', packeta: 'Packeta', gls: 'GLS', sps: 'SPS', dpd: 'DPD',
 }
 
