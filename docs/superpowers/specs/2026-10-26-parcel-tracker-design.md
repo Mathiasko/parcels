@@ -241,9 +241,16 @@ GET https://api.posta.sk/tracking?q={codes}&l=sk&p=1
   with `10 → 0` and `11 → 5`. **The API does not enforce it** — validate locally to
   catch typos only. A non-`SK` suffix returning `ok` does *not* imply Slovenská
   pošta (it accepts inbound foreign S10 numbers).
-- `events[]` populated shape is INFERRED (official manual + one independent
-  implementation); the envelope is VERIFIED. **Confirm `localDate` has no offset
-  and that `postOffice` appears under `p=1` against the first real parcel.**
+- `events[]` field names, from the official manual corroborated by one
+  independent implementation: `stateCode` (always present), `localDate`
+  (ISO 8601, naive local), `detailDescription` and `detailCode` (both optional),
+  `retainedTill` (optional hold-until date), and `postOffice` (optional, only
+  under `p=1`) with exactly `{name, street, city, postcode, districtStamp}`.
+  **Slovenská pošta supplies no coordinates** — there is no `lat`/`lon` on
+  `postOffice`, so a posta pickup point never yields a map link.
+- The populated `events[]` shape is INFERRED; the envelope is VERIFIED.
+  **Confirm `localDate` has no offset and that `postOffice` appears under `p=1`
+  against the first real parcel.**
 - **Do not call `https://api.posta.sk/private/web/track`** — undocumented, `private`
   in the path, not the supported contract.
 
