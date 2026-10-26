@@ -1,5 +1,9 @@
 import type { CarrierAdapter, CarrierId } from '../core/types.js'
+import { dpdAdapter } from './dpd.js'
+import { glsAdapter } from './gls.js'
+import { packetaAdapter } from './packeta.js'
 import { postaAdapter } from './posta.js'
+import { spsAdapter } from './sps.js'
 
 const adapters = new Map<CarrierId, CarrierAdapter>()
 
@@ -30,5 +34,6 @@ export function detectCarrier(number: string): CarrierId[] {
   return DETECT_ORDER.filter(id => adapters.get(id)?.matches(number) === true)
 }
 
-// Only the adapters that exist are registered; each later adapter adds its own line here.
-register(postaAdapter)
+// Adapters do not register themselves; this is the one place that does. Order here is irrelevant:
+// detectCarrier applies DETECT_ORDER.
+for (const adapter of [postaAdapter, packetaAdapter, glsAdapter, spsAdapter, dpdAdapter]) register(adapter)
