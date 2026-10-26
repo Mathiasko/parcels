@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest'
 import {
-  sleptSinceMs, checkSleepGap, recordPoll, parseSysctlTime, readWakeEvents, LONG_GAP_MS, type SleepEvents,
+  sleptSinceMs, checkSleepGap, recordPoll, parseSysctlTime, readLastWakeMs, LONG_GAP_MS,
 } from '../src/core/sleepgap.js'
 import { runPoll } from '../src/core/poll.js'
 import { updateParcelState, setNeedsPostcode } from '../src/db/parcels.js'
@@ -9,32 +9,21 @@ import { NOW, config, memDb, addParcel, ev, okResult, stubAdapter, bodyHttp } fr
 
 const HOUR = 3_600_000
 const T0 = Date.parse('2026-10-26T20:00:00Z')   // the last recorded poll
-const wake = (hoursAfterPoll: number, sleepHoursAfterPoll?: number): SleepEvents => ({
-  wakeMs: T0 + hoursAfterPoll * HOUR,
-  sleepMs: sleepHoursAfterPoll === undefined ? undefined : T0 + sleepHoursAfterPoll * HOUR,
-})
+const wakeAt = (hoursAfterPoll: number) => T0 + hoursAfterPoll * HOUR
 
 describe('sleptSinceMs', () => {
   test('reports zero when the last wake is not later than the last poll (the Mac has not slept since)', () => {
-    expect(sleptSinceMs(T0, wake(-5, -6))).toBe(0)
-    expect(sleptSinceMs(T0, wake(0))).toBe(0)
+    expect(sleptSinceMs(T0, wakeAt(-5))).toBe(0)
+    expect(sleptSinceMs(T0, wakeAt(0))).toBe(0)
   })
 
-  test('reports the time from the sleep to the wake when the Mac slept after the poll', () => {
-    // Polled 20:00, stayed awake until 23:00, slept until 07:00: 8h asleep, not the 11h since the poll.
-    expect(sleptSinceMs(T0, wake(11, 3))).toBe(8 * HOUR)
-  })
-
-  test('falls back to the time since the poll when the sleep time is unknown', () => {
-    expect(sleptSinceMs(T0, wake(10))).toBe(10 * HOUR)
-  })
-
-  test('a sleep that began before the poll counts only from the poll', () => {
-    expect(sleptSinceMs(T0, wake(2, -1))).toBe(2 * HOUR)
+  test('reports last wake minus last poll when the Mac woke after the poll: 21:00 poll, 07:00 wake is 10h', () => {
+    expect(sleptSinceMs(T0, wakeAt(10))).toBe(10 * HOUR)
+    expect(sleptSinceMs(T0, wakeAt(0) + 1)).toBe(1)
   })
 
   test('never reports negative sleep, and reports none when the wake time could not be read', () => {
-    expect(sleptSinceMs(T0, wake(5, 9))).toBe(0)   // nonsense: slept after waking
+    expect(sleptSinceMs(T0, wakeAt(-0.001))).toBe(0)
     expect(sleptSinceMs(T0, undefined)).toBe(0)
   })
 })
@@ -50,51 +39,73 @@ describe('parseSysctlTime', () => {
   })
 })
 
-test('readWakeEvents on this machine returns plausible values or undefined, and never throws', () => {
-  const e = readWakeEvents()
-  if (e) {
-    expect(e.wakeMs).toBeGreaterThan(Date.parse('2020-01-01'))
-    expect(e.wakeMs).toBeLessThanOrEqual(Date.now() + 5000)
-  }
+describe('readLastWakeMs', () => {
+  test('reads kern.waketime through the injected sysctl, and asks for nothing else', () => {
+    const asked: string[] = []
+    const wake = readLastWakeMs(name => { asked.push(name); return '{ sec = 1793036854, usec = 797269 } Mon Oct 26 18:47:34 2026\n' })
+    expect(wake).toBe(1793036854797)
+    expect(asked).toEqual(['kern.waketime'])
+  })
+
+  test('a DarkWake maintenance cycle just before the wake does not shrink the gap (kern.sleeptime is ignored)', () => {
+    // 07:00 real wake, preceded 16 seconds earlier by a maintenance sleep, as on this Mac.
+    const sysctl = (name: string) => name === 'kern.waketime'
+      ? '{ sec = 1793008800, usec = 0 }' : '{ sec = 1793008784, usec = 0 }'
+    const db = memDb(); recordPoll(db, 1793008800_000 - 10 * HOUR)
+    expect(checkSleepGap(db, () => readLastWakeMs(sysctl))).toEqual({ sleptMs: 10 * HOUR, longGap: true })
+  })
+
+  test('is undefined when sysctl cannot be run or prints something unintelligible', () => {
+    expect(readLastWakeMs(() => undefined)).toBeUndefined()
+    expect(readLastWakeMs(() => 'sysctl: unknown oid')).toBeUndefined()
+  })
+
+  test('the real sysctl on this machine gives a plausible time or undefined, and never throws', () => {
+    const wake = readLastWakeMs()
+    if (wake !== undefined) {
+      expect(wake).toBeGreaterThan(Date.parse('2020-01-01'))
+      expect(wake).toBeLessThanOrEqual(Date.now() + 5000)
+    }
+  })
 })
 
 describe('checkSleepGap', () => {
   test('the first ever run has no recorded poll to compare with, so it is not a long gap', () => {
-    expect(checkSleepGap(memDb(), () => wake(10, 1))).toEqual({ sleptMs: 0, longGap: false })
+    expect(checkSleepGap(memDb(), () => wakeAt(10))).toEqual({ sleptMs: 0, longGap: false })
   })
 
   test('compares against the poll recorded in the database, which a later process can read', () => {
     const db = memDb()
     recordPoll(db, T0)
     expect(db.prepare('SELECT polled_at_ms FROM last_poll').all()).toEqual([{ polled_at_ms: T0 }])
-    expect(checkSleepGap(db, () => wake(10, 1))).toEqual({ sleptMs: 9 * HOUR, longGap: true })
-    recordPoll(db, T0 + 11 * HOUR)
+    expect(checkSleepGap(db, () => wakeAt(10))).toEqual({ sleptMs: 10 * HOUR, longGap: true })
+    recordPoll(db, wakeAt(11))
     expect(db.prepare('SELECT COUNT(*) AS n FROM last_poll').get()).toEqual({ n: 1 })   // overwritten, never appended
   })
 
   test('checking does not record anything: only recordPoll does, so a crashed run is retried', () => {
     const db = memDb()
     recordPoll(db, T0)
-    expect(checkSleepGap(db, () => wake(10, 1)).longGap).toBe(true)
-    expect(checkSleepGap(db, () => wake(10, 1)).longGap).toBe(true)   // nothing was recorded in between
+    expect(checkSleepGap(db, () => wakeAt(10)).longGap).toBe(true)
+    expect(checkSleepGap(db, () => wakeAt(10)).longGap).toBe(true)   // nothing was recorded in between
   })
 
   test('a gap of exactly 6 hours is not long; one millisecond more is', () => {
     expect(LONG_GAP_MS).toBe(6 * HOUR)
     const db = memDb(); recordPoll(db, T0)
-    expect(checkSleepGap(db, () => ({ wakeMs: T0 + 7 * HOUR, sleepMs: T0 + HOUR })).longGap).toBe(false)
-    expect(checkSleepGap(db, () => ({ wakeMs: T0 + 7 * HOUR + 1, sleepMs: T0 + HOUR })).longGap).toBe(true)
+    expect(checkSleepGap(db, () => T0 + 6 * HOUR).longGap).toBe(false)
+    expect(checkSleepGap(db, () => T0 + 6 * HOUR + 1).longGap).toBe(true)
   })
 
-  test('hourly polls on a Mac that has not slept never trip it', () => {
+  test('hourly polls on a Mac that has not woken since the previous poll never trip it', () => {
     const db = memDb()
     for (let h = 0; h < 15; h++) {
       recordPoll(db, T0 + h * HOUR)
-      expect(checkSleepGap(db, () => wake(-3, -4)).longGap).toBe(false)
+      expect(checkSleepGap(db, () => T0 + h * HOUR - 3 * HOUR).longGap).toBe(false)
     }
   })
 
-  test('a reader that fails (undefined) is "no gap", never an error', () => {
+  test('a reader that finds nothing (undefined) is "no gap", never an error', () => {
     const db = memDb(); recordPoll(db, T0)
     expect(checkSleepGap(db, () => undefined)).toEqual({ sleptMs: 0, longGap: false })
   })
@@ -102,6 +113,12 @@ describe('checkSleepGap', () => {
   test('a reader that throws is also "no gap": sleep detection must never break a poll', () => {
     const db = memDb(); recordPoll(db, T0)
     expect(checkSleepGap(db, () => { throw new Error('boom') })).toEqual({ sleptMs: 0, longGap: false })
+  })
+
+  test('a database error while reading the last poll is "no gap" too', () => {
+    const db = memDb()
+    db.exec('DROP TABLE last_poll')
+    expect(checkSleepGap(db, () => wakeAt(10))).toEqual({ sleptMs: 0, longGap: false })
   })
 })
 

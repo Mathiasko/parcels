@@ -25,7 +25,11 @@ async function main(): Promise<void> {
       db, http: createHttpClient(), adapters: allAdapters(), config, now: new Date(),
       notifier: createNotifier(config.notifier), forceAll: gap.longGap,
     })
-    recordPoll(db, startedMs)   // only after the run completed: a crash mid-refresh leaves the gap to be retried
+    // Only after the run completed (a crash mid-refresh leaves the gap to be retried), and never fatal:
+    // failing to note the time must not turn a good poll into exit 1.
+    try { recordPoll(db, startedMs) } catch (err) {
+      console.error(`poll: could not record the poll time: ${err instanceof Error ? err.message : String(err)}`)
+    }
     const slept = gap.longGap ? ` [slept ${(gap.sleptMs / 3_600_000).toFixed(1)}h: full refresh]` : ''
     console.log(`${new Date().toISOString()} ${summarize(report)}${slept}`)
   } finally {

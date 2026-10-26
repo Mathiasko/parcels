@@ -1,13 +1,8 @@
 import { execFileSync } from 'node:child_process'
-import { uptime } from 'node:os'
 import type { Database } from '../db/index.js'
 
-/** More than this much sleep since the last completed poll forces a full refresh (spec section 9). */
+/** More than this long between the last completed poll and the machine's last wake forces a full refresh (spec section 9). */
 export const LONG_GAP_MS = 6 * 3_600_000
-
-/** When the machine last woke and (where known) when it last went to sleep, as epoch milliseconds. */
-export interface SleepEvents { wakeMs: number; sleepMs?: number }
-export type SleepEventReader = () => SleepEvents | undefined
 
 /**
  * `sysctl -n kern.waketime` prints `{ sec = 1793036854, usec = 797269 } Mon Oct 26 18:47:34 2026`.
@@ -24,35 +19,37 @@ export function parseSysctlTime(output: string): number | undefined {
   return Number(sec) * 1000 + Math.floor(Number(usec) / 1000)
 }
 
-const sysctlTime = (name: string): number | undefined => {
+/** Runs `sysctl -n <name>`; undefined if it cannot be run. */
+const runSysctl = (name: string): string | undefined => {
   try {
-    return parseSysctlTime(execFileSync('/usr/sbin/sysctl', ['-n', name], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }))
+    return execFileSync('/usr/sbin/sysctl', ['-n', name], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] })
   } catch {
     return undefined
   }
 }
 
 /**
- * The last wake and sleep, from macOS. A boot after the last wake counts as a wake too: the machine
- * was off, so nothing was polling, and the pre-boot sleep time says nothing about it. Undefined when
- * no wake time can be read at all (not macOS, sysctl missing or unparseable): "no gap detected".
+ * Epoch ms of the machine's last wake, from `kern.waketime`; undefined when it cannot be read (not
+ * macOS, sysctl missing or unparseable), which means "no gap detected".
+ *
+ * Deliberately only the wake time. `kern.sleeptime` tracks the latest sleep, and this Mac takes a
+ * maintenance DarkWake every few minutes, so "last sleep to last wake" measures that cycle (seconds),
+ * never the night's real sleep. A DarkWake after the poll does count as a wake: that can cost an
+ * occasional extra refresh, which is bounded and harmless, where the alternative misses every real sleep.
  */
-export function readWakeEvents(): SleepEvents | undefined {
-  const waked = sysctlTime('kern.waketime')
-  const bootMs = Date.now() - uptime() * 1000   // os.uptime() counts sleep, so this is the true boot time
-  if (waked === undefined) return undefined
-  return bootMs > waked ? { wakeMs: bootMs } : { wakeMs: waked, sleepMs: sysctlTime('kern.sleeptime') }
+export function readLastWakeMs(sysctl: (name: string) => string | undefined = runSysctl): number | undefined {
+  const out = sysctl('kern.waketime')
+  return out === undefined ? undefined : parseSysctlTime(out)
 }
 
 /**
- * How long the machine was asleep (or off) since the last completed poll at `lastPollMs`. If the last
- * wake is not later than that poll the machine has not slept since, and the answer is 0. Otherwise it
- * slept at some point in between: from the later of its last sleep and the poll, until that wake.
+ * Time from the last completed poll to the machine's last wake: 0 if that wake is not later than the
+ * poll (the machine has not slept since), otherwise last wake minus last poll. For the typical
+ * 21:00 poll and 07:00 wake that is the ~10h the machine spent asleep.
  */
-export function sleptSinceMs(lastPollMs: number, events: SleepEvents | undefined): number {
-  if (!events || events.wakeMs <= lastPollMs) return 0
-  const from = Math.max(events.sleepMs ?? lastPollMs, lastPollMs)
-  return Math.max(events.wakeMs - from, 0)
+export function sleptSinceMs(lastPollMs: number, lastWakeMs: number | undefined): number {
+  if (lastWakeMs === undefined || lastWakeMs <= lastPollMs) return 0
+  return lastWakeMs - lastPollMs
 }
 
 export interface SleepGap { sleptMs: number; longGap: boolean }
@@ -61,13 +58,14 @@ export interface SleepGap { sleptMs: number; longGap: boolean }
  * Whether the Mac slept longer than LONG_GAP_MS since the last poll that COMPLETED. Read-only: the
  * poll is recorded by `recordPoll` after the run, so a run that crashes mid-refresh leaves the gap in
  * place and the next run tries again. The first ever run has nothing to compare with and is not a
- * long gap. A reader that throws or finds nothing means "no gap": detection must never break a poll.
+ * long gap. A database or reader error, or a reader that finds nothing, means "no gap": detection must never break a poll.
  */
-export function checkSleepGap(db: Database, read: SleepEventReader = readWakeEvents): SleepGap {
-  const row = db.prepare('SELECT polled_at_ms FROM last_poll WHERE id = 1').get() as { polled_at_ms: number } | undefined
-  if (!row) return { sleptMs: 0, longGap: false }
+export function checkSleepGap(db: Database, readLastWake: () => number | undefined = readLastWakeMs): SleepGap {
   let sleptMs = 0
-  try { sleptMs = sleptSinceMs(row.polled_at_ms, read()) } catch { /* no gap detected */ }
+  try {
+    const row = db.prepare('SELECT polled_at_ms FROM last_poll WHERE id = 1').get() as { polled_at_ms: number } | undefined
+    if (row) sleptMs = sleptSinceMs(row.polled_at_ms, readLastWake())
+  } catch { /* no gap detected */ }
   return { sleptMs, longGap: sleptMs > LONG_GAP_MS }
 }
 
