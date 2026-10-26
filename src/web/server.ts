@@ -13,7 +13,8 @@ import { createNotifier } from '../notify/send.js'
 import type { Notifier } from '../notify/types.js'
 import { listDelivered, setLabel, setPostalCode } from '../db/parcels.js'
 import { carrierHealth } from '../db/health.js'
-import { addParcel, cleanPostcode } from './actions.js'
+import { addParcel, cleanPostcode, MAX_LABEL } from './actions.js'
+import { CARRIER_NAME } from './views/format.js'
 import {
   deliveryStats, getUnparsedMessage, listUnparsedMessages, rawResponsesFor,
 } from './queries.js'
@@ -46,17 +47,27 @@ export async function startServer(app: FastifyInstance, port: number): Promise<v
   await app.listen({ host: BIND_HOST, port })
 }
 
-const LOCAL_HOST = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/
+/** A parcel tried within this long is left alone by the global refresh (a double click, or the hourly poll just ran). */
+const MIN_REFRESH_GAP_MS = 60_000
+
+const LOCAL_HOST = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i
 
 const send = (reply: FastifyReply, page: Html, status = 200) =>
   reply.code(status).type('text/html; charset=utf-8').send(page.toString())
 
+/** A repeated query key (`?q=a&q=b`) arrives as an array; only the first value is ever meaningful. */
+const one = (v: unknown): string | undefined => {
+  const first = Array.isArray(v) ? v[0] : v
+  return typeof first === 'string' ? first : undefined
+}
+
 /** Parses `?refreshed=N&failures=M&busy=1` (set by the refresh redirect) back into a note. */
-export function refreshNote(query: Record<string, string | undefined>): RefreshNote | undefined {
-  if (query.busy === '1') return { polled: 0, failures: 0, busy: true }
-  if (query.refreshed === undefined) return undefined
-  const n = (v: string | undefined) => (v && /^\d{1,6}$/.test(v) ? Number(v) : 0)
-  return { polled: n(query.refreshed), failures: n(query.failures), busy: false }
+export function refreshNote(query: Record<string, unknown>): RefreshNote | undefined {
+  if (one(query.busy) === '1') return { polled: 0, failures: 0, busy: true }
+  const polled = one(query.refreshed)
+  if (polled === undefined) return undefined
+  const n = (v: string | undefined) => (v !== undefined && /^\d{1,6}$/.test(v) ? Number(v) : 0)
+  return { polled: n(polled), failures: n(one(query.failures)), busy: false }
 }
 
 export function buildServer(deps: WebDeps): FastifyInstance {
@@ -64,25 +75,38 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   const app = Fastify({ logger: false })
 
   // Without authentication, a page the user happens to visit must not be able to drive this server:
-  // a foreign Host header is a DNS-rebinding attempt, and a cross-origin POST is a forged form.
+  // a foreign Host header is a DNS-rebinding attempt, and a cross-site POST is a forged form. The Origin
+  // of a write must be THIS server (same host and port), not merely some loopback address: another dev
+  // server on localhost is just as foreign.
   app.addHook('onRequest', async (req, reply) => {
-    if (!LOCAL_HOST.test(req.headers.host ?? '')) return reply.code(403).type('text/plain').send('forbidden')
-    const origin = req.headers.origin
-    if (req.method === 'POST' && origin !== undefined) {
-      let host = ''
-      try { host = new URL(origin).host } catch { /* an unparseable origin is refused below */ }
-      if (!LOCAL_HOST.test(host)) return reply.code(403).type('text/plain').send('forbidden')
+    // Second layer behind the structural escaping: even injected markup could load nothing and run nothing.
+    reply.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'")
+    reply.header('X-Content-Type-Options', 'nosniff')
+    const host = req.headers.host ?? ''
+    const refuse = () => reply.code(403).type('text/plain').send('forbidden')
+    if (!LOCAL_HOST.test(host)) return refuse()
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      const site = req.headers['sec-fetch-site']
+      if (site !== undefined && site !== 'same-origin' && site !== 'none') return refuse()
+      const origin = req.headers.origin
+      if (origin !== undefined) {
+        let originHost: string | undefined
+        try { originHost = new URL(origin).host } catch { /* "null" and other unparseable origins are refused */ }
+        if (originHost === undefined || originHost.toLowerCase() !== host.toLowerCase()) return refuse()
+      }
     }
   })
 
-  app.setErrorHandler((err, _req, reply) => {
+  app.setErrorHandler((err, req, reply) => {
     const status = (err as { statusCode?: number }).statusCode ?? 500
+    // The logger is off, so without this a 500 under launchd leaves nothing in web.err.log to diagnose.
+    if (status >= 500) console.error(`${new Date().toISOString()} ${req.method} ${req.url}:`, err)
     reply.code(status).type('text/plain').send(status >= 500 ? 'internal error' : (err as Error).message)
   })
 
   app.get('/', async (req, reply) => {
     const entries = listActive(db).map(parcel => ({ parcel, last: latestEvent(db, parcel.id) }))
-    return send(reply, indexPage(entries, refreshNote(req.query as Record<string, string>)))
+    return send(reply, indexPage(entries, refreshNote(req.query as Record<string, unknown>)))
   })
 
   app.get<{ Params: { id: string } }>('/parcel/:id', async (req, reply) => {
@@ -90,7 +114,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     if (!parcel) return reply.code(404).type('text/plain').send('no such parcel')
     return send(reply, parcelPage(
       parcel, listEvents(db, parcel.id), rawResponsesFor(db, parcel.id, parcel.carrier),
-      refreshNote(req.query as Record<string, string>),
+      refreshNote(req.query as Record<string, unknown>),
     ))
   })
 
@@ -105,9 +129,13 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   })
 
   app.get('/history', async (req, reply) => {
-    const q = req.query as Record<string, string | undefined>
+    const query = req.query as Record<string, unknown>
+    const carrier = one(query.carrier)
     const filters = {
-      carrier: q.carrier || undefined, q: q.q?.trim() || undefined, from: q.from || undefined, to: q.to || undefined,
+      carrier: carrier !== undefined && carrier in CARRIER_NAME ? (carrier as CarrierId) : undefined,
+      q: one(query.q)?.trim().slice(0, 100) || undefined,
+      from: one(query.from) || undefined,
+      to: one(query.to) || undefined,
     }
     const day = (v: string | undefined, end: boolean) => {
       if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined
@@ -115,7 +143,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       return d.isValid ? (end ? d.endOf('day') : d.startOf('day')).toJSDate() : undefined
     }
     const parcels = listDelivered(db, {
-      carrier: filters.carrier as CarrierId | undefined, q: filters.q, from: day(filters.from, false), to: day(filters.to, true),
+      carrier: filters.carrier, q: filters.q, from: day(filters.from, false), to: day(filters.to, true),
     })
     return send(reply, historyPage(parcels, deliveryStats(db), filters))
   })
@@ -160,36 +188,43 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   app.post<{ Params: { id: string } }>('/parcel/:id/label', async (req, reply) => {
     const parcel = parcelFor(req.params.id)
     if (!parcel) return notFound(reply)
-    setLabel(db, parcel.id, text(form(req).label).slice(0, 200))
+    setLabel(db, parcel.id, text(form(req).label).slice(0, MAX_LABEL))
     return reply.redirect(`/parcel/${parcel.id}`, 303)
   })
 
   app.post<{ Params: { id: string } }>('/parcel/:id/postcode', async (req, reply) => {
     const parcel = parcelFor(req.params.id)
     if (!parcel) return notFound(reply)
-    setPostalCode(db, parcel.id, cleanPostcode(form(req).postcode).slice(0, 12))
+    setPostalCode(db, parcel.id, cleanPostcode(form(req).postcode))
     return reply.redirect(`/parcel/${parcel.id}`, 303)
   })
 
-  // A real poll, run from this process. It deliberately passes no force flag: the per-parcel backoff,
-  // the gated-carrier throttle and the needs_postcode skip all apply, so clicking cannot hammer a
-  // broken carrier. A notifier is passed so a status change found here is announced, not consumed.
+  // A real poll, run from this process. The click is the user saying "now", so the per-parcel backoff tier is
+  // skipped (`forceAll`), but only for the parcels they pointed at: `forceAll` skips `isDue` entirely, which
+  // would also wake dormant parcels, so the set is chosen here. The gated-carrier throttle and the
+  // needs_postcode skip are applied by `runPoll` regardless, so clicking cannot hammer a broken carrier.
+  // A notifier is passed so a status change found here is announced, not consumed.
   let refreshing = false
   app.post('/refresh', async (req, reply) => {
     const target = text(form(req).parcel)
     let back = '/'
-    let parcelIds: number[] | undefined
+    let parcelIds: number[]
     if (target !== '') {
       const parcel = parcelFor(target)
       if (!parcel) return notFound(reply)
       parcelIds = [parcel.id]
       back = `/parcel/${parcel.id}`
+    } else {
+      const t = now().getTime()
+      parcelIds = listActive(db)
+        .filter(p => !isDormant(p, now()) && (p.lastAttemptedAt === undefined || t - p.lastAttemptedAt.getTime() > MIN_REFRESH_GAP_MS))
+        .map(p => p.id)
     }
     if (refreshing) return reply.redirect(`${back}?busy=1`, 303)   // a double click must not poll twice
     refreshing = true
     try {
       const report = await runPoll({
-        db, config, parcelIds,
+        db, config, parcelIds, forceAll: true,
         http: deps.http ?? createHttpClient(),
         adapters: deps.adapters ?? allAdapters(),
         notifier: deps.notifier ?? createNotifier(config.notifier),

@@ -1,16 +1,16 @@
 import { loadRuntimeConfig } from './core/config.js'
-import { authStorePathFor, setDpdAuthStore } from './carriers/dpd.js'
+import { initRuntime } from './core/runtime.js'
 import { openDb } from './db/index.js'
 import { buildServer, BIND_HOST, startServer } from './web/server.js'
 
 /**
  * Web UI entry point, kept alive by launchd. `POST /refresh` runs a real poll in THIS process, so DPD's
- * auth store must be pointed at its file exactly as the poller and CLI do; otherwise every click would
- * re-run the whole Firebase -> OAuth chain and mint a fresh installation id.
+ * auth store must be pointed at its file exactly as the poller and CLI do (`initRuntime`); otherwise every
+ * click would re-run the whole Firebase -> OAuth chain and mint a fresh installation id.
  */
 async function main(): Promise<void> {
   const config = loadRuntimeConfig(process.argv[2])
-  setDpdAuthStore(authStorePathFor(config.dbPath))
+  initRuntime(config)
   const db = openDb(config.dbPath)
   const app = buildServer({ db, config })
   const shutdown = () => { void app.close().finally(() => { db.close(); process.exit(0) }) }

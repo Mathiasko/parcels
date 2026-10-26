@@ -1,4 +1,4 @@
-import type { Parcel } from '../../db/parcels.js'
+import { postcodeRejected, type Parcel } from '../../db/parcels.js'
 import type { StoredEvent } from '../../db/events.js'
 import { CARRIER_NAME, formatDay, formatDateTime, statusChip } from './format.js'
 import { html, type Html } from './html.js'
@@ -19,7 +19,7 @@ export function refreshBanner(n: RefreshNote | undefined): Html {
   if (!n) return html``
   if (n.busy) return html`<p class="notice">A refresh is already running; try again in a moment.</p>`
   const note = n.polled === 0
-    ? 'Nothing was due: parcels are polled less often as they go quiet, and a carrier that is failing is paused.'
+    ? 'Nothing was polled: each parcel here is paused (its carrier is failing, or its postcode was rejected) or was tried under a minute ago.'
     : `Polled ${n.polled} ${n.polled === 1 ? 'parcel' : 'parcels'}.`
   const failed = n.failures > 0 ? ` ${n.failures} carrier ${n.failures === 1 ? 'failure' : 'failures'}: see Health.` : ''
   return html`<p class="notice${n.failures > 0 ? ' alarm' : ' ok'}">${note}${failed}</p>`
@@ -37,7 +37,7 @@ export function indexPage(
     <span class="muted small">${CARRIER_NAME[p.carrier]} · ${p.trackingNumber}</span></div>
   ${last ? html`<div class="small muted">${formatDateTime(last.occurredAt)}: <span>${last.description}</span>${last.location ? html` · ${last.location}` : ''}</div>` : ''}
   ${pickup ? html`<div>Pickup: ${pickup}${p.retainedTill ? html` · <strong>Collect by ${formatDay(p.retainedTill)}</strong>` : ''}</div>` : ''}
-  ${p.needsPostcode !== undefined && p.needsPostcode === (p.postalCode ?? '')
+  ${postcodeRejected(p)
     ? html`<div class="alarm-text small">Postcode needed: <a href="/parcel/${p.id}">set one</a> to resume full tracking.</div>` : ''}
 </div>`
       })

@@ -170,7 +170,11 @@ describe('web core: faithful rendering', () => {
     const app = buildServer({ db: memDb(), config })
     const bad = await app.inject({ method: 'GET', url: '/', headers: { host: 'evil.example' } })
     expect(bad.statusCode).toBe(403)
-    const ok = await app.inject({ method: 'GET', url: '/', headers: { host: '127.0.0.1:8787' } })
-    expect(ok.statusCode).toBe(200)
+    for (const host of ['127.0.0.1:8787', 'localhost:8787', 'localhost', '[::1]:8787', 'LOCALHOST:8787']) {
+      expect((await app.inject({ method: 'GET', url: '/', headers: { host } })).statusCode, host).toBe(200)
+    }
+    for (const host of ['127.0.0.1.evil.example', 'localhost.evil.example:8787', '0.0.0.0:8787', '192.168.0.101:8787']) {
+      expect((await app.inject({ method: 'GET', url: '/', headers: { host } })).statusCode, host).toBe(403)
+    }
   })
 })

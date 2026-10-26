@@ -11,7 +11,7 @@ import { dedupHash } from './dedup.js'
 import { appendEvents, markNotified, recomputeParcelStatus } from '../db/events.js'
 import { carrierHealth, recordHealth, type HealthOutcome, type HealthRow } from '../db/health.js'
 import {
-  listActive, markAttempted, setNeedsPostcode, updateParcelState, type Parcel,
+  listActive, markAttempted, postcodeRejected, setNeedsPostcode, updateParcelState, type Parcel,
 } from '../db/parcels.js'
 
 export interface PollDeps {
@@ -59,14 +59,6 @@ type Fetched =
 
 const describe = (err: unknown) => (err instanceof Error ? `${err.name}: ${err.message}` : String(err))
 
-/**
- * Whether a recorded `needs_postcode` rejection still applies: it does while the parcel's postcode
- * is the very one that was rejected (a parcel with no postcode is recorded as `''`). Anything else
- * - a different postcode, or one finally supplied - is a genuine change worth asking about.
- */
-const rejectionStands = (p: Parcel): boolean =>
-  p.needsPostcode !== undefined && p.needsPostcode === (p.postalCode ?? '')
-
 function* chunks<T>(items: T[], size: number): Generator<T[]> {
   for (let i = 0; i < items.length; i += size) yield items.slice(i, i + size)
 }
@@ -90,7 +82,7 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
     // Deterministic: the carrier rejected this exact postcode and would reject it identically for
     // ever, so do not ask. The flag is NOT cleared here: clearing at selection would unflag a
     // parcel whose carrier has no adapter or is throttled, i.e. one that never gets polled at all.
-    if (rejectionStands(p)) continue
+    if (postcodeRejected(p)) continue
     byCarrier.set(p.carrier, [...(byCarrier.get(p.carrier) ?? []), p])
   }
 

@@ -5,7 +5,7 @@ import { loadRuntimeConfig, type Config } from './core/config.js'
 import { captureBodies, createHttpClient } from './core/http.js'
 import { runPoll, summarize } from './core/poll.js'
 import type { CarrierAdapter, CarrierId, HttpClient } from './core/types.js'
-import { authStorePathFor, setDpdAuthStore } from './carriers/dpd.js'
+import { initRuntime } from './core/runtime.js'
 import { allAdapters, detectCarrier, getAdapter, normalizeNumber } from './carriers/registry.js'
 import { openDb, type Database } from './db/index.js'
 import { createNotifier, type SpawnFn } from './notify/send.js'
@@ -205,7 +205,7 @@ export async function runCli(argv: string[], ctx: CliContext): Promise<number> {
 
 async function main(): Promise<void> {
   const config = loadRuntimeConfig()
-  setDpdAuthStore(authStorePathFor(config.dbPath))
+  initRuntime(config)
   const db = openDb(config.dbPath)
   try {
     process.exitCode = await runCli(process.argv.slice(2), {

@@ -213,6 +213,15 @@ export function markAnnounced(db: Database, id: number, status: CanonicalStatus,
     .run(status, pickupAnnounced ? 1 : 0, id)
 }
 
+/**
+ * Whether a recorded `needs_postcode` rejection still applies: it does while the parcel's postcode is the
+ * very one that was rejected (a parcel with no postcode is recorded as `''`). Anything else - a different
+ * postcode, or one finally supplied - is a genuine change worth asking about. The poller skips a parcel
+ * while this holds; the UI says why.
+ */
+export const postcodeRejected = (p: Parcel): boolean =>
+  p.needsPostcode !== undefined && p.needsPostcode === (p.postalCode ?? '')
+
 /** An empty label clears it, so the parcel falls back to its merchant or tracking number. */
 export function setLabel(db: Database, id: number, label: string): void {
   db.prepare('UPDATE parcels SET label = ? WHERE id = ?').run(label === '' ? null : label, id)

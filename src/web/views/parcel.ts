@@ -1,4 +1,4 @@
-import type { Parcel } from '../../db/parcels.js'
+import { postcodeRejected, type Parcel } from '../../db/parcels.js'
 import type { StoredEvent } from '../../db/events.js'
 import type { RawResponse } from '../queries.js'
 import { CARRIER_NAME, formatDateTime, formatDay, statusChip } from './format.js'
@@ -8,9 +8,9 @@ import { parcelName, pickupSummary, refreshBanner, type RefreshNote } from './in
 
 const RAW_SHOWN_CHARS = 20_000
 
-/** The carrier rejected this parcel's postcode, and it has not been changed since. */
-export const postcodeRejected = (p: Parcel): boolean =>
-  p.needsPostcode !== undefined && p.needsPostcode === (p.postalCode ?? '')
+/** Delivered, returned and archived parcels are never polled, so offering to refresh them would be a lie. */
+const isTracked = (p: Parcel): boolean =>
+  p.archivedAt === undefined && p.status !== 'delivered' && p.status !== 'returned'
 
 function mapsUrl(p: Parcel): string | undefined {
   const { lat, lon, name } = p.pickup ?? {}
@@ -62,7 +62,7 @@ export function parcelPage(
   const maps = mapsUrl(p)
   return layout(parcelName(p), '', html`
 <div class="row"><h1>${parcelName(p)}</h1>${statusChip(p.status)}
-  <form class="inline" method="post" action="/refresh"><input type="hidden" name="parcel" value="${p.id}"><button>Refresh this parcel</button></form></div>
+  ${isTracked(p) ? html`<form class="inline" method="post" action="/refresh"><input type="hidden" name="parcel" value="${p.id}"><button>Refresh this parcel</button></form>` : ''}</div>
 <p class="muted">${CARRIER_NAME[p.carrier]} · ${p.trackingNumber}${p.merchant ? html` · ${p.merchant}` : ''}${p.statusRaw ? html` · carrier says: ${p.statusRaw}` : ''}</p>
 ${refreshBanner(note)}
 <form class="inline" method="post" action="/parcel/${p.id}/label">

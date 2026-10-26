@@ -2,7 +2,7 @@ import { createHttpClient } from './core/http.js'
 import { loadRuntimeConfig } from './core/config.js'
 import { runPoll, summarize } from './core/poll.js'
 import { allAdapters } from './carriers/registry.js'
-import { authStorePathFor, setDpdAuthStore } from './carriers/dpd.js'
+import { initRuntime } from './core/runtime.js'
 import { openDb } from './db/index.js'
 import { createNotifier } from './notify/send.js'
 import { checkSleepGap, recordPoll } from './core/sleepgap.js'
@@ -14,7 +14,7 @@ import { checkSleepGap, recordPoll } from './core/sleepgap.js'
  */
 async function main(): Promise<void> {
   const config = loadRuntimeConfig(process.argv[2])
-  setDpdAuthStore(authStorePathFor(config.dbPath))   // the poller exits every run; DPD's token must outlive it
+  initRuntime(config)   // the poller exits every run; DPD's token must outlive it
   const db = openDb(config.dbPath)
   try {
     // After a long sleep the backoff tiers' idea of "recently polled" is stale: refresh everything

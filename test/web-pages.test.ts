@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { buildServer, type WebDeps } from '../src/web/server.js'
 import { appendEvents } from '../src/db/events.js'
 import { recordHealth } from '../src/db/health.js'
@@ -296,5 +296,139 @@ describe('web pages', () => {
     })
     expect(res.statusCode).toBe(403)
     expect(findParcel(db, 'posta', 'RA123456785SK')).toBeUndefined()
+  })
+})
+
+describe('web pages: fix round 1', () => {
+  const iso = (msAgo: number) => new Date(NOW.getTime() - msAgo).toISOString()
+  /** A parcel the backoff tiers would NOT poll now: moved 5 days ago, last polled an hour ago. */
+  function quiet(db: Database, number: string): number {
+    const id = insertParcel(db, { carrier: 'posta', trackingNumber: number, source: 'manual' })
+    db.prepare("UPDATE parcels SET status = 'in_transit', first_seen_at = ?, last_changed_at = ?, last_polled_at = ?, last_attempted_at = ? WHERE id = ?")
+      .run(iso(6 * DAY), iso(5 * DAY), iso(3_600_000), iso(3_600_000), id)
+    return id
+  }
+  const polled = (adapter: { calls: { number: string }[][] }) => adapter.calls.flat().map(i => i.number)
+  const answer = () => stubAdapter('posta', inputs => inputs.map(i => okResult(i.number, [ev('x', 'in_transit')])), 100)
+
+  test('the per-parcel refresh polls a parcel the backoff tiers would skip', async () => {
+    const db = memDb()
+    const id = quiet(db, 'RA1')
+    const adapter = answer()
+    const res = await post(db, '/refresh', { parcel: String(id) }, { adapters: [adapter], http: bodyHttp() })
+    expect(polled(adapter)).toEqual(['RA1'])
+    expect(res.headers.location).toMatch(/refreshed=1/)
+  })
+
+  test('the global refresh forces quiet parcels but leaves dormant and just-attempted ones alone', async () => {
+    const db = memDb()
+    quiet(db, 'QUIET')
+    const dormant = insertParcel(db, { carrier: 'posta', trackingNumber: 'DORMANT', source: 'manual' })
+    db.prepare('UPDATE parcels SET first_seen_at = ? WHERE id = ?').run(iso(40 * DAY), dormant)
+    const justTried = quiet(db, 'JUSTTRIED')
+    db.prepare('UPDATE parcels SET last_attempted_at = ? WHERE id = ?').run(iso(10_000), justTried)
+    insertParcel(db, { carrier: 'posta', trackingNumber: 'FRESH', source: 'manual' })
+    const adapter = answer()
+    await post(db, '/refresh', {}, { adapters: [adapter], http: bodyHttp() })
+    expect(polled(adapter).sort()).toEqual(['FRESH', 'QUIET'])
+  })
+
+  test('a forced per-parcel refresh still honours the needs_postcode skip', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'gls', trackingNumber: '123456789012', postalCode: '99999', source: 'manual' })
+    setNeedsPostcode(db, id, '99999')
+    const adapter = stubAdapter('gls', inputs => inputs.map(i => okResult(i.number, [])))
+    const res = await post(db, '/refresh', { parcel: String(id) }, { adapters: [adapter], http: bodyHttp() })
+    expect(adapter.calls).toHaveLength(0)
+    expect(res.headers.location).toMatch(/refreshed=0/)
+  })
+
+  test('delivered, returned and archived parcels get no refresh button', async () => {
+    const db = memDb()
+    const live = insertParcel(db, { carrier: 'posta', trackingNumber: 'LIVE', source: 'manual' })
+    const done = delivered(db, { number: 'DONE' })
+    const archived = insertParcel(db, { carrier: 'posta', trackingNumber: 'ARCH', source: 'manual' })
+    db.prepare('UPDATE parcels SET archived_at = ? WHERE id = ?').run(NOW.toISOString(), archived)
+    expect((await get(db, `/parcel/${live}`)).body).toContain('Refresh this parcel')
+    expect((await get(db, `/parcel/${done}`)).body).not.toContain('Refresh this parcel')
+    expect((await get(db, `/parcel/${archived}`)).body).not.toContain('Refresh this parcel')
+  })
+
+  test('repeated or invalid query keys on /history are tolerated, not a 500', async () => {
+    const db = memDb()
+    delivered(db, { carrier: 'posta', number: 'P1', label: 'First' })
+    delivered(db, { carrier: 'gls', number: 'G1', label: 'Second' })
+    for (const url of ['/history?q=a&q=b', '/history?carrier=posta&carrier=gls', '/history?from=x&from=y&to=1&to=2', '/history?carrier=nope']) {
+      expect((await get(db, url)).statusCode, url).toBe(200)
+    }
+    const body = (await get(db, '/history?carrier=posta&carrier=gls')).body   // the first value wins
+    expect(body).toContain('First')
+    expect(body).not.toContain('Second')
+    expect((await get(db, '/?refreshed=1&refreshed=2&failures=3&failures=4')).statusCode).toBe(200)
+  })
+
+  test('POST /add validates a chosen carrier against the number and caps field lengths', async () => {
+    const db = memDb()
+    const mismatch = await post(db, '/add', { number: 'garbage 123', carrier: 'posta' })
+    expect(mismatch.statusCode).toBe(400)
+    expect(mismatch.body).toMatch(/does not look like a Slovenská pošta tracking number/)
+    expect((await post(db, '/add', { number: 'A'.repeat(500), carrier: 'packeta' })).statusCode).toBe(400)
+    expect((await post(db, '/add', { number: 'A'.repeat(45) })).statusCode).toBe(400)
+    const ok = await post(db, '/add', { number: 'RA123456785SK', carrier: 'posta', label: 'L'.repeat(500), postcode: '1'.repeat(50) })
+    expect(ok.statusCode).toBe(303)
+    const p = findParcel(db, 'posta', 'RA123456785SK')!
+    expect(p.label).toHaveLength(200)
+    expect(p.postalCode).toHaveLength(12)
+  })
+
+  test('/assign applies the same carrier check', async () => {
+    const db = memDb()
+    const id = Number(db.prepare('INSERT INTO messages (message_id, subject, parsed_ok) VALUES (?, ?, 0)').run('<z@x>', 'Hi').lastInsertRowid)
+    const res = await post(db, `/attention/${id}/assign`, { number: 'garbage 123', carrier: 'posta' })
+    expect(res.statusCode).toBe(400)
+    expect(res.body).toContain('does not look like')
+    expect(db.prepare('SELECT parcel_id FROM messages WHERE id = ?').get(id)).toEqual({ parcel_id: null })
+  })
+
+  test('a 5xx is logged to stderr, not swallowed, and the page stays generic', async () => {
+    const db = memDb()
+    const app = server(db)
+    db.close()   // every query now throws
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const res = await app.inject({ method: 'GET', url: '/' })
+      expect(res.statusCode).toBe(500)
+      expect(res.body).toBe('internal error')
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(String(spy.mock.calls[0]![0])).toContain('GET /')
+      expect(spy.mock.calls[0]![1]).toBeInstanceOf(Error)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  test('every response, including a refusal, carries the CSP and nosniff headers', async () => {
+    const app = server(memDb())
+    const ok = await app.inject({ method: 'GET', url: '/' })
+    const refused = await app.inject({ method: 'GET', url: '/', headers: { host: 'evil.example' } })
+    for (const res of [ok, refused]) {
+      expect(res.headers['content-security-policy']).toBe("default-src 'none'; style-src 'unsafe-inline'; form-action 'self'")
+      expect(res.headers['x-content-type-options']).toBe('nosniff')
+    }
+  })
+
+  test('a write must come from this very server: same host and port only', async () => {
+    const db = memDb()
+    const attempt = (headers: Record<string, string>) => server(db).inject({
+      method: 'POST', url: '/add', payload: 'number=RA123456785SK',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', host: '127.0.0.1:8787', ...headers },
+    })
+    expect((await attempt({ origin: 'http://127.0.0.1:8787' })).statusCode).toBe(303)         // this server
+    expect((await attempt({ origin: 'http://localhost:3000' })).statusCode).toBe(403)         // another dev server on localhost
+    expect((await attempt({ origin: 'http://127.0.0.1:9999' })).statusCode).toBe(403)         // same host, other port
+    expect((await attempt({ origin: 'null' })).statusCode).toBe(403)                          // sandboxed/opaque origin
+    expect((await attempt({ 'sec-fetch-site': 'cross-site' })).statusCode).toBe(403)
+    expect((await attempt({ 'sec-fetch-site': 'same-site' })).statusCode).toBe(403)           // a sibling port on localhost
+    expect((await attempt({ 'sec-fetch-site': 'same-origin' })).statusCode).toBe(409)         // allowed; the parcel now exists
   })
 })
