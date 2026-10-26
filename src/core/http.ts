@@ -75,3 +75,19 @@ export function createHttpClient(opts: HttpClientOptions = {}): HttpClient {
     }
   }
 }
+
+/**
+ * Wraps a client so every response body it returns is also captured, in call order. Lets the
+ * caller keep the raw text of a response an adapter then failed to parse, or print it verbatim.
+ */
+export function captureBodies(http: HttpClient): { http: HttpClient; bodies: string[] } {
+  const bodies: string[] = []
+  return {
+    bodies,
+    http: async (url, init) => {
+      const res = await http(url, init)
+      bodies.push(await res.text())
+      return res
+    },
+  }
+}

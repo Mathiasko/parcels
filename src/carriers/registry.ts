@@ -1,4 +1,5 @@
 import type { CarrierAdapter, CarrierId } from '../core/types.js'
+import { postaAdapter } from './posta.js'
 
 const adapters = new Map<CarrierId, CarrierAdapter>()
 
@@ -28,3 +29,6 @@ export function normalizeNumber(raw: string): string {
 export function detectCarrier(number: string): CarrierId[] {
   return DETECT_ORDER.filter(id => adapters.get(id)?.matches(number) === true)
 }
+
+// Only the adapters that exist are registered; each later adapter adds its own line here.
+register(postaAdapter)

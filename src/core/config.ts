@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export interface Config {
   dbPath: string
@@ -28,4 +30,19 @@ export function loadConfig(path = 'config.json'): Config {
     notifier,
     imap: raw.imap,
   }
+}
+
+/** `<repo root>/config.json`; this file sits two levels below the root in both `src/` and `dist/`. */
+const REPO_CONFIG = fileURLToPath(new URL('../../config.json', import.meta.url))
+
+/**
+ * Config for the long-running entry points (poller, CLI, web), which launchd starts with an
+ * arbitrary working directory. The path is the explicit argument, else `$PARCELS_CONFIG`, else
+ * `config.json` in the repo root; a relative `dbPath` is resolved against the config file's own
+ * directory, so nothing depends on the cwd.
+ */
+export function loadRuntimeConfig(explicitPath?: string): Config {
+  const path = resolve(explicitPath ?? process.env.PARCELS_CONFIG ?? REPO_CONFIG)
+  const config = loadConfig(path)
+  return config.dbPath === ':memory:' ? config : { ...config, dbPath: resolve(dirname(path), config.dbPath) }
 }
