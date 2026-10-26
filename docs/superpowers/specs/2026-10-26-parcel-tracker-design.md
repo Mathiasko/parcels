@@ -281,8 +281,19 @@ POST https://tracking.packeta.com/api/getPacketById/{Zxxxxxxxxxx}/{locale}
   no separate location field. Treat as display-only; derive status from
   `packetStatusId`. Order is not guaranteed; sort by `time`.
 - `time` is naive `YYYY-MM-DD HH:MM:SS` — parse as `Europe/Prague`.
+- `item` field names, from two independent implementations, one of which reports
+  live confirmation against real delivered parcels: `barcode`, `packetStatusId`
+  (string), `packetStatus` (the carrier's own sentence), `sender`,
+  `branchAddress`, `courierId`, and `trackingDetails[]` of `{text, time}`.
+  **`branchAddress` is a plain string**, not an object — e.g.
+  `"Z-BOX Example Street 1"`. There is **no** delivered-at field, **no** ETA,
+  **no** weight, and the recipient is never named.
+- `item.sender` carries the shipper's name, which is a free source for a parcel's
+  merchant label on manually-added parcels. Not wired up in v1.
 - Pickup location: `item.branchAddress` (includes Z-BOX). No deadline available —
-  omit rather than invent.
+  omit rather than invent. Since the address is one unstructured string with
+  inconsistent formatting, do **not** attempt to parse street/city out of it;
+  both existing third-party clients tried and gave up.
 - Number format: `/^Z\d{10}$/` after stripping non-alphanumerics (labels print
   `Z 123 4567 890`). **No check digit exists**, so the shape test cannot catch a
   typo; a 404 is the definitive check.
