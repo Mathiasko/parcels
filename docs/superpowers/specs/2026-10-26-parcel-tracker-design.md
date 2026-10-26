@@ -602,9 +602,18 @@ CREATE TABLE deadline_reminders (   -- one row per parcel whose pickup-deadline 
 0. **Notification state is durable.** A status transition is `status <>
    last_announced_status`, a first pickup point is `pickup_announced = 0`, a deadline
    reminder is a row in `deadline_reminders`, and a carrier alarm is
-   `carrier_health.notified_at` (cleared by the carrier's next `ok`). None of it lives in
-   memory, so a run with no notifier, or a failed send, loses nothing it has not already
-   recorded as sent.
+   `carrier_health.notified_at` (cleared by the carrier's next `ok`). Every
+   **status-based** fact is durable, so a run with no notifier, or a failed send, loses
+   nothing it has not already recorded as sent. **One exception:** a *repeat* failed
+   delivery attempt (status unchanged, a new failed-attempt event) is derived from the
+   run's in-memory events and is not durable — a no-notifier caller would lose that one
+   banner. Making it durable would need another column and an existing-database break,
+   which is not worth it for a repeat of an already-announced condition.
+
+   Stamping happens **before** the send, inside the deciding transaction, so delivery is
+   **at-most-once**: a crash between stamp and send drops that banner rather than
+   repeating it later. That is deliberate — per §10 delivery is best-effort, and a
+   duplicated "delivered" banner is worse than a missed one.
 
 1. **`UNIQUE (parcel_id, dedup_hash)` makes polling idempotent.** Carriers return
    full history on every call. `dedup_hash = sha256(occurred_at_raw, code,
