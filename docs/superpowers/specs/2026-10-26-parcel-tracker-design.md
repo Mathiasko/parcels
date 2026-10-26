@@ -329,9 +329,30 @@ GET https://gls-group.com/app/service/open/rest/SK/sk/rstt028/{number}?postalCod
 - **Dummy-parcel trap:** GLS sometimes answers **200 with a fabricated parcel
   carrying every event code** for invalid numbers. Reject responses whose event
   count exceeds a sane threshold (~50) rather than trusting them.
+- **Error envelope, VERIFIED live.** The code is carried in **`lastError`**, not
+  `exceptionCode`:
+  `{"lastError":"E000","exceptionText":"Žiadne výsledky. …"}` (HTTP 404).
+  A 403 body is `{"exceptionText":"Prístup zamietnutý!"}` with no `lastError`.
+  A bad-input 400 is `{"fieldExceptions":[{"attribute":"zipcode","exceptionText":"…"}],"exceptionText":"…"}`.
 - Error codes: `E000` expired/unknown, `E206` unknown, `E609` postcode mismatch
   (→ fall back to `rstt029`), `E800`/`E801` not in index. A 403 or an HTML body
   means **gated**, not *not found*.
+- `rstt028` record fields, from GLS's own minified client: `tuStatus[]` of
+  `{tuNo, tuOwnerCode, referenceNo, signature{name,value}, infoText,
+  arrivalTime{name,value}, addresses[]{type,name,blockNo1,postalCode,city,
+  countryCode,country,latitude,longitude}, parcelShop{parcelShopID,…},
+  references[]{type,name,value}, dateTimes[]{type,value},
+  infos[]{type,name,value}, history[]{date,time,address,evtDscr,evtNo},
+  progressBar{statusInfo,statusText,colourIndex,evtNos[],statusBar[]}}`.
+  INFERRED from client code, not from a captured 200.
+- **No postal code available → degrade, do not refuse.** `rstt029` needs no
+  postcode, so a GLS parcel without one still yields an authoritative status; only
+  `history[]` is unavailable. Returning `needs_postcode` would be worse than
+  useless: the orchestrator stops polling such a parcel entirely, so the app would
+  refuse to track a parcel it can in fact track. Same for an `E609` mismatch —
+  fall back to `rstt029` and keep the parcel live. **No v1 adapter returns
+  `needs_postcode`**; the `FetchResult` variant and its orchestrator machinery are
+  retained for a carrier that genuinely cannot answer without one.
 - Pickup location: `parcelShop` plus `addresses[]` with `latitude`/`longitude`.
 - Number format: 11 digits, optionally a 12th check digit; also 12-digit and
   8-char alphanumeric Track ID forms. Check digit: weights `3,1,3,1…` from the
