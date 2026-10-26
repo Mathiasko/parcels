@@ -1,0 +1,10 @@
+{"tuStatus":[{"tuNo":"31217533227","references":[{"type":"UNITNO","name":"Parcel number","value":"312175332275"}],
+ "progressBar":{"level":3,"statusInfo":"INPICKUP","evtNos":["1.0","2.0","3.0"]},
+ "parcelShop":{"name":"GLS ParcelShop Papiernictvo Ruzinov","street":"Ruzinovska 12","city":"Bratislava","zipCode":"81101"},
+ "addresses":[{"type":"PARCELSHOP","latitude":48.1486,"longitude":17.1304}],
+ "history":[
+  {"date":"2026-10-22","time":"09:14:03","address":{"city":"Bratislava","countryName":"Slovensko","countryCode":"SK"},"evtDscr":"Zásielka bola doručená do GLS ParcelShopu a čaká na vyzdvihnutie."},
+  {"date":"2026-10-22","time":"06:02:41","address":{"city":"Bratislava","countryName":"Slovensko","countryCode":"SK"},"evtDscr":"Zásielka je na ceste ku konečnému príjemcovi."},
+  {"date":"2026-10-21","time":"22:47:10","address":{"city":"Senec","countryName":"Slovensko","countryCode":"SK"},"evtDscr":"Zásielka bola prijatá v depe GLS."},
+  {"date":"2026-10-20","time":"15:30:00","address":{"city":"Praha","countryName":"Česko","countryCode":"CZ"},"evtDscr":"Zásielka bola odovzdaná GLS."}
+ ]}]}
