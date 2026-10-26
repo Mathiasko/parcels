@@ -698,9 +698,20 @@ launchctl bootout   gui/$(id -u)/local.parcels.poller
 - `ThrottleInterval` defaults to 10s — relevant only when testing with
   `kickstart -k` repeatedly.
 - Each run is wrapped in `caffeinate -i`.
-- Optional refinement: compare `CLOCK_UPTIME_RAW` (excludes sleep) against
-  `CLOCK_MONOTONIC` to measure how long the Mac slept since the last poll, and
-  force a full refresh after a long gap.
+- **Sleep detection: use `sysctl -n kern.waketime`.** It returns the exact
+  timestamp of the last wake (`{ sec = … } Mon Oct 26 18:47:34 2026`), which is
+  cheap, exact and purpose-built. If the last wake is later than the last recorded
+  poll, the Mac slept in between.
+  **Do not use `process.hrtime.bigint()`** — VERIFIED on this machine that it
+  *includes* time asleep: it read 434.56h, identical to `os.uptime()` and to wall
+  time since boot, so a monotonic-clock delta always measures ~zero sleep. The
+  `CLOCK_UPTIME_RAW` trick from the reconnaissance works only from C, not through
+  any Node API.
+- A long gap forces a full refresh of all active parcels, overriding the
+  **per-parcel tier backoff only**. It must **never** override the gated-carrier
+  throttle or the `needs_postcode` skip — doing so would resurrect the retry storm
+  those mechanisms exist to prevent. Since overnight sleep is normal, "long gap" in
+  practice means "the first run after you open the lid", typically once a morning.
 
 ### Schedule
 
