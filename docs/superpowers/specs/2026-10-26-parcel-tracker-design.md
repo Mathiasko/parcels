@@ -389,9 +389,14 @@ Content-Type: application/json
 - Supporting endpoints, same host and header: `GET /tracking/validate-shipment-num/{n}`
   (cheap existence check), `GET /packageRegexes/get` (live accepted-number regexes),
   `GET /lang/get/sk` (status → Slovak label map).
-- Number format for routing: **`/^703\d{11}[0-4]\d$/` only.** SPS's own regex list
-  includes UPS (`1Z…`) and DHL (`JJD14902…`) patterns because it carries inbound
-  partner parcels — using the full list would misroute UPS and DHL numbers to SPS.
+- Number format for routing: **two SPS-native forms**, both required.
+  `/^703\d{11}[0-4]\d$/` **and** `/^SK[A-HJ-NP-Z0-9]{5}\d{2}[A-HJ-NP-Z0-9]{9}$/`
+  (`SK` + 16 characters, 18 total). **VERIFIED 2026-10-27:** the real tracking
+  number in the user's own SPS mail is `SK0TEST6000000000X`, which the live API
+  answers in full — so an adapter matching only the `703` family rejects the
+  format this user actually receives. Still **exclude** the UPS (`1Z…`) and DHL
+  (`JJD14902…`) entries from SPS's published list, which exist only because SPS
+  carries inbound partner parcels and would misroute other carriers' parcels.
 - No check digit identified. Client-side length gate is `>= 14`.
 - Pickup location: `placedInParcelShop` status indicates it; the address is not in
   the tracking payload. Pickup-point directory is public at
@@ -910,7 +915,7 @@ Confirmations owed against the first real parcel of each carrier, via
 | Slovenská pošta | `events[]` field names; `localDate` has no offset; `postOffice` appears under `p=1` |
 | Packeta | `item` field names and `packetStatusId` values; whether `branchAddress` is absent for courier delivery |
 | GLS | whether `rstt029` includes `history` or only `progressBar`; which `addresses[]` entry is the parcel shop (the adapter picks the first with coordinates, since `type` values are undocumented) — needs a captured `INPICKUP` record |
-| SPS | `data.states[]` field names; whether events carry a location field |
+| SPS | ~~`data.states[]` field names~~ — **CONFIRMED 2026-10-27** against real parcel `SK0TEST6000000000X`: `states[]` carries `time` (`yyyy-MM-dd HH:mm:ss`, naive `Europe/Bratislava`) and `statusDescr` (free-text Slovak, e.g. "Definícia dát", "Prvá registrácia", "Uložený v balíkomate", "Doručenie"). **No location field.** Per-event status is correctly `unknown` except the terminal one, since SPS emits no per-event codes. |
 | DPD | the postcode-verified shape; diff of step 3 with and without `dataForVerification` |
 
 Deferred, explicitly out of v1:
