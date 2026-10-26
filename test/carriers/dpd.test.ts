@@ -285,6 +285,27 @@ test('a non-JSON, truncated or unrecognised 200 body is transport, never a throw
   }
 })
 
+test('an unregistered number answered with DPD\'s empty success-shaped shell is not_found, not transport', async () => {
+  // Captured live: HTTP 200, receiver all null, and no status, parcelHistory, parcelEvents or exceptionType.
+  const { r } = await lookup(happy(file('unregistered-shell.json')))
+  expect(r).toEqual({ ok: false, number: NUMBER, reason: 'not_found' })
+})
+
+test('only the absence of status AND history makes a 200 a not_found: anything half-recognisable stays transport', async () => {
+  const shell = fixtureJson('unregistered-shell.json')
+  const cases: unknown[] = [
+    { ...shell, status: 'ORDER_CREATED' },          // a status of the wrong shape is drift
+    { ...shell, status: {} },                       // a status object with no description is drift
+    { ...shell, parcelHistory: [] },                // history present at all means the schema is in play
+    { ...shell, parcelEvents: [] },
+    {},                                             // an empty object is not DPD's shell
+  ]
+  for (const body of cases) {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect((await lookup(happy(json(body)))).r).toEqual({ ok: false, number: NUMBER, reason: 'transport' })
+  }
+})
+
 /** `prealert.json` with its top-level and only history milestone replaced. */
 function withMilestone(description: string) {
   const body = fixtureJson('prealert.json')

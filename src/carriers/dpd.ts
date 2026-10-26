@@ -393,6 +393,14 @@ function toPickup(body: Record<string, unknown>, scans: RawScan[]): PickupPoint 
 }
 
 function toResult(number: string, body: Record<string, unknown>): FetchResult {
+  // An unregistered number is answered 200 with a success-shaped empty shell (receiver all null, `refused`
+  // false ...) and none of the keys that carry a parcel: no `status`, `parcelHistory` or `parcelEvents`.
+  // That is DPD saying "no such parcel", so it is not_found, not an outage. The test is the ABSENCE of those
+  // keys (not a marker field the shell happens to carry), and an empty object is not the shell: anything that
+  // has even one of them but cannot be read stays `transport`, so real schema drift still alarms.
+  if (Object.keys(body).length > 0 && !('status' in body) && !('parcelHistory' in body) && !('parcelEvents' in body)) {
+    return { ok: false, number, reason: 'not_found' }
+  }
   const top = isObject(body.status) ? (body.status as RawMilestone) : undefined
   const description = asString(top?.description)
   if (!top || !description) return { ok: false, number, reason: 'transport' }
