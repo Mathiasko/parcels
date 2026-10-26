@@ -2,7 +2,9 @@ import { describe, expect, test, vi } from 'vitest'
 import { buildServer, type WebDeps } from '../src/web/server.js'
 import { appendEvents } from '../src/db/events.js'
 import { recordHealth } from '../src/db/health.js'
-import { findParcel, getParcel, insertParcel, setNeedsPostcode, updateParcelState } from '../src/db/parcels.js'
+import { recordIngest } from '../src/db/ingest-status.js'
+import type { Config } from '../src/core/config.js'
+import { findParcel, getParcel, insertParcel, setArchived, setNeedsPostcode, updateParcelState } from '../src/db/parcels.js'
 import type { Database } from '../src/db/index.js'
 import type { CarrierId } from '../src/core/types.js'
 import type { Notification } from '../src/notify/types.js'
@@ -106,7 +108,7 @@ describe('web pages', () => {
   test('GET /history renders cleanly on an empty database', async () => {
     const res = await get(memDb(), '/history')
     expect(res.statusCode).toBe(200)
-    expect(res.body).toContain('No delivered parcels')
+    expect(res.body).toContain('No delivered or archived parcels')
   })
 
   test('formatDuration: whole hours under 48h, one-decimal days beyond', () => {
@@ -430,5 +432,101 @@ describe('web pages: fix round 1', () => {
     expect((await attempt({ 'sec-fetch-site': 'cross-site' })).statusCode).toBe(403)
     expect((await attempt({ 'sec-fetch-site': 'same-site' })).statusCode).toBe(403)           // a sibling port on localhost
     expect((await attempt({ 'sec-fetch-site': 'same-origin' })).statusCode).toBe(409)         // allowed; the parcel now exists
+  })
+})
+
+// --- archived-on-arrival parcels stay queryable; mail ingest health --------------------------------
+
+describe('archived parcels from old mail', () => {
+  /** What the ingest leaves behind for 3-year-old mail: never polled (status unknown), archived, first seen at the mail's date. */
+  function archivedOnArrival(db: Database, number: string, merchant: string, daysOld: number): number {
+    const id = insertParcel(db, {
+      carrier: 'packeta', trackingNumber: number, merchant, source: 'email',
+      firstSeenAt: new Date(NOW.getTime() - daysOld * DAY),
+    })
+    setArchived(db, id, NOW)
+    return id
+  }
+
+  test('GET /history lists them, marked archived, newest first, mixed with delivered ones', async () => {
+    const db = memDb()
+    archivedOnArrival(db, 'Z0000000001', 'OldShopA', 400)
+    archivedOnArrival(db, 'Z0000000002', 'OldShopB', 90)
+    delivered(db, { number: 'DELIV', label: 'Delivered one', deliveredDaysAgo: 200 })
+    const body = (await get(db, '/history')).body
+    const at = ['OldShopB', 'Delivered one', 'OldShopA'].map(t => body.indexOf(t))
+    expect(at.every(i => i >= 0)).toBe(true)
+    expect(at).toEqual([...at].sort((a, b) => a - b))             // 90d, then 200d, then 400d
+    expect(body).toMatch(/archived · /)
+  })
+
+  test('they are not "In flight", and the median delivery time is untouched', async () => {
+    const db = memDb()
+    archivedOnArrival(db, 'Z0000000001', 'OldShopA', 400)
+    const home = (await get(db, '/')).body
+    expect(home).not.toContain('OldShopA')
+    const hist = (await get(db, '/history')).body
+    const row = hist.slice(hist.indexOf('data-carrier="packeta"')).split('</tr>')[0]!
+    expect(row).toContain('no deliveries yet')               // status stays unknown, so it is not a delivery
+  })
+
+  test('their status is never turned into "delivered"', async () => {
+    const db = memDb()
+    const id = archivedOnArrival(db, 'Z0000000001', 'OldShopA', 400)
+    await get(db, '/history')
+    expect(getParcel(db, id)!.status).toBe('unknown')
+  })
+
+  test('search and date filters apply to them (first-seen date stands in for the delivery date)', async () => {
+    const db = memDb()
+    archivedOnArrival(db, 'Z0000000001', 'OldShopA', 400)
+    archivedOnArrival(db, 'Z0000000002', 'OldShopB', 90)
+    expect((await get(db, '/history?q=oldshopa')).body).toContain('OldShopA')
+    expect((await get(db, '/history?q=oldshopa')).body).not.toContain('OldShopB')
+    const from = new Date(NOW.getTime() - 120 * DAY).toISOString().slice(0, 10)
+    const body = (await get(db, `/history?from=${from}`)).body
+    expect(body).toContain('OldShopB')
+    expect(body).not.toContain('OldShopA')
+  })
+
+  test('the empty state names both kinds', async () => {
+    expect((await get(memDb(), '/history')).body).toContain('No delivered or archived parcels')
+  })
+})
+
+describe('GET /health: mail ingest', () => {
+  const webWith = (db: Database, imap?: Config['imap']) =>
+    buildServer({ db, config: { ...config, imap }, now: () => NOW, notifier: { send: async () => {} } })
+  const IMAP = { host: 'h', port: 993, user: 'u', pass: 'p', mailbox: 'parcels' }
+
+  test('no mailbox configured and no history: the section is absent', async () => {
+    const body = (await webWith(memDb()).inject({ method: 'GET', url: '/health' })).body
+    expect(body).not.toContain('Mail ingest')
+  })
+
+  test('configured but never run: shows "no data"', async () => {
+    const body = (await webWith(memDb(), IMAP).inject({ method: 'GET', url: '/health' })).body
+    expect(body).toContain('Mail ingest')
+    expect(body).toContain('no data')
+  })
+
+  test('shows failing, the last error and the streak', async () => {
+    const db = memDb()
+    recordIngest(db, { ok: true }, new Date('2026-10-26T09:00:00Z'))
+    recordIngest(db, { ok: false, error: 'Invalid credentials (Failure)' }, new Date('2026-10-26T10:00:00Z'))
+    recordIngest(db, { ok: false, error: 'Invalid credentials (Failure)' }, new Date('2026-10-26T11:00:00Z'))
+    const body = (await webWith(db, IMAP).inject({ method: 'GET', url: '/health' })).body
+    const section = body.slice(body.indexOf('id="ingest-health"')).split('</table>')[0]!
+    expect(section).toContain('failing')
+    expect(section).toContain('Invalid credentials (Failure)')
+    expect(section).toContain('Mon 26 Oct, 10:00')                 // last ok, in Bratislava time
+    expect(section).toMatch(/>\s*2\s*</)
+  })
+
+  test('a healthy ingest shows ok', async () => {
+    const db = memDb()
+    recordIngest(db, { ok: true }, NOW)
+    const body = (await webWith(db, IMAP).inject({ method: 'GET', url: '/health' })).body
+    expect(body.slice(body.indexOf('id="ingest-health"')).split('</table>')[0]).toContain('<span>ok</span>')
   })
 })

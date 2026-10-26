@@ -14,7 +14,7 @@ carrier's website.
 
 ### Success criteria
 
-1. A parcel appears in the app by itself, from a forwarded shipping email.
+1. A parcel appears in the app by itself, from the shipping email in the user's own mailbox (a Gmail label; nothing is forwarded).
 2. A status change produces a native macOS notification within one poll cycle of
    the carrier publishing it.
 3. When a parcel is ready for pickup, the notification names **where** to collect
@@ -65,7 +65,7 @@ Decisions taken during design, recorded so they are not silently revisited.
 | Own HTTP adapters, no headless browser | All five carriers are reachable with plain `fetch`. A browser would add ~400 MB and more failure modes for no gain. |
 | No third-party aggregator | Not needed; keeps parcel data local. Adapter interface stays narrow enough that an aggregator-backed adapter could be dropped in for any carrier that defeats us. |
 | Runs on this Mac only | User's choice. Accepts that polling pauses during sleep, in exchange for zero hosting and zero cloud. |
-| Dedicated mailbox + Gmail forward rule | App credentials are scoped to a throwaway mailbox; the main inbox is never exposed. |
+| Read the main Gmail account, scoped to a label, strictly read-only | A Gmail filter labels shipping mail `parcels`; nothing is forwarded. The App Password is not scope-limited (see §8 for the accepted trade-off), so the ingest opens the mailbox read-only and never writes a flag. |
 | `terminal-notifier` for notifications | The only mechanism giving click-to-URL, its own app identity, and banner coalescing without a paid Apple Developer certificate. `osascript` is kept behind the same interface as a zero-dependency fallback. |
 | DPD included as a normal adapter | User's explicit choice, with the fragility understood and accepted. |
 | GLS open endpoint primary, official API documented as fallback | Works today with no signup. Official API (500 calls/day free) is the documented migration if GLS closes it again. |
@@ -111,17 +111,17 @@ cannot stop tracking; a hung carrier request cannot take down the UI.
 
 ### Poll run sequence
 
-1. Fetch `UNSEEN` mail from the dedicated mailbox over IMAP.
-2. Extract carrier + tracking number + merchant; insert new parcels.
+1. Read the `parcels` label over IMAP (read-only, no flag ever written); store messages not yet in the `messages` table; extract carrier + tracking number + merchant; insert new parcels. A failure here is recorded in `ingest_status` and never stops the carrier polling that follows.
 3. Select parcels due for polling per the backoff tiers (§9); group by carrier.
 4. Call each adapter. Slovenská pošta batches all its numbers into one request;
    others are per-parcel with a delay between requests.
 5. Diff returned events against stored events; append new ones.
 6. Emit notifications for un-notified meaningful changes.
-7. Update `carrier_health`; commit; mark mail seen; exit.
+7. Update `carrier_health`; commit; exit.
 
-Mail is marked seen **only after commit**, so a crash re-processes rather than
-loses a parcel.
+Mail is **never** marked seen (or touched at all). Each message is stored and placed in one transaction and
+deduplicated on `messages.message_id`, so a crash or a failure on one message re-processes it on the next
+run rather than losing a parcel.
 
 ### Accepted consequences
 
@@ -682,16 +682,22 @@ path. Both shapes must be handled and tested.
 
 ### Pipeline
 
-1. Connect over IMAP TLS; fetch `UNSEEN`.
-2. Write each raw message to `data/mail/<id>.eml`; insert a `messages` row.
-3. **Stage 1 — carrier from sender domain.** This is what rescues carrier
-   detection: a bare 14-digit number is ambiguous, but mail from `dpd.sk` is not.
-   Because Gmail forwarding wraps the original, the original sender must be read
-   from the forwarded headers, not the envelope sender.
-4. **Stage 2 — number by carrier-specific regex**, plus merchant name from the
-   forwarded subject/sender (so a card reads "Alza", not a number).
-5. Insert the parcel; link it to the message.
-6. Mark the message seen **only after commit**.
+1. Connect over IMAP TLS; open the label **read-only** (`EXAMINE`); read the envelopes of the whole
+   label, then download (`BODY.PEEK`) only messages whose Message-ID is not already in `messages`.
+   Messages over the size cap are recorded without being downloaded.
+2. For each new message, in one transaction: write the raw message to
+   `data/mail/<id>.eml` (directory 0700, files 0600) and insert a `messages` row.
+3. **Stage 1 — carrier from sender domain** (the registrable domain of `From`, any subdomain). This is
+   what rescues carrier detection: a bare 14-digit number is ambiguous, but mail from `dpd.sk` is not.
+   For a hand-forwarded message the sender inside the forwarded wrapper is the fallback.
+4. **Stage 2 — number by carrier-specific regex** over the subject and body (SPS puts it in the
+   subject), plus merchant name where the mail states it (so a card reads "Alza", not a number). With no
+   sender hint, only a distinctive shape (posta, Packeta, SPS) with exactly one candidate is accepted.
+5. Insert the parcel and link it to the message; a message about a parcel that already exists is just
+   linked. **A parcel whose newest mail in the batch is older than 30 days is created already archived**
+   (never polled, first-seen set to the mail's date, status left `unknown`), so the first run over a
+   multi-year label does not poll dead parcels. Age uses the later of the `Date` header and `INTERNALDATE`.
+6. Nothing is written back to the mailbox. The mail is never marked seen.
 
 ### Behaviours
 
@@ -699,11 +705,19 @@ path. Both shapes must be handled and tested.
   list in the web UI with the subject and sender shown, where carrier and number
   are assigned in one click. Shipping-email formats change constantly; silent
   failure would make misses invisible and undermine the whole premise.
-- **Ambiguity is resolved by probing, not guessing.** If a number matches several
-  carriers and the sender gives no hint, try each candidate — `not_found` is a
-  cheap definitive negative.
+- **Ambiguity goes to needs-attention, not to probing.** (The original design probed each candidate
+  carrier, since `not_found` is a cheap negative; that is **not implemented**.) A number is accepted
+  without a sender hint only if its shape is distinctive and unambiguous; bare 11-14 digit numbers and
+  mail naming several different numbers go to the needs-attention list, where one click assigns them.
+  Mail from a carrier domain that yields no number (e.g. Packeta's app-verification mail) lands there
+  too and never creates a parcel.
+- **The ingest has its own health.** The `ingest_status` row (last ok, last error, consecutive failures)
+  is shown on the Health page, and after three consecutive failed runs one notification is sent per
+  outage (held back if every carrier also failed in that run, i.e. the Mac is offline). A revoked App
+  Password therefore does not fail silently.
 - **A message can be reprocessed** from its stored `.eml` after a parser fix,
-  without needing the mail to still exist upstream.
+  without needing the mail to still exist upstream: `cli reprocess` re-runs extraction over every stored
+  message that no parcel was made from.
 - **Email is untrusted input.** Subjects and sender names reach the notification
   layer. They are passed as **process arguments**, never interpolated into a shell
   or AppleScript string; control characters are stripped and lengths capped. Links
@@ -857,8 +871,11 @@ Server-rendered pages, no build step, no frontend framework. Bound to
 ## 13. Security and privacy
 
 - Localhost only; no authentication by design, nothing listens externally.
-- IMAP credentials in a `chmod 600` config file, gitignored. Scoped to a dedicated
-  mailbox, never the main inbox.
+- IMAP credentials (a Gmail App Password for the user's main account) in a `chmod 600` config file,
+  gitignored. The app reads only the `parcels` label, **read-only** (no flag, move or delete is ever
+  issued), but an App Password is not scope-limited, so the label scope is a convention the app honours,
+  not a boundary Google enforces; see §8 for the accepted trade-off. Stored raw mail (`data/mail/`)
+  contains personal mail and pickup PINs: directory 0700, files 0600, gitignored.
 - Email content is untrusted: arguments not interpolation, control characters
   stripped, sizes capped, links never fetched.
 - Parcel data never leaves the machine. No aggregator, no telemetry.
@@ -884,9 +901,11 @@ Server-rendered pages, no build step, no frontend framework. Bound to
   notifies once.
 - **Diff/notification tests:** status transition fires; same-status new event does
   not; summary replaces >4 individual notifications.
-- **Email extraction tests** over saved `.eml` samples, including a forwarded
-  message where the original sender is in the wrapper, and an unparseable message
-  landing in needs-attention.
+- **Email extraction tests** over redacted `.eml` fixtures built from the real mailbox (committed with
+  all personal data replaced), plus hand-written ones for carriers with no real sample: sender-domain
+  routing (and its spoof cases), a hand-forwarded message where the original sender is in the wrapper,
+  a carrier mail with no parcel landing in needs-attention, the 30-day archive boundary, and a fake IMAP
+  client that fails the test on any flag, move or delete call.
 - **Injection test:** a parcel label containing quotes, backslashes, and newlines
   passes through the notifier without breaking or executing.
 - No live carrier calls in the test suite. A separate, manually-run

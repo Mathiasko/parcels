@@ -65,6 +65,16 @@ const asDate = (v: Date | string | undefined): Date | undefined => {
   return d && !Number.isNaN(d.getTime()) ? d : undefined
 }
 
+/**
+ * The later of the Date header (set by the sender, so arbitrary) and INTERNALDATE (set by the server on
+ * arrival). A bogus-old Date header must not make a fresh parcel look three years old and archive it
+ * unseen; a bogus-future one only makes a parcel look newer, which is the safe direction.
+ */
+export function receivedAt(header: Date | undefined, arrival: Date | undefined): Date {
+  if (header && arrival) return header > arrival ? header : arrival
+  return header ?? arrival ?? new Date()
+}
+
 /** A message with no Message-ID still needs a stable key, or it would be stored again every run. */
 function syntheticId(m: EnvelopeMessage, from: string, mailbox: string): string {
   const basis = [m.uid, from, m.envelope?.subject ?? '', asDate(m.envelope?.date)?.toISOString() ?? ''].join('\n')
@@ -106,7 +116,7 @@ export async function fetchMessages(deps: FetchDeps): Promise<RawMessage[]> {
         if (deps.known?.(messageId)) continue
         const base = {
           messageId, from, subject: m.envelope?.subject ?? '',
-          receivedAt: asDate(m.envelope?.date) ?? asDate(m.internalDate) ?? new Date(),
+          receivedAt: receivedAt(asDate(m.envelope?.date), asDate(m.internalDate)),
         }
         if ((m.size ?? 0) > maxBytes) {
           out.push({ ...base, raw: Buffer.alloc(0), oversize: true })

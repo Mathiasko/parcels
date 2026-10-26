@@ -11,6 +11,7 @@ import { openDb, type Database } from './db/index.js'
 import { createNotifier, type SpawnFn } from './notify/send.js'
 import type { Notifier } from './notify/types.js'
 import { listEvents } from './db/events.js'
+import { reprocessMessages } from './ingest/ingest.js'
 import { findParcel, getParcel, insertParcel, listActive } from './db/parcels.js'
 
 export interface CliContext {
@@ -34,6 +35,7 @@ const USAGE = `usage: cli <command>
   list
   show <id>
   poll
+  reprocess
   probe <carrier> <number> [--zip <postcode>]
   notify-test`
 
@@ -126,6 +128,19 @@ async function poll(ctx: CliContext): Promise<void> {
 }
 
 /**
+ * Re-runs extraction over stored mail that no parcel was made from, using the .eml files on disk (no
+ * mailbox access). Run it after improving the extractor; messages already assigned are left alone.
+ */
+async function reprocess(ctx: CliContext): Promise<void> {
+  const r = await reprocessMessages(ctx.db, {
+    now: new Date(), adapters: ctx.adapters ?? allAdapters(), defaultPostalCode: ctx.config.defaultPostalCode,
+  })
+  ctx.out(`reprocessed ${r.read} unassigned message(s): ${r.created} parcel(s) created`
+    + `${r.archivedOld ? ` (${r.archivedOld} archived as old)` : ''}, ${r.linked} linked, ${r.needsAttention} still need attention`
+    + `${r.failed ? `, ${r.failed} failed` : ''}`)
+}
+
+/**
  * Sends one fixed notification through the configured notifier and says how it went. This is the
  * command that triggers macOS's one-time authorisation prompt for terminal-notifier. The tools exit
  * 0 whether or not a banner appeared, so success here means "the process ran": look for the banner.
@@ -184,6 +199,7 @@ export async function runCli(argv: string[], ctx: CliContext): Promise<number> {
       case 'list': list(ctx); break
       case 'show': show(rest, ctx); break
       case 'poll': await poll(ctx); break
+      case 'reprocess': await reprocess(ctx); break
       case 'probe': await probe(rest, ctx); break
       case 'notify-test': await notifyTest(ctx); break
       default:

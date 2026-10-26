@@ -103,3 +103,21 @@ test('probe still prints the response body when the adapter throws while parsing
   expect(r.out).toEqual([body])
   expect(r.err).toMatch(/probe failed/)
 })
+
+test('reprocess re-runs extraction over stored, unassigned mail from disk and reports what it did', async () => {
+  const { mkdtempSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const db = memDb()
+  const path = join(mkdtempSync(join(tmpdir(), 'parcels-cli-')), '1.eml')
+  writeFileSync(path, 'From: noreply@packeta.sk\r\nTo: r@example.com\r\nSubject: Zasielka\r\n\r\nCislo zasielky Z 000 0000 004\r\n')
+  db.prepare("INSERT INTO messages (message_id, received_at, from_addr, subject, raw_path, parsed_ok, parse_note) VALUES ('<a@x>', ?, 'noreply@packeta.sk', 'Zasielka', ?, 0, 'old parser')")
+    .run(new Date().toISOString(), path)
+
+  const r = await cli(db, ['reprocess'])
+
+  expect(r.code).toBe(0)
+  expect(r.out).toEqual(['reprocessed 1 unassigned message(s): 1 parcel(s) created, 0 linked, 0 still need attention'])
+  expect(findParcel(db, 'packeta', 'Z0000000004')).toBeDefined()
+  expect((await cli(db, ['reprocess'])).out).toEqual(['reprocessed 0 unassigned message(s): 0 parcel(s) created, 0 linked, 0 still need attention'])
+})

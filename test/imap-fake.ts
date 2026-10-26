@@ -6,6 +6,8 @@ export interface FakeMessage {
   subject?: string
   from?: string
   date?: Date
+  /** The server's arrival time (INTERNALDATE); defaults to `date`. */
+  internalDate?: Date
   source?: Buffer
   /** Reported size; defaults to the source length. */
   size?: number
@@ -58,7 +60,7 @@ export function fakeImap(
           yield {
             uid: m.uid,
             size: m.size ?? m.source?.length ?? 0,
-            internalDate: m.date,
+            internalDate: m.internalDate ?? m.date,
             envelope: {
               messageId: m.messageId,
               subject: m.subject,

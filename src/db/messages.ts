@@ -30,9 +30,10 @@ export function storeMessage(db: Database, m: RawMessage, dir: string): number {
     }
     const id = Number(info.lastInsertRowid)
     if (!m.oversize) {
-      mkdirSync(dir, { recursive: true })
+      // Full personal mail (pickup PINs included): owner-only, like config.json.
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
       const path = join(dir, `${id}.eml`)
-      writeFileSync(`${path}.tmp`, m.raw)
+      writeFileSync(`${path}.tmp`, m.raw, { mode: 0o600 })
       renameSync(`${path}.tmp`, path)
       db.prepare('UPDATE messages SET raw_path = ? WHERE id = ?').run(path, id)
     }

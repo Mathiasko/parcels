@@ -10,6 +10,7 @@ import { HttpTransportError, captureBodies } from './http.js'
 import { isDue, slotFor } from './backoff.js'
 import { dedupHash } from './dedup.js'
 import { appendEvents, markNotified, recomputeParcelStatus } from '../db/events.js'
+import { recordIngest } from '../db/ingest-status.js'
 import { carrierHealth, recordHealth, type HealthOutcome, type HealthRow } from '../db/health.js'
 import {
   listActive, markAttempted, postcodeRejected, setNeedsPostcode, updateParcelState, type Parcel,
@@ -128,19 +129,27 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
 /**
  * Mail ingest is one input among several, never the run itself: whatever goes wrong with the mailbox
  * (no network, a revoked app password, a bad message) is reported and the carriers are still polled.
- * Carrier health is keyed by carrier, so a mailbox failure is carried in the report instead, where
- * `summarize` puts it in the poll log.
+ * A mailbox failure is carried in the report (and so the poll log) and in the
+ * `ingest_status` row behind the Health page and the "ingest is failing" banner.
  */
 async function runIngest(
   db: Database, deps: PollDeps, ingest: NonNullable<PollDeps['ingest']>,
 ): Promise<IngestReport> {
+  let report: IngestReport
   try {
-    return await ingestMessages(db, {
+    report = await ingestMessages(db, {
       ...ingest, now: deps.now, adapters: deps.adapters, defaultPostalCode: deps.config.defaultPostalCode,
     })
   } catch (err) {
-    return { read: 0, created: 0, linked: 0, archivedOld: 0, needsAttention: 0, error: describe(err) }
+    report = { read: 0, created: 0, linked: 0, archivedOld: 0, needsAttention: 0, failed: 0, error: describe(err) }
   }
+  // Not recorded in carrier_health (keyed by carrier); the ingest has a row of its own. Never fatal.
+  try {
+    recordIngest(db, report.error === undefined ? { ok: true } : { ok: false, error: report.error }, deps.now)
+  } catch (err) {
+    console.error(`ingest: could not record status: ${describe(err)}`)
+  }
+  return report
 }
 
 /**
@@ -320,6 +329,6 @@ export function summarize(report: PollReport): string {
   const mail = !i ? ''
     : i.error ? `, mail ingest failed: ${i.error}`
     : i.read === 0 ? ''
-    : `, mail: ${i.read} new, ${i.created} parcel(s) created${i.archivedOld ? ` (${i.archivedOld} archived as old)` : ''}${i.needsAttention ? `, ${i.needsAttention} need attention` : ''}`
+    : `, mail: ${i.read} new, ${i.created} parcel(s) created${i.archivedOld ? ` (${i.archivedOld} archived as old)` : ''}${i.needsAttention ? `, ${i.needsAttention} need attention` : ''}${i.failed ? `, ${i.failed} failed (will retry)` : ''}`
   return `polled ${report.polled} parcel(s), ${report.newEvents.length} new event(s)${mail}${failed}`
 }

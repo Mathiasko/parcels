@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
@@ -93,6 +93,18 @@ describe('extract: real (redacted) mail', () => {
 })
 
 describe('htmlToText', () => {
+  test('hostile html stays linear: unclosed <style and a wall of "<" finish promptly', () => {
+    const t0 = Date.now()
+    htmlToText('<style '.repeat(150_000))
+    htmlToText('<'.repeat(900_000))
+    htmlToText('<p'.repeat(450_000))
+    expect(Date.now() - t0).toBeLessThan(2_000)
+  })
+
+  test('an unclosed <style> block swallows the rest instead of rescanning for every opener', () => {
+    expect(htmlToText('keep <style>a{} never closed Z0000000001').trim()).toBe('keep')
+  })
+
   test('drops style/script, keeps block boundaries, decodes entities', () => {
     const t = htmlToText('<style>p{color:red}</style><p>A&nbsp;B</p><td>Z&#269; &amp; &#x41;</td><script>x()</script>')
     expect(t.replace(/\s+/g, ' ').trim()).toBe('A B Zč & A')
@@ -128,6 +140,19 @@ describe('extract: carriers without a fixture from the real mailbox', () => {
     expect(await extract(fx('synthetic-gls-notification'))).toMatchObject({
       carrier: 'gls', number: '000000000001', confidence: 'sender',
     })
+  })
+
+  test('GLS: a phone number printed BEFORE the parcel number does not win (12 digits, like a +421 number)', async () => {
+    expect(await extract(fx('synthetic-gls-phone-first'))).toMatchObject({ carrier: 'gls', number: '000000000001' })
+  })
+
+  test('GLS: with no label at all, a phone-shaped candidate loses to a non-phone one', async () => {
+    const e = await extract(eml('noreply@gls-group.eu', 'Your parcel', 'Tel: 421900123456\r\nYour reference 000000000007 is on its way'))
+    expect(e.number).toBe('000000000007')
+  })
+
+  test('GLS: if the phone-shaped number is all there is, it is still returned (needs-attention is for NO candidate)', async () => {
+    expect((await extract(eml('noreply@gls-group.eu', 'Your parcel', 'ref 421900123456'))).number).toBe('421900123456')
   })
 })
 
@@ -387,7 +412,7 @@ describe('reprocessing', () => {
     expect(counts(db)).toEqual({ parcels: 0, messages: 1 })
 
     // Parser fixed (adapter now registered): reprocess from the stored .eml, offline.
-    const r = await reprocessMessages(db, { mailDir: dir, now: NOW, adapters: allAdapters(), defaultPostalCode: '81101' })
+    const r = await reprocessMessages(db, { now: NOW, adapters: allAdapters(), defaultPostalCode: '81101' })
     expect(r).toMatchObject({ created: 1, needsAttention: 0 })
     expect(findParcel(db, 'packeta', 'Z0000000001')).toBeDefined()
     expect(listUnparsedMessages(db)).toEqual([])
@@ -404,7 +429,7 @@ describe('reprocessing', () => {
     writeFileSync(path, 'garbage')
     db.prepare("INSERT INTO parcels (carrier, tracking_number, status, first_seen_at, source) VALUES ('gls','000000000009','unknown','x','manual')").run()
     db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = 1 WHERE id = ?').run(id)
-    const r = await reprocessMessages(db, { mailDir: dir, now: NOW, adapters: allAdapters(), defaultPostalCode: '81101' })
+    const r = await reprocessMessages(db, { now: NOW, adapters: allAdapters(), defaultPostalCode: '81101' })
     expect(r).toMatchObject({ created: 0, needsAttention: 0 })
   })
 })
@@ -444,5 +469,176 @@ describe('runPoll wiring', () => {
     const report = await runPoll({ db, http: bodyHttp(), adapters: [], config, now: NOW })
     expect(report.ingest).toBeUndefined()
     expect(summarize(report)).toBe('polled 0 parcel(s), 0 new event(s)')
+  })
+})
+
+// --- fix round 1 ---------------------------------------------------------------------------------
+
+describe('ingestMessages: dates', () => {
+  test('a bogus-old Date header does not archive a fresh parcel on arrival (INTERNALDATE is the later)', async () => {
+    const { db, deps } = setup([mail(1, 'packeta-accepted', 1, {
+      date: new Date('2020-01-01T00:00:00Z'), internalDate: new Date(NOW.getTime() - DAY),
+    })])
+    const r = await ingestMessages(db, deps)
+    expect(r).toMatchObject({ created: 1, archivedOld: 0 })
+    expect(findParcel(db, 'packeta', 'Z0000000001')!.archivedAt).toBeUndefined()
+  })
+
+  test('a parcel archived on arrival is first seen when its mail was, and its status stays unknown', async () => {
+    const { db, deps } = setup([mail(1, 'packeta-accepted', 200)])
+    await ingestMessages(db, deps)
+    const p = findParcel(db, 'packeta', 'Z0000000001')!
+    expect(p.archivedAt).toEqual(NOW)
+    expect(p.firstSeenAt).toEqual(new Date(NOW.getTime() - 200 * DAY))
+    expect(p.status).toBe('unknown')       // status never comes from mail
+  })
+
+  test('a live parcel is first seen NOW (the backoff and dormancy clocks run from it)', async () => {
+    const { db, deps } = setup([mail(1, 'packeta-accepted', 2)])
+    const before = Date.now()
+    await ingestMessages(db, deps)
+    expect(findParcel(db, 'packeta', 'Z0000000001')!.firstSeenAt.getTime()).toBeGreaterThanOrEqual(before)
+  })
+})
+
+describe('ingestMessages: one message is one unit', () => {
+  const three = () => [
+    mail(1, 'packeta-accepted', 3),                        // Z...01
+    mail(2, 'packeta-zbox-next-day', 2),                   // Z...02
+    mail(3, 'synthetic-eshop-dispatch-packeta', 1),        // Z...03
+  ]
+  const rows = (db: ReturnType<typeof memDb>) => db.prepare('SELECT message_id, parsed_ok, parcel_id FROM messages ORDER BY id').all()
+
+  test('a throw while STORING message k (disk) rolls that message back; the earlier ones stay placed, and the next run retries it', async () => {
+    const s = setup(three())
+    // The third message gets row id 3 (a rolled-back id is reused, so only the LAST message can be singled
+    // out by id). A directory in the way of 3.eml makes the rename fail (EISDIR/ENOTEMPTY).
+    mkdirSync(join(s.deps.mailDir, '3.eml', 'x'), { recursive: true })
+    const r = await ingestMessages(s.db, s.deps)
+    expect(r).toMatchObject({ read: 3, created: 2, failed: 1 })
+    expect(findParcel(s.db, 'packeta', 'Z0000000001')).toBeDefined()
+    expect(findParcel(s.db, 'packeta', 'Z0000000002')).toBeDefined()
+    expect(findParcel(s.db, 'packeta', 'Z0000000003')).toBeUndefined()
+    // No stranded row: the failed message is not "known", so it is fetched again.
+    expect(s.db.prepare('SELECT COUNT(*) n FROM messages').get()).toEqual({ n: 2 })
+    expect(s.db.prepare('SELECT COUNT(*) n FROM messages WHERE parsed_ok = 0 AND parcel_id IS NULL').get()).toEqual({ n: 0 })
+
+    // Disk fixed: the next run places exactly the one that failed.
+    const fake = fakeImap(three())
+    const again = await ingestMessages(s.db, { ...s.deps, client: fake.client, mailDir: mkdtempSync(join(tmpdir(), 'parcels-fixed-')) })
+    expect(again).toMatchObject({ read: 1, created: 1, failed: 0 })
+    expect(findParcel(s.db, 'packeta', 'Z0000000003')).toBeDefined()
+    expect(counts(s.db)).toEqual({ parcels: 3, messages: 3 })
+  })
+
+  test('a throw while PLACING message k (database) rolls it back whole; the others still land; nothing is stranded', async () => {
+    const s = setup(three())
+    s.db.exec(`CREATE TRIGGER boom BEFORE INSERT ON parcels WHEN NEW.tracking_number = 'Z0000000002'
+               BEGIN SELECT RAISE(ABORT, 'SQLITE_BUSY (simulated)'); END`)
+    const r = await ingestMessages(s.db, s.deps)
+    expect(r).toMatchObject({ read: 3, created: 2, failed: 1 })
+    expect(rows(s.db)).toHaveLength(2)                              // no stored-but-unplaced row
+    expect((rows(s.db) as Array<{ parsed_ok: number }>).every(m => m.parsed_ok === 1)).toBe(true)
+
+    s.db.exec('DROP TRIGGER boom')
+    const again = await ingestMessages(s.db, { ...s.deps, client: fakeImap(three()).client })
+    expect(again).toMatchObject({ read: 1, created: 1, failed: 0 })
+    expect(counts(s.db)).toEqual({ parcels: 3, messages: 3 })
+  })
+
+  test('counts only reflect committed messages (a rolled-back creation is not "created")', async () => {
+    const s = setup([mail(1, 'packeta-accepted', 40)])      // old -> would be archived on arrival
+    s.db.exec(`CREATE TRIGGER boom2 BEFORE UPDATE OF archived_at ON parcels BEGIN SELECT RAISE(ABORT, 'x'); END`)
+    const r = await ingestMessages(s.db, s.deps)
+    expect(r).toMatchObject({ created: 0, archivedOld: 0, failed: 1 })
+    expect(counts(s.db)).toEqual({ parcels: 0, messages: 0 })
+  })
+})
+
+describe('ingest health', () => {
+  const status = (db: ReturnType<typeof memDb>) =>
+    db.prepare('SELECT consecutive_failures n, last_ok_at ok, last_error e, notified_at nt FROM ingest_status').get() as
+      { n: number; ok: string | null; e: string | null; nt: string | null }
+  const run = async (db: ReturnType<typeof memDb>, client: ReturnType<typeof fakeImap>['client'], at: Date, notifier?: { send(n: unknown): Promise<void> }) =>
+    runPoll({
+      db, http: bodyHttp(), adapters: [], config, now: at, notifier: notifier as never,
+      ingest: { imap, client, mailDir: mkdtempSync(join(tmpdir(), 'parcels-health-')) },
+    })
+  const down = () => fakeImap([], { connectError: new Error('Invalid credentials (Failure)') }).client
+  const up = () => fakeImap([]).client
+
+  test('a failed run is recorded, a good run resets it', async () => {
+    const db = memDb()
+    await run(db, down(), NOW)
+    expect(status(db)).toMatchObject({ n: 1, e: 'Error: Invalid credentials (Failure)', ok: null })
+    await run(db, down(), new Date(NOW.getTime() + 3_600_000))
+    expect(status(db).n).toBe(2)
+    await run(db, up(), new Date(NOW.getTime() + 7_200_000))
+    expect(status(db)).toMatchObject({ n: 0, nt: null })
+    expect(status(db).ok).not.toBeNull()
+  })
+
+  test('no ingest configured -> no ingest_status row at all', async () => {
+    const db = memDb()
+    await runPoll({ db, http: bodyHttp(), adapters: [], config, now: NOW })
+    expect(db.prepare('SELECT COUNT(*) n FROM ingest_status').get()).toEqual({ n: 0 })
+  })
+
+  test('ONE notification after 3 consecutive failures, none for the 4th, and a new one for the next outage', async () => {
+    const db = memDb()
+    const sent: Array<{ groupKey: string; title: string }> = []
+    const notifier = { send: async (n: { groupKey: string; title: string }) => { sent.push(n) } }
+    const at = (h: number) => new Date(NOW.getTime() + h * 3_600_000)
+
+    await run(db, down(), at(0), notifier)
+    await run(db, down(), at(1), notifier)
+    expect(sent).toEqual([])                                   // not yet: two failures is a blip
+    await run(db, down(), at(2), notifier)
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({ groupKey: 'ingest', title: 'Mail ingest is failing' })
+    await run(db, down(), at(3), notifier)
+    await run(db, down(), at(4), notifier)
+    expect(sent).toHaveLength(1)                               // still the same outage
+
+    await run(db, up(), at(5), notifier)                       // recovery clears the stamp
+    for (const h of [6, 7, 8]) await run(db, down(), at(h), notifier)
+    expect(sent).toHaveLength(2)                               // a new outage is announced afresh
+  })
+
+  test('the banner never carries the raw error (it can name hosts); the Health page shows it instead', async () => {
+    const db = memDb()
+    const sent: Array<{ message: string }> = []
+    const notifier = { send: async (n: { message: string }) => { sent.push(n) } }
+    for (let h = 0; h < 3; h++) await run(db, down(), new Date(NOW.getTime() + h * 3_600_000), notifier)
+    expect(sent[0]!.message).not.toMatch(/credentials/i)
+    expect(sent[0]!.message).toMatch(/3 runs in a row/)
+  })
+
+  test('held back (not spent) when every carrier also failed in that run: the Mac is offline', async () => {
+    const db = memDb()
+    const sent: Array<{ groupKey: string }> = []
+    const notifier = { send: async (n: { groupKey: string }) => { sent.push(n) } }
+    const dead = (id: 'packeta' | 'dpd') => stubAdapter(id, () => { throw new Error('offline') })
+    const mkRun = (at: Date, client = down()) => {
+      return runPoll({
+        db, http: bodyHttp(), adapters: [dead('packeta'), dead('dpd')], config, now: at, notifier: notifier as never,
+        ingest: { imap, client, mailDir: mkdtempSync(join(tmpdir(), 'parcels-health-')) },
+      })
+    }
+    db.prepare("INSERT INTO parcels (carrier, tracking_number, status, first_seen_at, source) VALUES ('packeta','Z0000000008','unknown',?,'manual'),('dpd','00000000000008','unknown',?,'manual')")
+      .run(NOW.toISOString(), NOW.toISOString())
+    for (const h of [0, 1, 2]) await mkRun(new Date(NOW.getTime() + h * 3_600_000))
+    expect(sent.filter(n => n.groupKey === 'ingest')).toEqual([])
+    expect(db.prepare('SELECT notified_at FROM ingest_status').get()).toEqual({ notified_at: null })
+  })
+})
+
+describe('mail directory permissions through the ingest', () => {
+  test('raw mail lands owner-only', async () => {
+    const { db, deps } = setup([mail(1, 'packeta-accepted', 2)], { mailDir: join(mkdtempSync(join(tmpdir(), 'parcels-perm-')), 'mail') })
+    await ingestMessages(db, deps)
+    expect(statSync(deps.mailDir).mode & 0o777).toBe(0o700)
+    const path = (db.prepare('SELECT raw_path FROM messages').get() as { raw_path: string }).raw_path
+    expect(statSync(path).mode & 0o777).toBe(0o600)
   })
 })

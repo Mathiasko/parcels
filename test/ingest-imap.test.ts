@@ -1,8 +1,8 @@
-import { mkdtempSync, existsSync, readFileSync } from 'node:fs'
+import { mkdtempSync, existsSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { fetchMessages, type RawMessage } from '../src/ingest/imap.js'
+import { fetchMessages, receivedAt, type RawMessage } from '../src/ingest/imap.js'
 import { storeMessage } from '../src/db/messages.js'
 import { fakeImap, type FakeMessage } from './imap-fake.js'
 import { memDb } from './poll-helpers.js'
@@ -86,6 +86,29 @@ describe('fetchMessages', () => {
   })
 })
 
+describe('received date', () => {
+  test('is the later of the Date header and INTERNALDATE, so a bogus-old header cannot age a fresh message', async () => {
+    const arrived = new Date('2026-10-25T08:00:00Z')
+    const out = await fetchMessages({
+      config: imap, client: fakeImap([msg(1, { date: new Date('2020-01-01T00:00:00Z'), internalDate: arrived })]).client,
+    })
+    expect(out[0]!.receivedAt).toEqual(arrived)
+  })
+
+  test('a genuinely old message keeps its header date when the server agrees', async () => {
+    const old = new Date('2023-08-11T08:50:03Z')
+    const out = await fetchMessages({ config: imap, client: fakeImap([msg(1, { date: old, internalDate: old })]).client })
+    expect(out[0]!.receivedAt).toEqual(old)
+  })
+
+  test('falls back to whichever exists', () => {
+    const d = new Date('2026-01-01T00:00:00Z')
+    expect(receivedAt(d, undefined)).toEqual(d)
+    expect(receivedAt(undefined, d)).toEqual(d)
+    expect(receivedAt(new Date('2026-02-01T00:00:00Z'), d)).toEqual(new Date('2026-02-01T00:00:00Z'))   // bogus-future header: safe direction
+  })
+})
+
 describe('storeMessage', () => {
   const raw = (over: Partial<RawMessage> = {}): RawMessage => ({
     messageId: '<one@x>', from: 'noreply@packeta.sk', subject: 'Zásielka', receivedAt: new Date('2026-10-20T10:00:00Z'),
@@ -103,6 +126,14 @@ describe('storeMessage', () => {
     })
     expect(row.raw_path).toBe(join(d, `${id}.eml`))
     expect(readFileSync(row.raw_path as string).equals(eml('one@x'))).toBe(true)
+  })
+
+  test('the mail directory is owner-only (0700) and each .eml is 0600: it holds pickup PINs and personal mail', () => {
+    const db = memDb()
+    const d = join(dir(), 'mail')   // not created yet: storeMessage makes it
+    const id = storeMessage(db, raw(), d)
+    expect(statSync(d).mode & 0o777).toBe(0o700)
+    expect(statSync(join(d, `${id}.eml`)).mode & 0o777).toBe(0o600)
   })
 
   test('is idempotent on message-id: a second store returns the same row and writes nothing new', () => {

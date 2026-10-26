@@ -3,6 +3,7 @@ import type { Database } from '../db/index.js'
 import type { CanonicalStatus, CarrierId, NewEvent } from '../core/types.js'
 import { getParcel, markAnnounced, type Parcel } from '../db/parcels.js'
 import { carrierHealth, markCarrierNotified, type HealthRow } from '../db/health.js'
+import { getIngestStatus, markIngestNotified } from '../db/ingest-status.js'
 import type { Notification } from './types.js'
 
 /** More notifications than this in one run (typically a catch-up after a long sleep) become one summary. */
@@ -108,10 +109,13 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
       if (deadlineDue) sent.run(id, now.toISOString())
     }
 
-    const alarms = carrierAlarms(carrierHealth(db), now).map(({ health, title, message }) => {
+    const health = carrierHealth(db)
+    const alarms = carrierAlarms(health, now).map(({ health, title, message }) => {
       markCarrierNotified(db, health.carrier, now)
       return { groupKey: `carrier-${health.carrier}`, title, message, url: `${base}/health` }
     })
+    const ingest = ingestAlarm(db, health, now)
+    if (ingest) alarms.push({ groupKey: 'ingest', ...ingest, url: `${base}/health` })
     return { parcelUpdates, alarms }
   })()
 
@@ -124,6 +128,30 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
   }, ...alarms]
 }
 
+/** Two or more carriers touched in this run and all of them failed: the Mac is offline, not the services broken. */
+function everyoneFailedThisRun(rows: HealthRow[], now: Date): boolean {
+  const at = now.getTime()
+  const failedNow = (h: HealthRow) => h.lastErrorAt?.getTime() === at
+  const touched = rows.filter(h => failedNow(h) || h.lastOkAt?.getTime() === at)
+  return touched.length >= 2 && touched.every(failedNow)
+}
+
+/**
+ * The mail ingest, announced once per outage after `STALE_AFTER_FAILURES` consecutive failed runs (a
+ * revoked App Password otherwise stops parcels appearing without a word). Like a stale carrier, it is held
+ * back when every carrier failed in this same run, which is the Mac being offline.
+ */
+function ingestAlarm(db: Database, rows: HealthRow[], now: Date): { title: string; message: string } | undefined {
+  const s = getIngestStatus(db)
+  if (!s || s.consecutiveFailures < STALE_AFTER_FAILURES || s.notifiedAt) return undefined
+  if (everyoneFailedThisRun(rows, now)) return undefined
+  markIngestNotified(db, now)
+  return {
+    title: 'Mail ingest is failing',
+    message: `The parcels mailbox could not be read for ${s.consecutiveFailures} runs in a row; new parcels will not appear. See Health.`,
+  }
+}
+
 /**
  * Carriers that need announcing, once per outage (`notified_at` is cleared by the next `ok`).
  * `gated` always counts: the adapter itself is broken. A carrier that keeps timing out or returning
@@ -132,10 +160,7 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
  * and it is left unannounced so it can be judged again once any carrier answers.
  */
 function carrierAlarms(rows: HealthRow[], now: Date): Array<{ health: HealthRow; title: string; message: string }> {
-  const at = now.getTime()
-  const failedNow = (h: HealthRow) => h.lastErrorAt?.getTime() === at
-  const touched = rows.filter(h => failedNow(h) || h.lastOkAt?.getTime() === at)
-  const everyoneFailed = touched.length >= 2 && touched.every(failedNow)
+  const everyoneFailed = everyoneFailedThisRun(rows, now)
 
   const out: Array<{ health: HealthRow; title: string; message: string }> = []
   for (const h of rows) {

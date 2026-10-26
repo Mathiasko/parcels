@@ -1,0 +1,13 @@
+Delivered-To: recipient@example.com
+Date: Wed, 21 Oct 2026 11:00:00 +0200
+From: GLS <noreply@gls-group.eu>
+To: Jane Doe <recipient@example.com>
+Subject: Your GLS parcel is on its way
+Message-ID: <fixture-gls-0002@gls-group.eu>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Questions? Call +421900123456 (Mon-Fri). Customer line: 421900123457.
+
+Parcel number: 000000000001. Expected delivery tomorrow.

@@ -31,10 +31,10 @@ export function historyPage(parcels: Parcel[], stats: Map<CarrierId, CarrierDeli
   <input type="date" name="to" value="${f.to ?? ''}" aria-label="Delivered to">
   <button>Filter</button></form>
 ${parcels.length === 0
-    ? html`<p class="muted">No delivered parcels${f.carrier || f.q || f.from || f.to ? ' match these filters' : ' yet'}.</p>`
-    : html`<table><tr><th>Parcel</th><th>Carrier</th><th>Merchant</th><th>Delivered</th></tr>${parcels.map(p => html`<tr>
+    ? html`<p class="muted">No delivered or archived parcels${f.carrier || f.q || f.from || f.to ? ' match these filters' : ' yet'}.</p>`
+    : html`<table><tr><th>Parcel</th><th>Carrier</th><th>Merchant</th><th>Delivered / archived</th></tr>${parcels.map(p => html`<tr>
   <td><a href="/parcel/${p.id}">${parcelName(p)}</a></td><td>${CARRIER_NAME[p.carrier]}</td>
-  <td>${p.merchant ?? ''}</td><td>${p.deliveredAt ? formatDate(p.deliveredAt) : '—'}</td></tr>`)}</table>`}
+  <td>${p.merchant ?? ''}</td><td>${p.deliveredAt ? formatDate(p.deliveredAt) : html`<span class="muted">archived · ${formatDate(p.firstSeenAt)}</span>`}</td></tr>`)}</table>`}
 <h2>Median delivery time</h2>
 <p class="muted small">Per carrier across all delivered parcels, from its first scan to delivery. Parcels with no usable scan history are left out; n shows how many were measured.</p>
 <table><tr><th>Carrier</th><th>Median</th><th>Based on</th></tr>${carriers.map(c => statsRow(c, stats.get(c)))}</table>`)

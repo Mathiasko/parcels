@@ -52,10 +52,32 @@ const SHAPE_ONLY: readonly CarrierId[] = ['posta', 'packeta', 'sps']
 
 const MERCHANT_MAX = 80
 const MAX_TEXT = 400_000
+const MAX_HTML = 1_000_000
 
 const firstNumber = (carrier: CarrierId, haystack: string): string | undefined => {
+  if (carrier === 'gls') return glsNumber(haystack)
   const m = haystack.match(NUMBER[carrier])
   return m ? normalizeNumber(m[0]) : undefined
+}
+
+const GLS_LABEL = /(?:parcel|package|tracking|track|number|zásielk\w*|zasielk\w*|balík\w*|balik\w*|číslo|cislo|paket\w*)[^\n\d]{0,30}$/i
+const PHONE_LABEL = /(?:tel\w*|phone|mobil\w*|call|fax|zavolajte|volajte|\+)[^\n\d]{0,15}$/i
+const PHONE_PREFIX = /^(?:42[01]|00421|00420)/
+
+/**
+ * A GLS number is 11-12 bare digits, exactly the shape of a printed phone number (421900123456 is 12
+ * digits), and a mail may print one first. So rank the candidates: one introduced by a "parcel number"
+ * style label, then any that does not look like a phone number, then the first. The text is searched in
+ * order, so within a rank the earlier one wins.
+ */
+function glsNumber(haystack: string): string | undefined {
+  const candidates = [...haystack.matchAll(NUMBER.gls)].map(m => {
+    const before = haystack.slice(Math.max(0, m.index - 50), m.index)
+    const phone = PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0])
+    return { number: m[0], rank: GLS_LABEL.test(before) && !phone ? 0 : phone ? 2 : 1 }
+  })
+  const best = candidates.sort((a, b) => a.rank - b.rank)[0]   // stable: ties keep text order
+  return best && normalizeNumber(best.number)
 }
 
 const ENTITIES: Record<string, string> = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
@@ -66,15 +88,34 @@ const ENTITIES: Record<string, string> = { nbsp: ' ', amp: '&', lt: '<', gt: '>'
  * Good enough to find a number in prose; not a renderer.
  */
 export function htmlToText(html: string): string {
-  return html
-    .replace(/<(style|script|head)\b[\s\S]*?<\/\1\s*>/gi, ' ')
+  return stripBlocks(html)
     .replace(/<br\s*\/?>|<\/(?:p|div|tr|td|th|li|h[1-6]|table)\s*>/gi, '\n')
-    .replace(/<[^>]*>/g, ' ')
+    .replace(/<[^<>]*>/g, ' ')   // `[^<>]`, so a stray `<` costs one character, not a scan to the end
     .replace(/&(?:#(\d+)|#x([0-9a-f]+)|([a-z]+));/gi, (whole, dec: string, hex: string, name: string) => {
       if (name) return ENTITIES[name.toLowerCase()] ?? whole
       const code = dec ? Number(dec) : parseInt(hex, 16)
       return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole
     })
+}
+
+/**
+ * Removes `<style>`, `<script>` and `<head>` blocks in one forward pass. An unclosed block swallows the
+ * rest of the input, which keeps hostile mail linear (a lazy regex rescans to the end for every opener).
+ */
+function stripBlocks(html: string): string {
+  const open = /<(style|script|head)\b/gi
+  let out = ''
+  let from = 0
+  for (let m = open.exec(html); m; m = open.exec(html)) {
+    out += html.slice(from, m.index) + ' '
+    const close = new RegExp(`</${m[1]}\\s*>`, 'gi')
+    close.lastIndex = m.index
+    const end = close.exec(html)
+    if (!end) return out
+    from = end.index + end[0].length
+    open.lastIndex = from
+  }
+  return out + html.slice(from)
 }
 
 const clean = (s: string | undefined): string | undefined => {
@@ -113,7 +154,7 @@ export async function extract(raw: Buffer): Promise<Extraction> {
   try {
     const mail = await simpleParser(raw)
     const subject = mail.subject ?? ''
-    const text = (mail.text || (typeof mail.html === 'string' ? htmlToText(mail.html) : '')).slice(0, MAX_TEXT)
+    const text = (mail.text || (typeof mail.html === 'string' ? htmlToText(mail.html.slice(0, MAX_HTML)) : '')).slice(0, MAX_TEXT)
     const haystack = `${subject}\n${text}`.normalize('NFC')
 
     const envelope = mail.from?.value[0]

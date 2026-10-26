@@ -13,6 +13,7 @@ import { createNotifier } from '../notify/send.js'
 import type { Notifier } from '../notify/types.js'
 import { listDelivered, setLabel, setPostalCode } from '../db/parcels.js'
 import { carrierHealth } from '../db/health.js'
+import { getIngestStatus } from '../db/ingest-status.js'
 import { addParcel, cleanPostcode, MAX_LABEL } from './actions.js'
 import { CARRIER_NAME } from './views/format.js'
 import {
@@ -148,7 +149,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     return send(reply, historyPage(parcels, deliveryStats(db), filters))
   })
 
-  app.get('/health', async (_req, reply) => send(reply, healthPage(carrierHealth(db))))
+  app.get('/health', async (_req, reply) => send(reply, healthPage(carrierHealth(db), { configured: config.imap !== undefined, status: getIngestStatus(db) })))
 
   const attention = (reply: FastifyReply, error?: AttentionError, status = 200) =>
     send(reply, attentionPage(

@@ -9,6 +9,8 @@ export interface NewParcel {
   postalCode?: string
   source: 'email' | 'manual'
   sourceMessageId?: string
+  /** Defaults to now. A parcel created from old mail passes the mail's date so history sorts by it. */
+  firstSeenAt?: Date
 }
 
 export interface Parcel {
@@ -118,7 +120,7 @@ export function insertParcel(db: Database, p: NewParcel): number {
     label: p.label ?? null,
     merchant: p.merchant ?? null,
     postalCode: p.postalCode ?? null,
-    firstSeenAt: new Date().toISOString(),
+    firstSeenAt: (p.firstSeenAt ?? new Date()).toISOString(),
     source: p.source,
     sourceMessageId: p.sourceMessageId ?? null,
   })
@@ -245,9 +247,13 @@ export interface DeliveredFilter {
   to?: Date
 }
 
-/** Delivered parcels, archived or not, newest delivery first. */
+/**
+ * Delivered parcels, plus archived ones that were never delivered (parcels created already archived
+ * from old mail: they were never polled, so their status is still 'unknown' and must stay so). Newest
+ * first by delivery, or by first-seen for those. Date bounds apply to the same instant.
+ */
 export function listDelivered(db: Database, f: DeliveredFilter = {}): Parcel[] {
-  const where = ["status = 'delivered'"]
+  const where = ["(status = 'delivered' OR archived_at IS NOT NULL)"]
   const args: (string | number)[] = []
   if (f.carrier) { where.push('carrier = ?'); args.push(f.carrier) }
   if (f.q) {
@@ -255,10 +261,10 @@ export function listDelivered(db: Database, f: DeliveredFilter = {}): Parcel[] {
     where.push("(label LIKE ? ESCAPE '\\' OR merchant LIKE ? ESCAPE '\\' OR tracking_number LIKE ? ESCAPE '\\')")
     args.push(like, like, like)
   }
-  if (f.from) { where.push('delivered_at >= ?'); args.push(f.from.toISOString()) }
-  if (f.to) { where.push('delivered_at <= ?'); args.push(f.to.toISOString()) }
+  if (f.from) { where.push('COALESCE(delivered_at, first_seen_at) >= ?'); args.push(f.from.toISOString()) }
+  if (f.to) { where.push('COALESCE(delivered_at, first_seen_at) <= ?'); args.push(f.to.toISOString()) }
   const rows = db.prepare(
-    `SELECT * FROM parcels WHERE ${where.join(' AND ')} ORDER BY delivered_at IS NULL, delivered_at DESC, id DESC`,
+    `SELECT * FROM parcels WHERE ${where.join(' AND ')} ORDER BY COALESCE(delivered_at, first_seen_at) DESC, id DESC`,
   ).all(...args) as Row[]
   return rows.map(toParcel)
 }

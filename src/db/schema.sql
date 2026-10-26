@@ -95,3 +95,14 @@ CREATE TABLE IF NOT EXISTS last_poll (
   id           INTEGER PRIMARY KEY CHECK (id = 1),
   polled_at_ms INTEGER NOT NULL
 );
+
+-- The mail ingest's own health (always one row, id = 1), mirroring last_poll. carrier_health cannot hold
+-- it: that table is keyed by carrier, and the notification rules and Health page read it as carriers.
+CREATE TABLE IF NOT EXISTS ingest_status (
+  id                   INTEGER PRIMARY KEY CHECK (id = 1),
+  last_ok_at           TEXT,
+  last_error_at        TEXT,
+  last_error           TEXT,
+  consecutive_failures INTEGER NOT NULL DEFAULT 0,
+  notified_at          TEXT                  -- the current outage has been announced; cleared by the next ok
+);
