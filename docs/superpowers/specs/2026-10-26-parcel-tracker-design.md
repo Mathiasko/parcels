@@ -543,8 +543,15 @@ CREATE TABLE raw_responses (
 2. **`events.notified_at` makes notification exactly-once.** A notification is sent
    only where it is null, and it is set in the same transaction. A crash between
    poll and notify re-notifies at most genuinely un-announced events.
-3. **Events are append-only.** `parcels.status` is derived from the newest event;
-   it is a cache, never the source of truth.
+3. **Events are append-only.** `parcels.status` comes from the adapter's
+   authoritative top-level `status`, **not** from the newest event. Deriving it
+   from events breaks for carriers whose events are prose-only and carry no
+   per-event code (Packeta, SPS): their stored events can never be restamped, so
+   a status change that arrives without a new event would be reverted on every
+   poll, leaving a row whose status contradicts its own `status_raw` and pickup
+   point. It also blocks the retroactive mapping fix that rule 3 of §5 promises.
+   `delivered_at` is still taken from the newest event's timestamp when the
+   authoritative status is `delivered`.
 4. **`raw_responses` is bounded** — keep the last N per parcel, prune older.
 5. **Timestamps:** `occurred_at` is UTC; `occurred_at_raw` and `occurred_at_tz` are
    retained so a parsing error is diagnosable rather than a silent DST drift.
