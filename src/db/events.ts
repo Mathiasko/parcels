@@ -63,6 +63,14 @@ export function latestEvent(db: Database, parcelId: number): StoredEvent | undef
   return row && toEvent(row)
 }
 
+/** A parcel's full timeline, oldest first (insertion order breaks ties). */
+export function listEvents(db: Database, parcelId: number): StoredEvent[] {
+  const rows = db.prepare(
+    'SELECT * FROM events WHERE parcel_id = ? ORDER BY occurred_at, id',
+  ).all(parcelId) as Row[]
+  return rows.map(toEvent)
+}
+
 /**
  * Re-derives the parcel's cached status from its newest event. `delivered_at` follows the newest
  * event too: set to its time when delivered, cleared otherwise. No events: parcel untouched.

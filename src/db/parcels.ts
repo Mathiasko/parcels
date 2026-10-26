@@ -114,6 +114,11 @@ export function findParcel(db: Database, carrier: CarrierId, number: string): Pa
   return row && toParcel(row)
 }
 
+export function getParcel(db: Database, id: number): Parcel | undefined {
+  const row = db.prepare('SELECT * FROM parcels WHERE id = ?').get(id) as Row | undefined
+  return row && toParcel(row)
+}
+
 export function listActive(db: Database): Parcel[] {
   const rows = db.prepare(`
     SELECT * FROM parcels
