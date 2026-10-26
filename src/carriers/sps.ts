@@ -9,10 +9,17 @@ const ENDPOINT = 'https://rest.mysps.sk/tracking/getShipmentTrackAndTrace'
 /** The key as published in the bundle on 2026-10-26; only used when scraping the current one fails. */
 const FALLBACK_API_KEY = '6VS314WZ+YtFPrYqqV2EZAoxKJNIyr13JGKTWjlOy6jz5zWKr-C8ZnpCJ7ChvZfW'
 
-// Deliberately narrower than SPS's own published regex list, which also admits UPS (`1Z...`) and DHL
-// (`JJD14902...`) numbers because SPS carries inbound partner parcels. Using that list would misroute
-// those numbers here. No check digit is known, so a typo is only caught by the not-found answer.
-const NUMBER_SHAPE = /^703\d{11}[0-4]\d$/
+// The two SPS-native forms, both from SPS's own published `packageRegexes` list: the numeric `703...`
+// form, and `SK` + 16 characters (18 total), which is the form seen on real SPS mail (the live API
+// answers it in full). Deliberately narrower than that list, which also admits UPS (`1Z...`) and DHL
+// (`JJD14902...`) numbers because SPS carries inbound partner parcels: matching those would misroute
+// other carriers' parcels here. The `SK...` form cannot collide with Slovenska posta's S10
+// (`^[A-Z]{2}\d{9}SK$`, 13 characters ending in SK). No check digit is known, so a typo is only caught
+// by the not-found answer.
+const NUMBER_SHAPES = [
+  /^703\d{11}[0-4]\d$/,
+  /^SK[A-HJ-NP-Z0-9]{5}\d{2}[A-HJ-NP-Z0-9]{9}$/,
+]
 
 /** The content-hashed bundle changes name on every deploy, hence it is found rather than hardcoded. */
 const BUNDLE_PATH = /assets\/index-[\w-]+\.js/
@@ -165,6 +172,6 @@ export const spsAdapter: CarrierAdapter = {
   id: 'sps',
   needsPostalCode: false,
   batchSize: 1,
-  matches: number => NUMBER_SHAPE.test(number),
+  matches: number => NUMBER_SHAPES.some(shape => shape.test(number)),
   fetch: (inputs, http) => Promise.all(inputs.map(i => fetchOne(i, http))),
 }

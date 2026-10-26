@@ -186,6 +186,17 @@ test('matches() accepts 703-prefixed numbers and rejects a UPS 1Z number', () =>
   expect(spsAdapter.matches('70312345678901234')).toBe(false)  // too long
 })
 
+test('matches() accepts the SK-prefixed form seen on real SPS mail', () => {
+  expect(spsAdapter.matches('SK0TEST6000000000X')).toBe(true)
+  expect(spsAdapter.matches('703' + '12345678901' + '23')).toBe(true)   // the numeric form still matches
+  expect(spsAdapter.matches('1Z999AA10123456784')).toBe(false)         // UPS
+  expect(spsAdapter.matches('JJD14902' + '1234567890123456')).toBe(false)   // DHL: JJD14902 + 16 digits
+  expect(spsAdapter.matches('SK0SCZD6001020454')).toBe(false)          // 17 characters
+  expect(spsAdapter.matches('SK0TEST6000000000XX')).toBe(false)        // 19 characters
+  expect(spsAdapter.matches('SK0SCZDAB01020454X')).toBe(false)         // the two digits are letters
+  expect(spsAdapter.matches('RA123456785SK')).toBe(false)              // Slovenska posta S10
+})
+
 test('adapter metadata', () => {
   expect(spsAdapter.id).toBe('sps')
   expect(spsAdapter.batchSize).toBe(1)
