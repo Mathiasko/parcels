@@ -1,8 +1,10 @@
 import type { Database } from '../db/index.js'
 import type { Config } from './config.js'
 import type {
-  CarrierAdapter, CarrierId, FetchResult, HttpClient, ParcelEvent,
+  CarrierAdapter, CarrierId, FetchResult, HttpClient, NewEvent, ParcelEvent,
 } from './types.js'
+import type { Notifier } from '../notify/types.js'
+import { buildNotifications, snapshot } from '../notify/rules.js'
 import { HttpTransportError, captureBodies } from './http.js'
 import { isDue, slotFor } from './backoff.js'
 import { dedupHash } from './dedup.js'
@@ -18,15 +20,15 @@ export interface PollDeps {
   adapters: CarrierAdapter[]
   config: Config
   now: Date
-  /** Wired by the notification rules (Task 13); not consumed yet. */
-  notifier?: unknown
+  /** When present, the run's notifications are built and sent; when absent nothing is built at all. */
+  notifier?: Notifier
   /** Wired by email ingest (Task 18); not consumed yet. */
   ingest?: unknown
 }
 
 export interface PollReport {
   polled: number
-  newEvents: ParcelEvent[]
+  newEvents: NewEvent[]
   failures: Array<{ carrier: CarrierId; reason: string }>
 }
 
@@ -72,6 +74,7 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   const slot = slotFor(now)
   const report: PollReport = { polled: 0, newEvents: [], failures: [] }
 
+  const before = snapshot(db)
   const health = new Map(carrierHealth(db).map(h => [h.carrier, h]))
   const byCarrier = new Map<CarrierId, Parcel[]>()
   for (const p of listActive(db)) {
@@ -110,7 +113,25 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
       report.failures.push({ carrier, reason: `parse: ${detail}` })
     }
   }
+  if (deps.notifier) await notify(deps.notifier, db, report, now, deps.config.port, before)
   return report
+}
+
+/**
+ * Delivery is best-effort: the events were marked notified when they were appended, and the rules
+ * record their one-shot facts before anything is sent, so a notifier that throws loses a banner and
+ * nothing else. It must never turn a completed poll into a failed run.
+ */
+async function notify(
+  notifier: Notifier, db: Database, report: PollReport, now: Date, port: number, before: ReturnType<typeof snapshot>,
+): Promise<void> {
+  try {
+    for (const n of buildNotifications(db, report.newEvents, now, port, before)) {
+      try { await notifier.send(n) } catch (err) { console.error(`notify: delivery failed: ${describe(err)}`) }
+    }
+  } catch (err) {
+    console.error(`notify: could not build notifications: ${describe(err)}`)
+  }
 }
 
 /**
@@ -144,8 +165,8 @@ async function fetchCarrier(adapter: CarrierAdapter, parcels: Parcel[], http: Ht
 
 function applyCarrier(
   db: Database, carrier: CarrierId, fetched: Fetched[], now: Date,
-): { newEvents: ParcelEvent[]; failure?: string } {
-  const newEvents: ParcelEvent[] = []
+): { newEvents: NewEvent[]; failure?: string } {
+  const newEvents: NewEvent[] = []
   const outcomes: Outcome[] = []
 
   for (const f of fetched) {
@@ -216,7 +237,7 @@ function carrierVerdict(outcomes: Outcome[]): (Outcome & { kind: HealthOutcome }
   return informative[0]
 }
 
-function applyOk(db: Database, p: Parcel, r: Extract<FetchResult, { ok: true }>, now: Date): ParcelEvent[] {
+function applyOk(db: Database, p: Parcel, r: Extract<FetchResult, { ok: true }>, now: Date): NewEvent[] {
   const inserted = appendEvents(db, p.id, r.events)
   markAppendedNotified(db, p.id, inserted, now)
 
@@ -233,13 +254,14 @@ function applyOk(db: Database, p: Parcel, r: Extract<FetchResult, { ok: true }>,
   })
   recomputeParcelStatus(db, p.id, r.status, now)
   storeRaw(db, p.id, p.carrier, JSON.stringify(r.raw), now)
-  return inserted
+  return inserted.map(e => ({ ...e, parcelId: p.id }))
 }
 
 /**
- * Every event appended in a run is marked notified here, whether or not it produces a notification
- * (the rules arrive in Task 13). A new parcel's first poll appends its entire history, and leaving
- * that unmarked would later fire a banner for every scan from weeks ago.
+ * Every event appended in a run is marked notified here, before any notifier runs, whether or not it
+ * produces a notification (the rules work from the run's `newEvents`, never from the table). A new
+ * parcel's first poll appends its entire history, and leaving that unmarked would later fire a banner
+ * for every scan from weeks ago.
  */
 function markAppendedNotified(db: Database, parcelId: number, appended: ParcelEvent[], now: Date): void {
   const find = db.prepare('SELECT id FROM events WHERE parcel_id = ? AND dedup_hash = ?')

@@ -27,6 +27,9 @@ export interface ParcelEvent {
   location?: string
 }
 
+/** An event inserted by this run, tagged with the parcel it belongs to. */
+export type NewEvent = ParcelEvent & { parcelId: number }
+
 export interface PickupPoint {
   kind: 'post_office' | 'zbox' | 'parcelshop' | 'locker' | 'unknown'
   name?: string; street?: string; city?: string; postalCode?: string

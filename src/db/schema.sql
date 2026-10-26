@@ -75,3 +75,11 @@ CREATE TABLE IF NOT EXISTS raw_responses (
   fetched_at TEXT NOT NULL,
   body       TEXT NOT NULL
 );
+
+-- One row per parcel whose pickup-deadline reminder has been sent. Durable because the poller is a
+-- short-lived process: "once per parcel" cannot live in memory. A table of its own (rather than a
+-- parcels column) so an existing database gains it from the idempotent schema exec, with no migration.
+CREATE TABLE IF NOT EXISTS deadline_reminders (
+  parcel_id   INTEGER PRIMARY KEY REFERENCES parcels(id),
+  notified_at TEXT NOT NULL
+);

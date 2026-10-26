@@ -40,10 +40,14 @@ test('poll runs the orchestrator over the injected adapters and prints the summa
   insertParcel(db, { carrier: 'posta', trackingNumber: 'RA123456785SK', source: 'manual' })
   const posta = stubAdapter('posta', ins => ins.map(i => okResult(i.number, [ev('2026-10-26 09:00:00', 'in_transit', 0)])), 100)
 
-  const r = await cli(db, ['poll'], { adapters: [posta], http: bodyHttp() })
+  const sent: string[] = []
+  const notifier = { send: async (n: { title: string }) => { sent.push(n.title) } }
+
+  const r = await cli(db, ['poll'], { adapters: [posta], http: bodyHttp(), notifier })
 
   expect(r.code).toBe(0)
   expect(r.out[0]).toMatch(/polled 1 parcel\(s\), 1 new event\(s\)/)
+  expect(sent).toHaveLength(1)   // a manual poll announces what it stores
   expect(findParcel(db, 'posta', 'RA123456785SK')?.status).toBe('in_transit')
 })
 

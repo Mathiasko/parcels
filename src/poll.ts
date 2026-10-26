@@ -4,6 +4,7 @@ import { runPoll, summarize } from './core/poll.js'
 import { allAdapters } from './carriers/registry.js'
 import { authStorePathFor, setDpdAuthStore } from './carriers/dpd.js'
 import { openDb } from './db/index.js'
+import { createNotifier } from './notify/send.js'
 
 /**
  * Poller entry point, run hourly by launchd. A carrier failing is data, not an error: it is
@@ -17,6 +18,7 @@ async function main(): Promise<void> {
   try {
     const report = await runPoll({
       db, http: createHttpClient(), adapters: allAdapters(), config, now: new Date(),
+      notifier: createNotifier(config.notifier),
     })
     console.log(`${new Date().toISOString()} ${summarize(report)}`)
   } finally {

@@ -8,6 +8,8 @@ import type { CarrierAdapter, CarrierId, HttpClient } from './core/types.js'
 import { authStorePathFor, setDpdAuthStore } from './carriers/dpd.js'
 import { allAdapters, detectCarrier, getAdapter, normalizeNumber } from './carriers/registry.js'
 import { openDb, type Database } from './db/index.js'
+import { createNotifier } from './notify/send.js'
+import type { Notifier } from './notify/types.js'
 import { listEvents } from './db/events.js'
 import { findParcel, getParcel, insertParcel, listActive } from './db/parcels.js'
 
@@ -19,6 +21,8 @@ export interface CliContext {
   /** Injectable for tests; `poll` and `probe` default to the real client / registered adapters. */
   http?: HttpClient
   adapters?: CarrierAdapter[]
+  /** Injectable for tests; `poll` defaults to the configured notifier. */
+  notifier?: Notifier
 }
 
 const CARRIER_IDS: readonly CarrierId[] = ['posta', 'packeta', 'gls', 'sps', 'dpd']
@@ -111,6 +115,9 @@ async function poll(ctx: CliContext): Promise<void> {
     adapters: ctx.adapters ?? allAdapters(),
     config: ctx.config,
     now: new Date(),
+    // A manual poll stores the very status changes the hourly run would have announced, so it must
+    // announce them itself or they would be lost.
+    notifier: ctx.notifier ?? createNotifier(ctx.config.notifier),
   })
   ctx.out(summarize(report))
 }

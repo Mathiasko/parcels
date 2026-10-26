@@ -16,6 +16,8 @@ export interface HealthRow {
 /**
  * Records one run's outcome for a carrier. `ok` resets the failure streak; anything else extends
  * it. The last error is kept after recovery so the history of the most recent problem survives.
+ * Recovery also clears `notified_at`: that stamp means "the current outage has been announced", so
+ * the next outage must be announced afresh.
  */
 export function recordHealth(
   db: Database, carrier: CarrierId, outcome: HealthOutcome, detail?: string, at: Date = new Date(),
@@ -24,7 +26,8 @@ export function recordHealth(
   if (outcome === 'ok') {
     db.prepare(`
       INSERT INTO carrier_health (carrier, last_ok_at, consecutive_failures) VALUES (?, ?, 0)
-      ON CONFLICT (carrier) DO UPDATE SET last_ok_at = excluded.last_ok_at, consecutive_failures = 0
+      ON CONFLICT (carrier) DO UPDATE SET
+        last_ok_at = excluded.last_ok_at, consecutive_failures = 0, notified_at = NULL
     `).run(carrier, iso)
     return
   }
@@ -53,4 +56,9 @@ export function carrierHealth(db: Database): HealthRow[] {
     consecutiveFailures: r.consecutive_failures as number,
     notifiedAt: date(r.notified_at),
   }))
+}
+
+/** Stamps that the carrier's current outage has been announced; cleared when it next records `ok`. */
+export function markCarrierNotified(db: Database, carrier: CarrierId, at: Date): void {
+  db.prepare('UPDATE carrier_health SET notified_at = ? WHERE carrier = ?').run(at.toISOString(), carrier)
 }
