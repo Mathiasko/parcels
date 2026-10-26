@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp src/db/schema.sql dist/db/schema.sql",
     "test": "vitest run",
     "poll": "node dist/poll.js",
     "serve": "node dist/server.js",
