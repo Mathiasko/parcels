@@ -810,7 +810,7 @@ Confirmations owed against the first real parcel of each carrier, via
 |---|---|
 | Slovenská pošta | `events[]` field names; `localDate` has no offset; `postOffice` appears under `p=1` |
 | Packeta | `item` field names and `packetStatusId` values; whether `branchAddress` is absent for courier delivery |
-| GLS | whether `rstt029` includes `history` or only `progressBar` |
+| GLS | whether `rstt029` includes `history` or only `progressBar`; which `addresses[]` entry is the parcel shop (the adapter picks the first with coordinates, since `type` values are undocumented) — needs a captured `INPICKUP` record |
 | SPS | `data.states[]` field names; whether events carry a location field |
 | DPD | the postcode-verified shape; diff of step 3 with and without `dataForVerification` |
 
