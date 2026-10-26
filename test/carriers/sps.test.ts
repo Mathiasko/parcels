@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs'
-import { test, expect, vi, afterEach } from 'vitest'
-import { spsAdapter, resolveApiKey } from '../../src/carriers/sps.js'
+import { test, expect, vi, beforeEach, afterEach } from 'vitest'
+import { spsAdapter, resolveApiKey, clearApiKeyCache } from '../../src/carriers/sps.js'
 import type { FetchResult, HttpClient } from '../../src/core/types.js'
 
-afterEach(() => { vi.restoreAllMocks() })
+// the key cache is module-level, so every test starts without one
+beforeEach(() => { clearApiKeyCache() })
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
 
 const fixture = (name: string) =>
   readFileSync(new URL(`../fixtures/sps/${name}`, import.meta.url), 'utf8')
@@ -59,8 +61,11 @@ function ok(r: FetchResult) {
 }
 
 /** `in-transit.json` with `shipmentStatus` replaced. */
-const withStatus = (shipmentStatus: string) =>
-  fixture('in-transit.json').replace('"inTransit"', JSON.stringify(shipmentStatus))
+const withStatus = (shipmentStatus: string) => {
+  const body = fixture('in-transit.json')
+  if (!body.includes('"shipmentStatus":"inTransit"')) throw new Error('in-transit.json no longer has the status to replace')
+  return body.replace('"shipmentStatus":"inTransit"', `"shipmentStatus":${JSON.stringify(shipmentStatus)}`)
+}
 
 const statusOf = async (shipmentStatus: string) =>
   ok((await fetchOne(site({ body: withStatus(shipmentStatus) }))).r).status
@@ -110,6 +115,11 @@ test('HTTP 200 with body code 404 maps to not_found', async () => {
 
 test('HTTP 401 maps to gated, signalling key rotation', async () => {
   const { r } = await fetchOne(site({ status: 401, body: fixture('unauthorized.json') }))
+  expect(r).toEqual({ ok: false, number: NUMBER, reason: 'gated' })
+})
+
+test('HTTP 200 with body code 401 also maps to gated', async () => {
+  const { r } = await fetchOne(site({ status: 200, body: fixture('unauthorized.json') }))
   expect(r).toEqual({ ok: false, number: NUMBER, reason: 'gated' })
 })
 
@@ -192,24 +202,76 @@ test('a non-JSON, truncated or unrecognised tracking body is transport, never a 
     .toEqual({ ok: false, number: NUMBER, reason: 'transport' })
 })
 
-test('the key is resolved once per HttpClient, and again after a 401', async () => {
-  let trackingStatus = 200
+/** A fresh client object on every call, as the orchestrator's per-chunk `captureBodies` wrapper produces. */
+function freshClients(state: { trackingStatus: number }) {
   const calls: string[] = []
   const answers = site({ body: fixture('in-transit.json') })
-  const http: HttpClient = async url => {
+  const next = (): HttpClient => async url => {
     calls.push(url)
     const isTracking = url === TRACKING_URL
     const body = isTracking
-      ? (trackingStatus === 401 ? fixture('unauthorized.json') : fixture('in-transit.json'))
+      ? (state.trackingStatus === 401 ? fixture('unauthorized.json') : fixture('in-transit.json'))
       : url === 'https://mysps.sk/' ? answers.index!.body : answers.bundle!.body
-    return { status: isTracking ? trackingStatus : 200, headers: {}, text: async () => body, json: async <T>() => JSON.parse(body) as T }
+    return {
+      status: isTracking ? state.trackingStatus : 200, headers: {},
+      text: async () => body, json: async <T>() => JSON.parse(body) as T,
+    }
   }
-  await spsAdapter.fetch([{ number: NUMBER }], http)
-  await spsAdapter.fetch([{ number: NUMBER }], http)
-  expect(calls.filter(u => u === 'https://mysps.sk/')).toHaveLength(1)
-  trackingStatus = 401
-  expect((await spsAdapter.fetch([{ number: NUMBER }], http))[0]).toMatchObject({ ok: false, reason: 'gated' })
-  trackingStatus = 200
-  await spsAdapter.fetch([{ number: NUMBER }], http)
-  expect(calls.filter(u => u === 'https://mysps.sk/')).toHaveLength(2)   // re-scraped after the rotation
+  const scrapes = () => calls.filter(u => u === 'https://mysps.sk/').length
+  return { next, scrapes, calls }
+}
+
+test('the key is scraped once across distinct HttpClient objects', async () => {
+  const { next, scrapes, calls } = freshClients({ trackingStatus: 200 })
+  for (let i = 0; i < 3; i++) await spsAdapter.fetch([{ number: NUMBER }], next())
+  expect(scrapes()).toBe(1)
+  expect(calls.filter(u => u === TRACKING_URL)).toHaveLength(3)
+})
+
+test('concurrent callers share one scrape', async () => {
+  const { next, scrapes } = freshClients({ trackingStatus: 200 })
+  await Promise.all([1, 2, 3].map(() => spsAdapter.fetch([{ number: NUMBER }], next())))
+  expect(scrapes()).toBe(1)
+})
+
+test('the key is scraped again after a 401', async () => {
+  const state = { trackingStatus: 200 }
+  const { next, scrapes } = freshClients(state)
+  await spsAdapter.fetch([{ number: NUMBER }], next())
+  state.trackingStatus = 401
+  expect((await spsAdapter.fetch([{ number: NUMBER }], next()))[0]).toMatchObject({ ok: false, reason: 'gated' })
+  state.trackingStatus = 200
+  await spsAdapter.fetch([{ number: NUMBER }], next())
+  expect(scrapes()).toBe(2)
+})
+
+test('the key is scraped again once an hour has passed', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-26T08:00:00Z'))
+  const { next, scrapes } = freshClients({ trackingStatus: 200 })
+  await spsAdapter.fetch([{ number: NUMBER }], next())
+  vi.setSystemTime(new Date('2026-10-26T08:59:00Z'))
+  await spsAdapter.fetch([{ number: NUMBER }], next())
+  expect(scrapes()).toBe(1)
+  vi.setSystemTime(new Date('2026-10-26T09:00:01Z'))
+  await spsAdapter.fetch([{ number: NUMBER }], next())
+  expect(scrapes()).toBe(2)
+})
+
+test('a failed scrape is not cached, so the next call tries again', async () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const dead = stubHttp({ tracking: { body: fixture('in-transit.json') } })
+  await spsAdapter.fetch([{ number: NUMBER }], dead.http)   // index unreachable: fallback key, nothing cached
+  const { next, scrapes } = freshClients({ trackingStatus: 200 })
+  await spsAdapter.fetch([{ number: NUMBER }], next())
+  expect(scrapes()).toBe(1)
+  expect(dead.calls.find(c => c.url === TRACKING_URL)?.init?.headers).toMatchObject({ 'Api-Key': FALLBACK_KEY })
+})
+
+test('an unparseable event time degrades to transport and the reason is logged', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const body = fixture('in-transit.json').replace('2026-10-25 06:41:00', '25.10.2026 06:41')
+  const { r } = await fetchOne(site({ body }))
+  expect(r).toEqual({ ok: false, number: NUMBER, reason: 'transport' })
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining('25.10.2026 06:41'))
 })

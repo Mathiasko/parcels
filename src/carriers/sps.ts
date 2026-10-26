@@ -41,13 +41,10 @@ interface RawBody {
   data?: { shipmentStatus?: unknown; states?: RawState[] }
 }
 
-/**
- * Reads the current `Api-Key` out of SPS's own public JS bundle: the index page names the hashed
- * bundle, the bundle carries the key. It is a build-time constant, so no account is involved.
- * Never throws: any failure along the way yields the known literal, and a wrong key surfaces
- * later as a 401, which is `gated`.
- */
-export async function resolveApiKey(http: HttpClient): Promise<string> {
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err))
+
+/** The key as currently published, or undefined when any step of reading it fails. Never throws. */
+async function scrapeApiKey(http: HttpClient): Promise<string | undefined> {
   try {
     const index = await http(SITE)
     if (index.status !== 200) throw new Error(`index page answered ${index.status}`)
@@ -59,20 +56,43 @@ export async function resolveApiKey(http: HttpClient): Promise<string> {
     if (!key) throw new Error('no Api-Key literal in the bundle')
     return key
   } catch (err) {
-    console.warn(`sps: could not scrape the Api-Key (${err instanceof Error ? err.message : String(err)}), using the known literal`)
-    return FALLBACK_API_KEY
+    console.warn(`sps: could not scrape the Api-Key (${message(err)}), using the known literal`)
+    return undefined
   }
 }
 
-/** One scrape per client rather than per parcel; dropped on a 401 so a rotated key is re-read. */
-const keys = new WeakMap<HttpClient, Promise<string>>()
+/**
+ * Reads the current `Api-Key` out of SPS's own public JS bundle: the index page names the hashed
+ * bundle, the bundle carries the key. It is a build-time constant, so no account is involved.
+ * Never throws: any failure along the way yields the known literal, and a wrong key surfaces
+ * later as a 401, which is `gated`.
+ */
+export async function resolveApiKey(http: HttpClient): Promise<string> {
+  return (await scrapeApiKey(http)) ?? FALLBACK_API_KEY
+}
+
+/** The key only changes when SPS deploys, so an hour is ample. */
+const KEY_TTL_MS = 60 * 60 * 1000
+
+/**
+ * Module-level on purpose: the orchestrator wraps the HttpClient afresh for every chunk, so anything
+ * keyed on the client object would never hit. The promise is cached, so concurrent callers share one
+ * scrape. A failed scrape is not kept (the fallback is used for that call only), and a 401 clears it.
+ */
+let cachedKey: { at: number; found: Promise<string | undefined> } | undefined
+
 function apiKey(http: HttpClient): Promise<string> {
-  let key = keys.get(http)
-  if (!key) {
-    key = resolveApiKey(http)
-    keys.set(http, key)
+  if (!cachedKey || Date.now() - cachedKey.at >= KEY_TTL_MS) {
+    const entry = { at: Date.now(), found: scrapeApiKey(http) }
+    cachedKey = entry
+    void entry.found.then(key => { if (!key && cachedKey === entry) cachedKey = undefined })
   }
-  return key
+  return cachedKey.found.then(key => key ?? FALLBACK_API_KEY)
+}
+
+/** Forgets the cached key, so the next call scrapes again. For a rotated key, and for tests. */
+export function clearApiKeyCache(): void {
+  cachedKey = undefined
 }
 
 function mapStatus(shipmentStatus: string): CanonicalStatus {
@@ -118,7 +138,7 @@ async function fetchOne({ number }: FetchInput, http: HttpClient): Promise<Fetch
     })
     // A genuine 401 means the key rotated: the adapter is broken, which is not "parcel not found".
     if (res.status === 401) {
-      keys.delete(http)
+      clearApiKeyCache()
       return { ok: false, number, reason: 'gated' }
     }
     if (res.status !== 200) return transport
@@ -126,14 +146,17 @@ async function fetchOne({ number }: FetchInput, http: HttpClient): Promise<Fetch
     const body = JSON.parse(await res.text()) as RawBody
     if (body?.code === 404) return { ok: false, number, reason: 'not_found' }   // unknown or not yet announced
     if (body?.code === 401) {
-      keys.delete(http)
+      clearApiKeyCache()
       return { ok: false, number, reason: 'gated' }
     }
     const data = body?.data
     if (body?.code !== 200 || !data || typeof data.shipmentStatus !== 'string') return transport
     return toResult(number, data.shipmentStatus, Array.isArray(data.states) ? data.states : [], body)
-  } catch {
+  } catch (err) {
     // Non-JSON or truncated bodies, an unparseable event time and transport errors all land here.
+    // The message is worth seeing: the `time` format has never been observed on a real parcel, and
+    // parseNaive names the offending string.
+    console.warn(`sps: could not read the answer for ${number}: ${message(err)}`)
     return transport
   }
 }

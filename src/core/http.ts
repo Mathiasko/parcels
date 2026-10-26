@@ -77,8 +77,16 @@ export function createHttpClient(opts: HttpClientOptions = {}): HttpClient {
 }
 
 /**
- * Wraps a client so every response body it returns is also captured, in call order. Lets the
- * caller keep the raw text of a response an adapter then failed to parse, or print it verbatim.
+ * Longest body `captureBodies` keeps. Captured bodies end up in `raw_responses` as diagnostics for a
+ * wrong status mapping; an adapter that has to fetch a page or script on the way (SPS reads its key
+ * out of a JS bundle) must not be able to push megabytes of noise there.
+ */
+export const MAX_CAPTURED_BODY_CHARS = 64 * 1024
+
+/**
+ * Wraps a client so every response body it returns is also captured, in call order, each cut to
+ * `MAX_CAPTURED_BODY_CHARS`. Lets the caller keep the raw text of a response an adapter then failed
+ * to parse, or print it. The response handed back to the adapter is never truncated.
  */
 export function captureBodies(http: HttpClient): { http: HttpClient; bodies: string[] } {
   const bodies: string[] = []
@@ -86,7 +94,10 @@ export function captureBodies(http: HttpClient): { http: HttpClient; bodies: str
     bodies,
     http: async (url, init) => {
       const res = await http(url, init)
-      bodies.push(await res.text())
+      const body = await res.text()
+      bodies.push(body.length > MAX_CAPTURED_BODY_CHARS
+        ? `${body.slice(0, MAX_CAPTURED_BODY_CHARS)}\n[truncated: ${body.length} characters]`
+        : body)
       return res
     },
   }

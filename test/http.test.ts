@@ -1,5 +1,5 @@
 import { test, expect, vi, afterEach } from 'vitest'
-import { createHttpClient, HttpTransportError } from '../src/core/http.js'
+import { createHttpClient, captureBodies, HttpTransportError, MAX_CAPTURED_BODY_CHARS } from '../src/core/http.js'
 
 afterEach(() => { vi.useRealTimers() })
 
@@ -120,4 +120,25 @@ test('a body that keeps failing surfaces as HttpTransportError, not a raw TypeEr
   const assertion = expect(p).rejects.toBeInstanceOf(HttpTransportError)
   await vi.advanceTimersByTimeAsync(5_000)
   await assertion
+})
+
+test('captureBodies records each body in call order and leaves the response readable', async () => {
+  const fetchImpl = vi.fn(async (url: string | URL | Request) => respond(200, String(url).endsWith('/a') ? 'first' : 'second'))
+  const capture = captureBodies(createHttpClient({ fetchImpl }))
+  const res = await capture.http('https://example.test/a')
+  await capture.http('https://example.test/b')
+  expect(await res.text()).toBe('first')
+  expect(capture.bodies).toEqual(['first', 'second'])
+})
+
+test('captureBodies truncates an oversized body in the record but not in the response', async () => {
+  const big = 'x'.repeat(MAX_CAPTURED_BODY_CHARS + 500)
+  const fetchImpl = vi.fn(async () => respond(200, big))
+  const capture = captureBodies(createHttpClient({ fetchImpl }))
+  const res = await capture.http('https://example.test/bundle.js')
+  expect((await res.text()).length).toBe(big.length)
+  expect(capture.bodies).toHaveLength(1)
+  expect(capture.bodies[0]!.startsWith('x'.repeat(MAX_CAPTURED_BODY_CHARS))).toBe(true)
+  expect(capture.bodies[0]!.length).toBeLessThan(MAX_CAPTURED_BODY_CHARS + 100)
+  expect(capture.bodies[0]).toContain(`[truncated: ${big.length} characters]`)
 })
