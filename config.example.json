@@ -1,0 +1,13 @@
+{
+  "defaultPostalCode": "81101",
+  "dbPath": "data/parcels.db",
+  "port": 8787,
+  "notifier": "auto",
+  "imap": {
+    "host": "imap.example.com",
+    "port": 993,
+    "user": "parcels@example.com",
+    "pass": "app-password",
+    "mailbox": "INBOX"
+  }
+}
