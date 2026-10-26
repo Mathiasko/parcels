@@ -89,7 +89,7 @@ describe('with the real adapters', () => {
   test('the SK-prefixed SPS form and the S10 Slovenska posta form never collide', () => {
     expect(detectCarrier('SK0TEST6000000000X')).toEqual(['sps'])
     expect(detectCarrier('RA123456785SK')).toEqual(['posta'])
-    expect(detectCarrier(normalizeNumber('sk0scz d600 1020454x'))).toEqual(['sps'])
+    expect(detectCarrier(normalizeNumber('sk0tes t600 0000000x'))).toEqual(['sps'])
   })
 
   test('detectCarrier prefers the distinctive carriers over the ambiguous ones', () => {

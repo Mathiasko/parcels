@@ -40,7 +40,7 @@ export function carrierForAddress(address: string): CarrierId | undefined {
  * token, so a 14-digit DPD number is never read as a 12-digit GLS one.
  */
 const NUMBER: Record<CarrierId, RegExp> = {
-  packeta: /(?<![A-Z0-9])Z(?:[  ]?\d){10}(?!\d)/g,   // printed as "Z 000 0000 000"
+  packeta: /(?<![A-Z0-9])Z(?:[ \u00a0\u202f]?\d){10}(?!\d)/g,   // printed as "Z 000 0000 000"
   posta: /(?<![A-Z0-9])[A-Z]{2}\d{9}SK(?![A-Z0-9])/g,
   sps: /(?<![A-Z0-9])(?:SK[A-HJ-NP-Z0-9]{5}\d{2}[A-HJ-NP-Z0-9]{9}|703\d{11}[0-4]\d)(?![A-Z0-9])/g,
   dpd: /(?<![A-Z0-9])\d{14}(?![A-Z0-9])/g,
