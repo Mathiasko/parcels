@@ -1,5 +1,5 @@
-{"item":{"packetId":"Z1234567890","packetStatusId":"2","packetStatus":"Your parcel is ready for pickup.",
- "branchAddress":"Z-BOX Bratislava, Obchodna 12, 811 06 Bratislava",
+{"item":{"barcode":"Z1234567890","packetStatusId":"2","packetStatus":"Your parcel is ready for pickup.",
+ "sender":"Example Shop s.r.o.","courierId":"1234","branchAddress":"Z-BOX Bratislava, Obchodna 12, 811 06 Bratislava",
  "trackingDetails":[
   {"text":"The parcel is ready for pickup.","time":"2026-10-20 09:15:00"},
   {"text":"The parcel is on its way to the pickup point.","time":"2026-10-19 07:42:30"}

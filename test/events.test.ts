@@ -68,6 +68,34 @@ test('recomputeParcelStatus sets delivered_at when the newest event is delivered
   expect(p.deliveredAt?.toISOString()).toBe('2026-04-29T14:00:00.000Z')
 })
 
+test('recomputeParcelStatus with an authoritative status is not overridden by the newest event', () => {
+  appendEvents(db, parcelId, three)   // newest event is out_for_delivery
+  recomputeParcelStatus(db, parcelId, 'ready_for_pickup')
+  expect(findParcel(db, 'packeta', 'Z1234567890')!.status).toBe('ready_for_pickup')
+})
+test('recomputeParcelStatus takes delivered_at from the newest event when the authoritative status is delivered', () => {
+  // the newest event is stamped unknown (stored events are never restamped), yet the parcel is delivered
+  appendEvents(db, parcelId, [...three, ev('2026-04-29 14:00:00', { status: 'unknown' })])
+  recomputeParcelStatus(db, parcelId, 'delivered', new Date('2026-05-01T00:00:00.000Z'))
+  const p = findParcel(db, 'packeta', 'Z1234567890')!
+  expect(p.status).toBe('delivered')
+  expect(p.deliveredAt?.toISOString()).toBe('2026-04-29T14:00:00.000Z')
+})
+test('recomputeParcelStatus falls back to the poll time for delivered_at when there are no events', () => {
+  recomputeParcelStatus(db, parcelId, 'delivered', new Date('2026-05-01T00:00:00.000Z'))
+  const p = findParcel(db, 'packeta', 'Z1234567890')!
+  expect(p.status).toBe('delivered')
+  expect(p.deliveredAt?.toISOString()).toBe('2026-05-01T00:00:00.000Z')
+})
+test('recomputeParcelStatus clears delivered_at when the authoritative status is not delivered', () => {
+  appendEvents(db, parcelId, three)
+  recomputeParcelStatus(db, parcelId, 'delivered')
+  recomputeParcelStatus(db, parcelId, 'problem')
+  const p = findParcel(db, 'packeta', 'Z1234567890')!
+  expect(p.status).toBe('problem')
+  expect(p.deliveredAt).toBeUndefined()
+})
+
 test('latestEvent is undefined when a parcel has no events', () => {
   expect(latestEvent(db, parcelId)).toBeUndefined()
 })

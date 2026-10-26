@@ -52,7 +52,9 @@ test('issues a POST with an empty body and no required headers', async () => {
   expect(calls[0]!.url).toBe('https://tracking.packeta.com/api/getPacketById/Z1234567890/en')
   expect(calls[0]!.init?.method).toBe('POST')
   expect(calls[0]!.init?.body ?? '').toBe('')
-  expect(calls[0]!.init?.headers).toBeUndefined()
+  // the endpoint needs no credentials, so none may be sent (a polite User-Agent would be fine)
+  const headers = new Headers(calls[0]!.init?.headers)
+  for (const name of ['authorization', 'cookie', 'x-api-key']) expect(headers.has(name)).toBe(false)
 })
 
 test('a GET is never issued', async () => {
@@ -101,6 +103,35 @@ test('an unknown packetStatusId maps to unknown and preserves packetStatus text 
   expect(r.statusDetail).toBe('4242')
   expect(r.events).toHaveLength(1)
   expect(warn).toHaveBeenCalledWith(expect.stringContaining('4242'))
+})
+
+test('a numeric packetStatusId is tolerated and mapped like its string form', async () => {
+  const r = ok(await fetchOne(fixture('delivered.json').replace('"packetStatusId":"3"', '"packetStatusId":3')))
+  expect(r.status).toBe('delivered')
+  expect(r.statusDetail).toBe('3')
+})
+
+test('pickup is omitted when the status is not ready_for_pickup, even if branchAddress is present', async () => {
+  // delivered.json carries a branchAddress but the parcel is already delivered
+  const r = ok(await fetchOne(fixture('delivered.json')))
+  expect(r.pickup).toBeUndefined()
+})
+
+test('pickup is omitted when branchAddress is missing, without affecting the status', async () => {
+  const r = ok(await fetchOne(fixture('ready-for-pickup.json').replace(/"branchAddress":"[^"]*",/, '')))
+  expect(r.status).toBe('ready_for_pickup')
+  expect(r.pickup).toBeUndefined()
+})
+
+test('a pickup address that does not mention Z-BOX is kept whole with kind unknown', async () => {
+  const r = ok(await fetchOne(fixture('ready-for-pickup.json').replace('Z-BOX Bratislava, ', '')))
+  expect(r.pickup).toEqual({ kind: 'unknown', name: 'Obchodna 12, 811 06 Bratislava' })
+})
+
+test('statusRaw falls back to the packetStatusId when packetStatus is absent', async () => {
+  const r = ok(await fetchOne(fixture('delivered.json').replace(/"packetStatus":"[^"]*",/, '')))
+  expect(r.status).toBe('delivered')
+  expect(r.statusRaw).toBe('3')
 })
 
 test('event times are parsed as Europe/Prague', async () => {

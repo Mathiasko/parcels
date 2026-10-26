@@ -7,6 +7,7 @@ import { carrierHealth } from '../src/db/health.js'
 import { openDb } from '../src/db/index.js'
 import { findParcel, updateParcelState } from '../src/db/parcels.js'
 import { HttpTransportError } from '../src/core/http.js'
+import type { CanonicalStatus } from '../src/core/types.js'
 import {
   NOW, config, memDb, addParcel, ev, okResult, failResult, stubAdapter, bodyHttp,
 } from './poll-helpers.js'
@@ -56,6 +57,32 @@ test('appends new events and leaves existing ones untouched on a second run', as
   const third = await runPoll(deps)
   expect(third.newEvents.map(e => e.status)).toEqual(['delivered'])
   expect(findParcel(db, 'posta', 'RA000000001SK')).toMatchObject({ status: 'delivered' })
+})
+
+test('a status change with no new event is kept, stays consistent with statusRaw and pickup, and survives repeat polls', async () => {
+  const db = memDb()
+  addParcel(db, 'packeta', 'Z1234567890')
+  // Packeta events carry no code, so the stored newest event is stamped with the status at first sight.
+  const events = [ev('2026-10-26 08:30:00', 'in_transit', 2)]
+  let extra: Parameters<typeof okResult>[2] = { statusRaw: 'on the way' }
+  let status: CanonicalStatus = 'in_transit'
+  const packeta = stubAdapter('packeta', ins => ins.map(i => okResult(i.number, events, { status, ...extra })))
+  const deps = { db, http: bodyHttp(), adapters: [packeta], config, now: NOW }
+
+  await runPoll(deps)
+  expect(findParcel(db, 'packeta', 'Z1234567890')).toMatchObject({ status: 'in_transit', statusRaw: 'on the way' })
+
+  // packetStatusId moves 31 -> 2 and trackingDetails does not grow
+  status = 'ready_for_pickup'
+  extra = { statusRaw: 'ready for pickup', pickup: { kind: 'zbox', name: 'Z-BOX Example Street 1' } }
+  for (let i = 0; i < 2; i++) {
+    const report = await runPoll(deps)
+    expect(report.newEvents).toEqual([])
+    expect(findParcel(db, 'packeta', 'Z1234567890')).toMatchObject({
+      status: 'ready_for_pickup', statusRaw: 'ready for pickup', pickup: { kind: 'zbox', name: 'Z-BOX Example Street 1' },
+    })
+  }
+  expect(db.prepare('SELECT status FROM events').all()).toEqual([{ status: 'in_transit' }])   // never restamped
 })
 
 test('a gated result records carrier health as gated and does not alter the parcel status', async () => {

@@ -231,7 +231,7 @@ function applyOk(db: Database, p: Parcel, r: Extract<FetchResult, { ok: true }>,
     lastPolledAt: now,
     lastChangedAt: movedAt !== p.lastChangedAt ? movedAt : undefined,
   })
-  recomputeParcelStatus(db, p.id)
+  recomputeParcelStatus(db, p.id, r.status, now)
   storeRaw(db, p.id, p.carrier, JSON.stringify(r.raw), now)
   return inserted
 }

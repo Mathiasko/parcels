@@ -72,16 +72,25 @@ export function listEvents(db: Database, parcelId: number): StoredEvent[] {
 }
 
 /**
- * Re-derives the parcel's cached status from its newest event. `delivered_at` follows the newest
- * event too: set to its time when delivered, cleared otherwise. No events: parcel untouched.
+ * Settles the parcel's cached status and `delivered_at`.
+ *
+ * On the poll path pass the adapter's authoritative top-level `status`: it is written as-is and
+ * never overridden by the newest event, because stored events are never restamped (carriers with
+ * prose-only events would otherwise be reverted on every poll). `delivered_at` is the newest
+ * event's time when that status is `delivered` (`now` when there are no events), else cleared.
+ *
+ * Without an authoritative status the status is derived from the newest event instead, and a
+ * parcel with no events is left untouched.
  */
-export function recomputeParcelStatus(db: Database, parcelId: number): void {
+export function recomputeParcelStatus(
+  db: Database, parcelId: number, authoritativeStatus?: CanonicalStatus, now: Date = new Date(),
+): void {
   const newest = latestEvent(db, parcelId)
-  if (!newest) return
+  const status = authoritativeStatus ?? newest?.status
+  if (status === undefined) return
+  const deliveredAt = status === 'delivered' ? (newest?.occurredAt ?? now) : undefined
   db.prepare('UPDATE parcels SET status = ?, delivered_at = ? WHERE id = ?').run(
-    newest.status,
-    newest.status === 'delivered' ? newest.occurredAt.toISOString() : null,
-    parcelId,
+    status, deliveredAt?.toISOString() ?? null, parcelId,
   )
 }
 
