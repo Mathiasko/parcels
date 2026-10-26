@@ -1,0 +1,12 @@
+Delivered-To: recipient@example.com
+Date: Tue, 20 Oct 2026 09:15:00 +0200
+From: Example Shop <orders@shop.example>
+To: Jane Doe <recipient@example.com>
+Subject: Your order ORDER-0004 has been dispatched with GLS
+Message-ID: <fixture-eshop-gls-0001@shop.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Your parcel was handed to GLS.
+Parcel number: 000000000001

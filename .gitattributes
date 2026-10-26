@@ -1,0 +1,2 @@
+# Mail fixtures are RFC 5322 messages: line endings are CRLF and must survive byte-for-byte.
+test/fixtures/mail/*.eml -text

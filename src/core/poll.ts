@@ -5,6 +5,7 @@ import type {
 } from './types.js'
 import type { Notifier } from '../notify/types.js'
 import { buildNotifications } from '../notify/rules.js'
+import { ingestMessages, type IngestDeps, type IngestReport } from '../ingest/ingest.js'
 import { HttpTransportError, captureBodies } from './http.js'
 import { isDue, slotFor } from './backoff.js'
 import { dedupHash } from './dedup.js'
@@ -30,14 +31,19 @@ export interface PollDeps {
   forceAll?: boolean
   /** Restricts the run to these parcels (a single-parcel refresh). Every other rule still applies. */
   parcelIds?: number[]
-  /** Wired by email ingest (Task 18); not consumed yet. */
-  ingest?: unknown
+  /**
+   * When present, the mailbox is read first and any parcels it names are created before polling
+   * starts, so a new parcel is polled in the very run that found it. Absent: no mail is touched.
+   */
+  ingest?: Pick<IngestDeps, 'imap' | 'mailDir' | 'client' | 'maxBytes'>
 }
 
 export interface PollReport {
   polled: number
   newEvents: NewEvent[]
   failures: Array<{ carrier: CarrierId; reason: string }>
+  /** What the mail ingest did this run; absent when no ingest is configured. */
+  ingest?: IngestReport
 }
 
 const RAW_RESPONSES_KEPT = 5
@@ -73,6 +79,8 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   const { db, http, now } = deps
   const slot = slotFor(now)
   const report: PollReport = { polled: 0, newEvents: [], failures: [] }
+
+  if (deps.ingest) report.ingest = await runIngest(db, deps, deps.ingest)
 
   const health = new Map(carrierHealth(db).map(h => [h.carrier, h]))
   const byCarrier = new Map<CarrierId, Parcel[]>()
@@ -115,6 +123,24 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   }
   if (deps.notifier) await notify(deps.notifier, db, report, now, deps.config.port)
   return report
+}
+
+/**
+ * Mail ingest is one input among several, never the run itself: whatever goes wrong with the mailbox
+ * (no network, a revoked app password, a bad message) is reported and the carriers are still polled.
+ * Carrier health is keyed by carrier, so a mailbox failure is carried in the report instead, where
+ * `summarize` puts it in the poll log.
+ */
+async function runIngest(
+  db: Database, deps: PollDeps, ingest: NonNullable<PollDeps['ingest']>,
+): Promise<IngestReport> {
+  try {
+    return await ingestMessages(db, {
+      ...ingest, now: deps.now, adapters: deps.adapters, defaultPostalCode: deps.config.defaultPostalCode,
+    })
+  } catch (err) {
+    return { read: 0, created: 0, linked: 0, archivedOld: 0, needsAttention: 0, error: describe(err) }
+  }
 }
 
 /**
@@ -290,5 +316,10 @@ export function summarize(report: PollReport): string {
   const failed = report.failures.length === 0
     ? ''
     : `, ${report.failures.length} carrier failure(s) (${report.failures.map(f => `${f.carrier}: ${f.reason}`).join('; ')})`
-  return `polled ${report.polled} parcel(s), ${report.newEvents.length} new event(s)${failed}`
+  const i = report.ingest
+  const mail = !i ? ''
+    : i.error ? `, mail ingest failed: ${i.error}`
+    : i.read === 0 ? ''
+    : `, mail: ${i.read} new, ${i.created} parcel(s) created${i.archivedOld ? ` (${i.archivedOld} archived as old)` : ''}${i.needsAttention ? `, ${i.needsAttention} need attention` : ''}`
+  return `polled ${report.polled} parcel(s), ${report.newEvents.length} new event(s)${mail}${failed}`
 }

@@ -1,3 +1,4 @@
+import { dirname, join } from 'node:path'
 import { createHttpClient } from './core/http.js'
 import { loadRuntimeConfig } from './core/config.js'
 import { runPoll, summarize } from './core/poll.js'
@@ -24,6 +25,8 @@ async function main(): Promise<void> {
     const report = await runPoll({
       db, http: createHttpClient(), adapters: allAdapters(), config, now: new Date(),
       notifier: createNotifier(config.notifier), forceAll: gap.longGap,
+      // Raw mail lands in data/mail beside the database. Read-only against the mailbox; see ingest/imap.ts.
+      ingest: config.imap && { imap: config.imap, mailDir: join(dirname(config.dbPath), 'mail') },
     })
     // Only after the run completed (a crash mid-refresh leaves the gap to be retried), and never fatal:
     // failing to note the time must not turn a good poll into exit 1.

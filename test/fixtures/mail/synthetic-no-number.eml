@@ -1,0 +1,11 @@
+Delivered-To: recipient@example.com
+Date: Mon, 19 Oct 2026 08:00:00 +0200
+From: A Friend <friend@example.com>
+To: Jane Doe <recipient@example.com>
+Subject: Lunch on Friday?
+Message-ID: <fixture-no-number-0001@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Are you free for lunch on Friday?

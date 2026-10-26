@@ -1,0 +1,16 @@
+Delivered-To: recipient@example.com
+Date: Tue, 20 Oct 2026 09:15:00 +0200
+From: Example Shop <orders@shop.example>
+To: Jane Doe <recipient@example.com>
+Subject: Your order ORDER-0003 has been dispatched
+Message-ID: <fixture-eshop-packeta-0001@shop.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Hello Jane,
+
+Your order ORDER-0003 left our warehouse today.
+Carrier: Packeta. Tracking number: Z 000 0000 003
+
+Thank you for shopping with us.
