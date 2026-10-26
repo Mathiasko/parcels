@@ -2,6 +2,7 @@ import { test, expect, beforeEach } from 'vitest'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import BetterSqlite3 from 'better-sqlite3'
 import { openDb, type Database } from '../src/db/index.js'
 import {
   insertParcel, findParcel, listActive, updateParcelState, setArchived,
@@ -127,4 +128,18 @@ test('listActive excludes delivered, returned and archived parcels', () => {
   setArchived(db, archived, new Date('2026-07-14T00:00:00.000Z'))
   const list = listActive(db)
   expect(list.map(p => p.id)).toEqual([active])
+})
+
+test('openDb on a database from an older schema fails at open, naming the missing column', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'parcels-old-'))
+  try {
+    const path = join(dir, 'old.db')
+    const old = new BetterSqlite3(path)
+    old.exec('CREATE TABLE parcels (id INTEGER PRIMARY KEY, carrier TEXT NOT NULL, tracking_number TEXT NOT NULL)')
+    old.close()
+    expect(() => openDb(path)).toThrow(/table "parcels" is missing columns .*"needs_postcode"/)
+    expect(() => openDb(path)).toThrow(/"last_attempted_at"/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

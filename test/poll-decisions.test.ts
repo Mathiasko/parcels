@@ -225,36 +225,62 @@ describe('gated carrier backoff', () => {
                 VALUES ('packeta', ?, 'gated', ?)`).run(new Date(NOW.getTime() - lastErrorAgoHours * HOUR).toISOString(), n)
     return db
   }
-  const poll = (db: ReturnType<typeof memDb>, answer: 'gated' | 'ok' = 'gated') => {
-    const packeta = stubAdapter('packeta', ins => ins.map(i =>
-      answer === 'gated' ? failResult(i.number, 'gated') : okResult(i.number, [ev('2026-10-26 09:00:00', 'in_transit')])), 100)
-    return runPoll({ db, http: bodyHttp(), adapters: [packeta], config, now: NOW }).then(report => ({ report, packeta }))
+  /** Each adapter fetch makes one HTTP request, so `requests` is what the carrier's host would see. */
+  const poll = async (db: ReturnType<typeof memDb>, answer: 'gated' | 'ok' = 'gated') => {
+    let requests = 0
+    const counting: HttpClient = (url, init) => { requests++; return bodyHttp()(url, init) }
+    const packeta = stubAdapter('packeta', async (ins, http) => {
+      await http('https://carrier.example/track')
+      return ins.map(i =>
+        answer === 'gated' ? failResult(i.number, 'gated') : okResult(i.number, [ev('2026-10-26 09:00:00', 'in_transit')]))
+    }, 100)
+    const report = await runPoll({ db, http: counting, adapters: [packeta], config, now: NOW })
+    return { report, packeta, requests: () => requests }
   }
 
-  test('inside the window only one canary parcel is sent', async () => {
+  test('while the window is open nothing at all is sent to the carrier', async () => {
     const db = seed(2, 1)   // wait = 2h, last error 1h ago
-    const { report, packeta } = await poll(db)
-    expect(packeta.calls.map(c => c.length)).toEqual([1])
-    expect(report.polled).toBe(1)
-    expect(carrierHealth(db)[0]).toMatchObject({ lastErrorKind: 'gated', consecutiveFailures: 3 })
+    const { report, packeta, requests } = await poll(db)
+    expect(requests()).toBe(0)
+    expect(packeta.calls).toEqual([])
+    expect(report.polled).toBe(0)
+    expect(carrierHealth(db)[0]).toMatchObject({ lastErrorKind: 'gated', consecutiveFailures: 2 })   // untouched
+    expect(db.prepare('SELECT COUNT(*) AS n FROM parcels WHERE last_attempted_at IS NOT NULL').get()).toEqual({ n: 0 })
   })
 
-  test('once the window has passed every parcel is polled again', async () => {
+  test('once the window has elapsed exactly one canary parcel is sent, not the full fan-out', async () => {
     const db = seed(2, 2)   // wait = 2h, last error exactly 2h ago
-    const { packeta } = await poll(db)
-    expect(packeta.calls.map(c => c.length)).toEqual([3])
+    const { report, packeta, requests } = await poll(db)
+    expect(requests()).toBe(1)
+    expect(packeta.calls.map(c => c.length)).toEqual([1])
+    expect(report.polled).toBe(1)
+    expect(carrierHealth(db)[0]).toMatchObject({ lastErrorKind: 'gated', consecutiveFailures: 3 })   // failed canary widens the window
+  })
+
+  test('failed canaries space out: the next one is not due until the wider window has passed', async () => {
+    const db = seed(2, 2)
+    const packeta = stubAdapter('packeta', ins => ins.map(i => failResult(i.number, 'gated')), 100)
+    const at = (h: number) => runPoll({
+      db, http: bodyHttp(), adapters: [packeta], config, now: new Date(NOW.getTime() + h * HOUR),
+    })
+    await at(0)   // canary fails: n = 3, last error at NOW, window now 4h
+    await at(3)
+    expect(packeta.calls).toHaveLength(1)
+    await at(4)
+    expect(packeta.calls.map(c => c.length)).toEqual([1, 1])
   })
 
   test('the first failure waits one hour and the wait is capped at 24 hours', async () => {
-    expect((await poll(seed(1, 0.5))).packeta.calls.map(c => c.length)).toEqual([1])
-    expect((await poll(seed(1, 1))).packeta.calls.map(c => c.length)).toEqual([3])
-    expect((await poll(seed(30, 23))).packeta.calls.map(c => c.length)).toEqual([1])
-    expect((await poll(seed(30, 24))).packeta.calls.map(c => c.length)).toEqual([3])
+    expect((await poll(seed(1, 0.5))).requests()).toBe(0)
+    expect((await poll(seed(1, 1))).packeta.calls.map(c => c.length)).toEqual([1])
+    expect((await poll(seed(30, 23))).requests()).toBe(0)
+    expect((await poll(seed(30, 24))).packeta.calls.map(c => c.length)).toEqual([1])
   })
 
   test('a canary that succeeds clears the streak so the next run polls everyone', async () => {
-    const db = seed(4, 1)
-    await poll(db, 'ok')
+    const db = seed(4, 8)   // wait = 8h, last error exactly 8h ago
+    const { packeta: canary } = await poll(db, 'ok')
+    expect(canary.calls.map(c => c.length)).toEqual([1])
     expect(carrierHealth(db)[0]).toMatchObject({ consecutiveFailures: 0 })
     const { packeta } = await poll(db)
     expect(packeta.calls.map(c => c.length)).toEqual([3])

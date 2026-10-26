@@ -133,15 +133,17 @@ test('consecutive_failures resets to zero after a successful poll', async () => 
   let broken = true
   const packeta = stubAdapter('packeta', ins => ins.map(i =>
     broken ? failResult(i.number, 'gated') : okResult(i.number, [ev('2026-10-26 09:00:00', 'in_transit')])))
-  const deps = { db, http: bodyHttp(), adapters: [packeta], config, now: NOW }
+  const hoursAfter = (h: number) => new Date(NOW.getTime() + h * 3_600_000)
+  const run = (now: Date) => runPoll({ db, http: bodyHttp(), adapters: [packeta], config, now })
 
-  await runPoll(deps)
-  await runPoll(deps)
+  // spaced past the gated backoff window (1h after the first failure, 2h after the second)
+  await run(NOW)
+  await run(hoursAfter(1))
   expect(carrierHealth(db)[0]).toMatchObject({ consecutiveFailures: 2 })
 
   broken = false
-  await runPoll(deps)
-  expect(carrierHealth(db)[0]).toMatchObject({ consecutiveFailures: 0, lastOkAt: NOW })
+  await run(hoursAfter(3))
+  expect(carrierHealth(db)[0]).toMatchObject({ consecutiveFailures: 0, lastOkAt: hoursAfter(3) })
 })
 
 test('the run commits even when every carrier fails', async () => {

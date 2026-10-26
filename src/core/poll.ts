@@ -82,9 +82,12 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
       report.failures.push({ carrier, reason: 'no adapter registered' })
       continue
     }
-    // A broken adapter (gated) is not hammered once per parcel per slot: while its backoff window
-    // is open, a single canary parcel is sent so recovery is still noticed.
-    const parcels = gatedBackoffOpen(health.get(carrier), now) ? due.slice(0, 1) : due
+    // A broken adapter (gated) is probed, not polled: nothing at all while its backoff window is
+    // open, then exactly one canary parcel once it has elapsed. A canary that succeeds clears the
+    // streak, so the next run is a normal one; a failure widens the window.
+    const throttle = gatedThrottle(health.get(carrier), now)
+    if (throttle === 'wait') continue
+    const parcels = throttle === 'canary' ? due.slice(0, 1) : due
     report.polled += parcels.length
 
     const fetched = await fetchCarrier(adapter, parcels, http)
@@ -104,13 +107,14 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
 }
 
 /**
- * True while a carrier whose last failure was `gated` should only be sent a canary: the wait is
- * min(2^(failures-1) hours, 24h) from the last error (1h, 2h, 4h ... capped at a day).
+ * How to treat a carrier whose last failure was `gated`. The window is min(2^(failures-1) hours,
+ * 24h) from the last error (1h, 2h, 4h ... capped at a day): `wait` while it is open, `canary` once
+ * it has elapsed (a window that has exactly elapsed counts), `none` for a carrier not in that state.
  */
-function gatedBackoffOpen(h: HealthRow | undefined, now: Date): boolean {
-  if (!h || h.lastErrorKind !== 'gated' || h.consecutiveFailures <= 0 || !h.lastErrorAt) return false
+function gatedThrottle(h: HealthRow | undefined, now: Date): 'none' | 'wait' | 'canary' {
+  if (!h || h.lastErrorKind !== 'gated' || h.consecutiveFailures <= 0 || !h.lastErrorAt) return 'none'
   const wait = Math.min(2 ** (h.consecutiveFailures - 1) * HOUR, GATED_MAX_WAIT)
-  return now.getTime() - h.lastErrorAt.getTime() < wait
+  return now.getTime() - h.lastErrorAt.getTime() < wait ? 'wait' : 'canary'
 }
 
 /** Calls the adapter once per `batchSize` chunk; each call is isolated so one throw loses one chunk. */
