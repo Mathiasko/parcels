@@ -9,7 +9,22 @@ import type { Notification, Notifier } from './types.js'
  */
 export type SpawnFn = (command: string, args: readonly string[]) => Promise<{ code: number | null }>
 
+/** What one delivery attempt did. `started` says a process ran, never that a banner appeared. */
+export interface Delivery {
+  mechanism: 'terminal-notifier' | 'osascript'
+  started: boolean
+  exitCode: number | null
+  note?: string
+}
+
+export interface ReportingNotifier extends Notifier {
+  /** Like `send`, but says which mechanism was used and how it went. Also never rejects. */
+  deliver(n: Notification): Promise<Delivery>
+}
+
 const TERMINAL_NOTIFIER = ['/opt/homebrew/bin/terminal-notifier', 'terminal-notifier']
+/** terminal-notifier's exit code when macOS has not authorised it to post notifications. */
+const NOT_AUTHORISED = 3
 const SPAWN_TIMEOUT_MS = 10_000
 const MAX_CHARS = 200
 
@@ -35,61 +50,91 @@ function clean(text: string): string {
 
 /**
  * terminal-notifier reads option values through NSUserDefaults, which parses a value as a property
- * list: one whose FIRST character is `[`, `(`, `{`, `"`, `<` or `-` is rejected (exit 2, nothing
- * posted). Its README prescribes a leading backslash; only the first character ever needs it.
+ * list: one that starts with `[`, `(`, `{`, `"`, `<` or `-` is rejected (exit 2 or 4, nothing posted),
+ * and so is one where such a character follows leading whitespace or zero-width characters (checked
+ * against the real binary). Its README prescribes a leading backslash. Leading blanks are dropped
+ * first, so the backslash lands on the character that matters; text that needs neither is untouched.
  */
-const forTerminalNotifier = (text: string): string => (/^[[({"<-]/.test(text) ? `\\${text}` : text)
-
-/** Escapes text for use inside an AppleScript double-quoted string literal. */
-const appleScriptLiteral = (text: string): string => text.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+const LEADING_BLANKS = '\\s\\u00AD\\u200B-\\u200F\\u2060\\uFEFF'
+const RISKY_START = new RegExp(`^[${LEADING_BLANKS}]*[[({"<-]`)
+const forTerminalNotifier = (text: string): string =>
+  RISKY_START.test(text) ? `\\${text.replace(new RegExp(`^[${LEADING_BLANKS}]+`), '')}` : text
 
 const isMissing = (err: unknown): boolean => (err as { code?: unknown } | null)?.code === 'ENOENT'
 
-/**
- * `auto` prefers terminal-notifier (it can coalesce by group and open a URL) and falls back to
- * osascript when the binary cannot be launched. Both tools exit 0 whether or not a banner appeared,
- * so the exit code is never read as a delivery result and nothing is retried: delivery is best-effort.
- */
-export function createNotifier(mode: Config['notifier'], spawn: SpawnFn = defaultSpawn): Notifier {
-  let terminalNotifierMissing = false
-  let preferred = 0   // index into TERMINAL_NOTIFIER of the candidate that last launched
+type Attempt = { kind: 'missing' } | { kind: 'failed' } | { kind: 'ran'; code: number | null }
 
-  /** Whether terminal-notifier was launched at all (not whether it delivered anything). */
-  async function viaTerminalNotifier(n: Notification): Promise<boolean> {
+/**
+ * `auto` prefers terminal-notifier (it can coalesce by group and open a URL) and uses osascript when
+ * the binary is absent or macOS has not authorised it (exit 3); the decision is remembered for the
+ * life of the notifier so the doomed spawn is not repeated. An explicit `terminal-notifier` mode never
+ * degrades: it reports the problem on stderr. Both tools exit 0 whether or not a banner appeared, so
+ * apart from that one code the exit status is not read as a delivery result, and nothing is retried.
+ */
+export function createNotifier(mode: Config['notifier'], spawn: SpawnFn = defaultSpawn): ReportingNotifier {
+  let tnProblem: string | undefined   // why terminal-notifier is not being used (auto mode only)
+  let preferred = 0                   // index into TERMINAL_NOTIFIER of the candidate that last launched
+
+  async function runTerminalNotifier(n: Notification): Promise<Attempt> {
     const title = clean(n.title)
+    const message = clean(n.message)
     const args = [
       '-title', forTerminalNotifier(title),
-      // terminal-notifier prints usage and posts nothing for an empty message.
-      '-message', forTerminalNotifier(clean(n.message) || title),
+      // terminal-notifier prints usage and posts nothing for an empty (or all-blank) message.
+      '-message', forTerminalNotifier(new RegExp(`^[${LEADING_BLANKS}]*$`).test(message) ? title : message),
       '-group', forTerminalNotifier(clean(n.groupKey)),
       ...(n.url ? ['-open', clean(n.url)] : []),
       '-sound', 'Ping',
     ]
     for (const i of [preferred, 1 - preferred]) {
       try {
-        await spawn(TERMINAL_NOTIFIER[i]!, args)
+        const { code } = await spawn(TERMINAL_NOTIFIER[i]!, args)
         preferred = i
-        return true
+        return { kind: 'ran', code }
       } catch (err) {
-        if (!isMissing(err)) return true   // it started and then failed: do not retry or fall back
+        if (!isMissing(err)) return { kind: 'failed' }   // it could not run: do not try again
       }
     }
-    terminalNotifierMissing = true
-    return false
+    return { kind: 'missing' }
   }
 
-  async function viaOsascript(n: Notification): Promise<void> {
-    const script = `display notification "${appleScriptLiteral(clean(n.message))}"`
-      + ` with title "${appleScriptLiteral(clean(n.title))}" sound name "Ping"`
-    try { await spawn('osascript', ['-e', script]) } catch { /* best-effort */ }
+  async function runOsascript(n: Notification, note?: string): Promise<Delivery> {
+    const message = clean(n.message) || clean(n.title)
+    // The text travels as argv items read by `on run argv`, never inside the script source. The
+    // `--` is load-bearing: without it osascript would read a value like `-x` as one of its options.
+    const args = [
+      '-e', 'on run argv',
+      '-e', 'display notification (item 1 of argv) with title (item 2 of argv) sound name "Ping"',
+      '-e', 'end run',
+      '--', message, clean(n.title),
+    ]
+    try {
+      const { code } = await spawn('osascript', args)
+      return { mechanism: 'osascript', started: true, exitCode: code, note }
+    } catch {
+      return { mechanism: 'osascript', started: false, exitCode: null, note }
+    }
   }
 
-  return {
-    async send(n) {
-      if (mode !== 'osascript' && !terminalNotifierMissing) {
-        if (await viaTerminalNotifier(n)) return
+  const loud = (msg: string) => console.error(`notify: ${msg}`)
+
+  async function deliver(n: Notification): Promise<Delivery> {
+    if (mode !== 'osascript' && tnProblem === undefined) {
+      const r = await runTerminalNotifier(n)
+      if (r.kind === 'ran' && r.code !== NOT_AUTHORISED) {
+        return { mechanism: 'terminal-notifier', started: true, exitCode: r.code }
       }
-      if (mode !== 'terminal-notifier') await viaOsascript(n)
-    },
+      const problem = r.kind === 'missing' ? 'terminal-notifier is not installed'
+        : r.kind === 'failed' ? 'terminal-notifier could not be launched'
+        : 'terminal-notifier is not authorised to post notifications (exit 3); run it once from Terminal and approve the prompt'
+      if (mode === 'terminal-notifier') {
+        loud(problem)
+        return { mechanism: 'terminal-notifier', started: r.kind === 'ran', exitCode: r.kind === 'ran' ? r.code : null, note: problem }
+      }
+      tnProblem = problem
+    }
+    return runOsascript(n, tnProblem)   // osascript mode, or auto after terminal-notifier proved unusable
   }
+
+  return { deliver, send: async n => { await deliver(n) } }
 }

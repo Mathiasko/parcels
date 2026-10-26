@@ -51,6 +51,35 @@ test('poll runs the orchestrator over the injected adapters and prints the summa
   expect(findParcel(db, 'posta', 'RA123456785SK')?.status).toBe('in_transit')
 })
 
+test('notify-test sends one fixed notification and reports the mechanism used', async () => {
+  const calls: string[] = []
+  const spawn = async (command: string) => { calls.push(command); return { code: 0 } }
+  const r = await cli(memDb(), ['notify-test'], { spawn })
+  expect(r.code).toBe(0)
+  expect(calls).toEqual(['/opt/homebrew/bin/terminal-notifier'])
+  expect(r.out).toContain('mechanism used: terminal-notifier')
+  expect(r.out).toContain('process started: yes')
+  expect(r.out).toContain('exit code: 0')
+})
+
+test('notify-test shows the fallback and why when terminal-notifier is not authorised', async () => {
+  const calls: string[] = []
+  const spawn = async (command: string) => { calls.push(command); return { code: command.endsWith('terminal-notifier') ? 3 : 0 } }
+  const r = await cli(memDb(), ['notify-test'], { spawn })
+  expect(r.code).toBe(0)
+  expect(calls).toEqual(['/opt/homebrew/bin/terminal-notifier', 'osascript'])
+  expect(r.out).toContain('mechanism used: osascript')
+  expect(r.out.join('\n')).toMatch(/note: terminal-notifier is not authorised/)
+})
+
+test('notify-test exits 1 when nothing could be launched', async () => {
+  const spawn = async () => { throw Object.assign(new Error('nope'), { code: 'ENOENT' }) }
+  const r = await cli(memDb(), ['notify-test'], { spawn })
+  expect(r.code).toBe(1)
+  expect(r.out).toContain('process started: no')
+  expect(r.err).toMatch(/no notification could be sent/)
+})
+
 test('an unknown flag or command is a usage message and exit 1, not a stack trace', async () => {
   const flag = await cli(memDb(), ['add', 'RA123456785SK', '--bogus'])
   expect(flag.code).toBe(1)

@@ -523,6 +523,8 @@ CREATE TABLE parcels (
   merchant        TEXT,              -- parsed from email
   postal_code     TEXT,              -- for GLS/DPD; defaults from config
   status          TEXT NOT NULL,     -- CanonicalStatus
+  last_announced_status TEXT NOT NULL DEFAULT 'unknown',  -- status the user was last notified of
+  pickup_announced INTEGER NOT NULL DEFAULT 0,            -- 1 once a pickup point was announced
   status_raw      TEXT,
   status_detail   TEXT,              -- e.g. posta detailCode
   pickup_kind     TEXT,
@@ -588,9 +590,21 @@ CREATE TABLE raw_responses (
   fetched_at TEXT NOT NULL,
   body       TEXT NOT NULL
 );
+
+CREATE TABLE deadline_reminders (   -- one row per parcel whose pickup-deadline reminder was sent
+  parcel_id   INTEGER PRIMARY KEY REFERENCES parcels(id),
+  notified_at TEXT NOT NULL
+);
 ```
 
 ### Invariants
+
+0. **Notification state is durable.** A status transition is `status <>
+   last_announced_status`, a first pickup point is `pickup_announced = 0`, a deadline
+   reminder is a row in `deadline_reminders`, and a carrier alarm is
+   `carrier_health.notified_at` (cleared by the carrier's next `ok`). None of it lives in
+   memory, so a run with no notifier, or a failed send, loses nothing it has not already
+   recorded as sent.
 
 1. **`UNIQUE (parcel_id, dedup_hash)` makes polling idempotent.** Carriers return
    full history on every call. `dedup_hash = sha256(occurred_at_raw, code,

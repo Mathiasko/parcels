@@ -8,7 +8,7 @@ import type { CarrierAdapter, CarrierId, HttpClient } from './core/types.js'
 import { authStorePathFor, setDpdAuthStore } from './carriers/dpd.js'
 import { allAdapters, detectCarrier, getAdapter, normalizeNumber } from './carriers/registry.js'
 import { openDb, type Database } from './db/index.js'
-import { createNotifier } from './notify/send.js'
+import { createNotifier, type SpawnFn } from './notify/send.js'
 import type { Notifier } from './notify/types.js'
 import { listEvents } from './db/events.js'
 import { findParcel, getParcel, insertParcel, listActive } from './db/parcels.js'
@@ -23,6 +23,8 @@ export interface CliContext {
   adapters?: CarrierAdapter[]
   /** Injectable for tests; `poll` defaults to the configured notifier. */
   notifier?: Notifier
+  /** Injectable for tests; `notify-test` defaults to really launching the notifier. */
+  spawn?: SpawnFn
 }
 
 const CARRIER_IDS: readonly CarrierId[] = ['posta', 'packeta', 'gls', 'sps', 'dpd']
@@ -32,7 +34,8 @@ const USAGE = `usage: cli <command>
   list
   show <id>
   poll
-  probe <carrier> <number> [--zip <postcode>]`
+  probe <carrier> <number> [--zip <postcode>]
+  notify-test`
 
 /** A user-facing failure: its message is printed as-is, with no stack. */
 class CliError extends Error {}
@@ -122,6 +125,28 @@ async function poll(ctx: CliContext): Promise<void> {
   ctx.out(summarize(report))
 }
 
+/**
+ * Sends one fixed notification through the configured notifier and says how it went. This is the
+ * command that triggers macOS's one-time authorisation prompt for terminal-notifier. The tools exit
+ * 0 whether or not a banner appeared, so success here means "the process ran": look for the banner.
+ */
+async function notifyTest(ctx: CliContext): Promise<void> {
+  const d = await createNotifier(ctx.config.notifier, ctx.spawn).deliver({
+    groupKey: 'notify-test',
+    title: 'Parcel tracker',
+    message: 'Test notification. If you can read this, notifications work.',
+  })
+  ctx.out(`configured notifier: ${ctx.config.notifier}`)
+  ctx.out(`mechanism used: ${d.mechanism}`)
+  ctx.out(`process started: ${d.started ? 'yes' : 'no'}`)
+  ctx.out(`exit code: ${d.exitCode ?? 'none'}`)
+  if (d.note) ctx.out(`note: ${d.note}`)
+  if (!d.started || (d.mechanism === 'terminal-notifier' && d.exitCode === 3)) {
+    throw new CliError('no notification could be sent')
+  }
+  ctx.out('Check that a banner appeared: a zero exit code only means the tool ran.')
+}
+
 /** The only command that touches the live network. Prints each response body exactly as received. */
 async function probe(argv: string[], ctx: CliContext): Promise<void> {
   const { values, positionals } = parseArgs({
@@ -160,6 +185,7 @@ export async function runCli(argv: string[], ctx: CliContext): Promise<number> {
       case 'show': show(rest, ctx); break
       case 'poll': await poll(ctx); break
       case 'probe': await probe(rest, ctx); break
+      case 'notify-test': await notifyTest(ctx); break
       default:
         ctx.err(command === undefined ? USAGE : `unknown command "${command}"\n${USAGE}`)
         return 1

@@ -19,6 +19,10 @@ export interface Parcel {
   merchant?: string
   postalCode?: string
   status: CanonicalStatus
+  /** The status the user was last told about ('unknown' until the first announcement). */
+  lastAnnouncedStatus: CanonicalStatus
+  /** Whether a pickup point has been announced yet. */
+  pickupAnnounced: boolean
   statusRaw?: string
   statusDetail?: string
   pickup?: PickupPoint
@@ -84,6 +88,8 @@ function toParcel(r: Row): Parcel {
     merchant: opt(r.merchant as string | null),
     postalCode: opt(r.postal_code as string | null),
     status: r.status as CanonicalStatus,
+    lastAnnouncedStatus: r.last_announced_status as CanonicalStatus,
+    pickupAnnounced: r.pickup_announced === 1,
     statusRaw: opt(r.status_raw as string | null),
     statusDetail: opt(r.status_detail as string | null),
     pickup,
@@ -199,4 +205,10 @@ export function setNeedsPostcode(db: Database, id: number, rejected: string | nu
 
 export function setArchived(db: Database, id: number, at: Date): void {
   db.prepare('UPDATE parcels SET archived_at = ? WHERE id = ?').run(at.toISOString(), id)
+}
+
+/** Records what the user has now been told, so the same status or pickup point is never announced twice. */
+export function markAnnounced(db: Database, id: number, status: CanonicalStatus, pickupAnnounced: boolean): void {
+  db.prepare('UPDATE parcels SET last_announced_status = ?, pickup_announced = pickup_announced OR ? WHERE id = ?')
+    .run(status, pickupAnnounced ? 1 : 0, id)
 }

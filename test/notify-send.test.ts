@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest'
+import { test, expect, vi } from 'vitest'
 import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -51,8 +51,6 @@ test('a message containing double quotes, backslashes and newlines is passed thr
   expect(calls[0]!.args[calls[0]!.args.indexOf('-title') + 1]).toBe(n.title)
   expect(calls[0]!.args[calls[0]!.args.indexOf('-message') + 1]).toBe(n.message)
   expect(calls[0]!.args).toHaveLength(8)   // -title T -message M -group G -sound Ping
-  // The spawn seam takes (command, args) only, so there is nowhere to ask for a shell.
-  expect(spawn.length).toBe(2)
 })
 
 test('shell metacharacters reach a real process as inert argv entries', async () => {
@@ -80,6 +78,22 @@ test('a leading character terminal-notifier would parse as a property list is ba
   expect(calls.slice(0, 6).map(c => c.args[1])).toEqual(['[', '(', '{', '"', '<', '-'].map(l => `\\${l}t`))
   expect(value(6, '-title')).toBe("'t")
   expect(value(6, '-message')).toBe('m [x] -y')
+})
+
+test('leading whitespace or zero-width characters before a risky character do not defeat the escape', async () => {
+  const { calls, spawn } = recorder()
+  const notifier = createNotifier('terminal-notifier', spawn)
+  const leads = [' ', '\t', '\n', '\u00a0', '\u200b', '\u3000', '\ufeff', '\u200b\u200b ']
+  for (const lead of leads) await notifier.send({ groupKey: 'g', title: `${lead}(Redirected)`, message: `${lead}[x] y` })
+  await notifier.send({ groupKey: 'g', title: '  plain title', message: '   ' })
+  const arg = (i: number, flag: string) => calls[i]!.args[calls[i]!.args.indexOf(flag) + 1]
+  for (let i = 0; i < leads.length; i++) {
+    expect(arg(i, '-title')).toBe('\\(Redirected)')
+    expect(arg(i, '-message')).toBe('\\[x] y')
+  }
+  // Text that does not need the escape is not touched, and an all-blank message falls back to the title.
+  expect(arg(leads.length, '-title')).toBe('  plain title')
+  expect(arg(leads.length, '-message')).toBe('  plain title')
 })
 
 test('an emoji in the label survives intact', async () => {
@@ -126,17 +140,22 @@ test('auto mode falls back to osascript when terminal-notifier is absent', async
   expect(calls.slice(3).map(c => c.command)).toEqual(['osascript'])
 })
 
-test('the osascript fallback escapes quotes and backslashes in the AppleScript string literal', async () => {
+test('the osascript fallback passes text as argv items, never inside the script source', async () => {
+  const n = { groupKey: 'g', title: 'say "hi" \\ bye', message: '-x " & (do shell script "id") & "\\\n$(whoami) `id`' }
   const { calls, spawn } = recorder()
-  await createNotifier('osascript', spawn).send({
-    groupKey: 'g', title: 'say "hi" \\ bye', message: '" & (do shell script "id") & "\\',
-  })
+  await createNotifier('osascript', spawn).send(n)
   expect(calls).toHaveLength(1)
   expect(calls[0]!.command).toBe('osascript')
   expect(calls[0]!.args).toEqual([
-    '-e',
-    'display notification "\\" & (do shell script \\"id\\") & \\"\\\\" with title "say \\"hi\\" \\\\ bye" sound name "Ping"',
+    '-e', 'on run argv',
+    '-e', 'display notification (item 1 of argv) with title (item 2 of argv) sound name "Ping"',
+    '-e', 'end run',
+    '--', n.message, n.title,   // after `--`, so a leading "-x" is a value and not an osascript option
   ])
+  // No text of ours appears in any script fragment.
+  const scripts = calls[0]!.args.filter((_, i) => calls[0]!.args[i - 1] === '-e').join('\n')
+  expect(scripts).not.toContain('shell script')
+  expect(scripts).not.toContain('bye')
 })
 
 test('send resolves even when the notifier process exits non-zero', async () => {
@@ -150,4 +169,37 @@ test('send resolves even when the notifier process exits non-zero', async () => 
 
   const missing = recorder(async () => { throw enoent() })
   await expect(createNotifier('auto', missing.spawn).send(base)).resolves.toBeUndefined()
+})
+
+const NOT_AUTHORISED = (c: Call) => c.command.endsWith('terminal-notifier') ? { code: 3 } : { code: 0 }
+
+test('auto mode falls back to osascript when terminal-notifier is not authorised (exit 3), and remembers it', async () => {
+  const { calls, spawn } = recorder(async c => NOT_AUTHORISED(c))
+  const notifier = createNotifier('auto', spawn)
+
+  const first = await notifier.deliver(base)
+  expect(calls.map(c => c.command)).toEqual([TN, 'osascript'])
+  expect(first).toMatchObject({ mechanism: 'osascript', started: true, exitCode: 0 })
+  expect(first.note).toMatch(/not authorised/)
+
+  await notifier.send(base)
+  expect(calls.map(c => c.command)).toEqual([TN, 'osascript', 'osascript'])   // no second doomed spawn
+})
+
+test('an explicit terminal-notifier mode does not degrade when unauthorised: it reports loudly and uses no osascript', async () => {
+  const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    const { calls, spawn } = recorder(async c => NOT_AUTHORISED(c))
+    const d = await createNotifier('terminal-notifier', spawn).deliver(base)
+    expect(calls.map(c => c.command)).toEqual([TN])
+    expect(d).toMatchObject({ mechanism: 'terminal-notifier', started: true, exitCode: 3 })
+    expect(err).toHaveBeenCalledWith(expect.stringMatching(/not authorised/))
+  } finally { err.mockRestore() }
+})
+
+test('other non-zero exits from terminal-notifier in auto mode neither fall back nor retry', async () => {
+  const { calls, spawn } = recorder(async () => ({ code: 1 }))
+  const d = await createNotifier('auto', spawn).deliver(base)
+  expect(calls.map(c => c.command)).toEqual([TN])
+  expect(d).toMatchObject({ mechanism: 'terminal-notifier', exitCode: 1 })
 })

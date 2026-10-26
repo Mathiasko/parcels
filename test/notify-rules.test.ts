@@ -1,9 +1,8 @@
 import { test, expect } from 'vitest'
-import { buildNotifications, snapshot } from '../src/notify/rules.js'
+import { buildNotifications } from '../src/notify/rules.js'
 import { runPoll } from '../src/core/poll.js'
-import { markNotified } from '../src/db/events.js'
 import { carrierHealth, recordHealth } from '../src/db/health.js'
-import { updateParcelState, type ParcelStateUpdate } from '../src/db/parcels.js'
+import { markAnnounced, updateParcelState, getParcel, type ParcelStateUpdate } from '../src/db/parcels.js'
 import type { Database } from '../src/db/index.js'
 import type { CanonicalStatus, CarrierId, NewEvent, ParcelEvent } from '../src/core/types.js'
 import type { Notification, Notifier } from '../src/notify/types.js'
@@ -15,74 +14,70 @@ const PORT = 8787
 const HOUR = 3_600_000
 const ZBOX = { kind: 'zbox' as const, name: 'Z-BOX', street: 'Hlavna 12', city: 'Zilina' }
 
-/** A parcel already sitting in `status` (as if an earlier run had stored it). */
+/** A parcel already sitting in `status`, and already announced as such (as if an earlier run had told the user). */
 function parcelIn(db: Database, status: CanonicalStatus, extra: Partial<ParcelStateUpdate> = {}, carrier: CarrierId = 'posta', n = 'RA000000001SK'): number {
   const id = addParcel(db, carrier, n)
   updateParcelState(db, id, { status, ...extra })
+  markAnnounced(db, id, status, extra.pickup !== undefined)
   return id
 }
 const newEv = (parcelId: number, raw: string, status: CanonicalStatus): NewEvent => ({ ...ev(raw, status), parcelId })
 
-const build = (db: Database, before: ReturnType<typeof snapshot>, events: NewEvent[] = [], now = NOW) =>
-  buildNotifications(db, events, now, PORT, before)
+const build = (db: Database, events: NewEvent[] = [], now = NOW) => buildNotifications(db, events, now, PORT)
 
 test('a status transition produces one notification', () => {
   const db = memDb()
   const id = parcelIn(db, 'in_transit')
-  const before = snapshot(db)
   updateParcelState(db, id, { status: 'out_for_delivery' })
-  const out = build(db, before, [newEv(id, 'a', 'out_for_delivery')])
+  const out = build(db, [newEv(id, 'a', 'out_for_delivery')])
   expect(out).toHaveLength(1)
   expect(out[0]!.title).toMatch(/Out for delivery/)
+  expect(build(db)).toEqual([])   // announced: the same transition is never announced twice
 })
 
 test('a status transition with no new event at all still notifies (prose-only carriers)', () => {
   const db = memDb()
   const id = parcelIn(db, 'in_transit')
-  const before = snapshot(db)
   updateParcelState(db, id, { status: 'returning' })
-  expect(build(db, before, [])).toHaveLength(1)
+  expect(build(db, [])).toHaveLength(1)
 })
 
 test('new events that do not change the canonical status produce none', () => {
   // four depot scans overnight -> 0 notifications
   const db = memDb()
   const id = parcelIn(db, 'in_transit')
-  const before = snapshot(db)
   const scans = ['a', 'b', 'c', 'd'].map(r => newEv(id, r, 'in_transit'))
-  expect(build(db, before, scans)).toEqual([])
+  expect(build(db, scans)).toEqual([])
 })
 
 test('a transition to unknown is not announced', () => {
   const db = memDb()
   const id = parcelIn(db, 'in_transit')
-  const before = snapshot(db)
   updateParcelState(db, id, { status: 'unknown' })
-  expect(build(db, before)).toEqual([])
+  expect(build(db)).toEqual([])
 })
 
 test('the first appearance of a pickup location notifies with the address in the message', () => {
   const db = memDb()
   const id = parcelIn(db, 'ready_for_pickup')
-  const before = snapshot(db)
   updateParcelState(db, id, { status: 'ready_for_pickup', pickup: ZBOX })
-  const [n, ...rest] = build(db, before)
+  const [n, ...rest] = build(db)
   expect(rest).toEqual([])
   expect(n!.message).toContain('Z-BOX')
   expect(n!.message).toContain('Hlavna 12, Zilina')
   // Nothing new the next time round: the pickup point is no longer "first seen".
-  expect(build(db, snapshot(db))).toEqual([])
+  expect(build(db)).toEqual([])
 })
 
 test('a retainedTill within 48h notifies once and never again for the same parcel', () => {
   const db = memDb()
   const id = parcelIn(db, 'ready_for_pickup', { pickup: ZBOX, retainedTill: new Date(NOW.getTime() + 30 * HOUR) })
-  const first = build(db, snapshot(db))
+  const first = build(db)
   expect(first).toHaveLength(1)
   expect(first[0]!.message).toMatch(/collect by Tue 27 Oct/)
-  // The poller is a short-lived process: a later run builds from a fresh snapshot and fresh state.
-  expect(build(db, snapshot(db), [], new Date(NOW.getTime() + HOUR))).toEqual([])
-  expect(build(db, snapshot(db), [], new Date(NOW.getTime() + 20 * HOUR))).toEqual([])
+  // The poller is a short-lived process: a later run starts from nothing but the database.
+  expect(build(db, [], new Date(NOW.getTime() + HOUR))).toEqual([])
+  expect(build(db, [], new Date(NOW.getTime() + 20 * HOUR))).toEqual([])
   expect(db.prepare('SELECT COUNT(*) AS n FROM deadline_reminders WHERE parcel_id = ?').get(id)).toEqual({ n: 1 })
 })
 
@@ -90,42 +85,39 @@ test('a deadline further than 48h away, or already past, does not notify', () =>
   const db = memDb()
   parcelIn(db, 'ready_for_pickup', { retainedTill: new Date(NOW.getTime() + 49 * HOUR) }, 'posta', 'RA000000001SK')
   parcelIn(db, 'ready_for_pickup', { retainedTill: new Date(NOW.getTime() - HOUR) }, 'posta', 'RA000000002SK')
-  expect(build(db, snapshot(db))).toEqual([])
+  expect(build(db)).toEqual([])
   // ...and the far one fires once it comes inside the window.
-  expect(build(db, snapshot(db), [], new Date(NOW.getTime() + 2 * HOUR))).toHaveLength(1)
+  expect(build(db, [], new Date(NOW.getTime() + 2 * HOUR))).toHaveLength(1)
 })
 
 test('a deadline reminder that coincides with a transition is a single banner and counts as sent', () => {
   const db = memDb()
   const id = parcelIn(db, 'in_transit')
-  const before = snapshot(db)
   updateParcelState(db, id, { status: 'ready_for_pickup', pickup: ZBOX, retainedTill: new Date(NOW.getTime() + 24 * HOUR) })
-  const out = build(db, before)
+  const out = build(db)
   expect(out).toHaveLength(1)
   expect(out[0]!.message).toMatch(/collect by/)
-  expect(build(db, snapshot(db))).toEqual([])
+  expect(build(db)).toEqual([])
 })
 
 test('a failed delivery attempt notifies', () => {
   const db = memDb()
   const id = parcelIn(db, 'out_for_delivery')
-  const before = snapshot(db)
   updateParcelState(db, id, { status: 'failed_attempt' })
-  const out = build(db, before, [newEv(id, 'x', 'failed_attempt')])
+  const out = build(db, [newEv(id, 'x', 'failed_attempt')])
   expect(out).toHaveLength(1)
   expect(out[0]!.title).toMatch(/attempt failed/i)
 
   // A second failed attempt while the status is unchanged is a new event worth a banner.
-  const again = build(db, snapshot(db), [newEv(id, 'y', 'failed_attempt')])
+  const again = build(db, [newEv(id, 'y', 'failed_attempt')])
   expect(again).toHaveLength(1)
 })
 
 test('an old failed attempt in a newly added parcel\'s history does not notify as one', () => {
   const db = memDb()
   const id = parcelIn(db, 'unknown')
-  const before = snapshot(db)
   updateParcelState(db, id, { status: 'delivered' })
-  const out = build(db, before, [newEv(id, 'old', 'failed_attempt'), newEv(id, 'new', 'delivered')])
+  const out = build(db, [newEv(id, 'old', 'failed_attempt'), newEv(id, 'new', 'delivered')])
   expect(out).toHaveLength(1)
   expect(out[0]!.title).toMatch(/Delivered/)
 })
@@ -133,56 +125,53 @@ test('an old failed attempt in a newly added parcel\'s history does not notify a
 test('a carrier entering gated notifies once and not again until it recovers', () => {
   const db = memDb()
   recordHealth(db, 'gls', 'gated', 'gated for 123', NOW)
-  const first = build(db, snapshot(db))
+  const first = build(db)
   expect(first).toHaveLength(1)
   expect(first[0]!.title).toMatch(/GLS/)
   expect(carrierHealth(db)[0]!.notifiedAt).toEqual(NOW)
 
   recordHealth(db, 'gls', 'gated', 'gated for 123', new Date(NOW.getTime() + HOUR))   // still broken
-  expect(build(db, snapshot(db))).toEqual([])
+  expect(build(db)).toEqual([])
   recordHealth(db, 'gls', 'transport', 'timeout', new Date(NOW.getTime() + 2 * HOUR)) // still no recovery
   recordHealth(db, 'gls', 'gated', 'gated again', new Date(NOW.getTime() + 3 * HOUR))
-  expect(build(db, snapshot(db))).toEqual([])
+  expect(build(db)).toEqual([])
 
   recordHealth(db, 'gls', 'ok', undefined, new Date(NOW.getTime() + 4 * HOUR))        // recovered
-  expect(build(db, snapshot(db))).toEqual([])
+  expect(build(db)).toEqual([])
   recordHealth(db, 'gls', 'gated', 'broken anew', new Date(NOW.getTime() + 5 * HOUR))
-  expect(build(db, snapshot(db))).toHaveLength(1)
+  expect(build(db)).toHaveLength(1)
 })
 
 test('only gated is announced: a failing-but-not-gated carrier is not', () => {
   const db = memDb()
   recordHealth(db, 'dpd', 'transport', 'timeout', NOW)
   recordHealth(db, 'sps', 'parse', 'bad json', NOW)
-  expect(build(db, snapshot(db))).toEqual([])
+  expect(build(db)).toEqual([])
 })
 
 test('groupKey is parcel-<id> so a later banner replaces the earlier one', () => {
   const db = memDb()
   const id = parcelIn(db, 'pre_transit')
-  const before = snapshot(db)
   updateParcelState(db, id, { status: 'in_transit' })
-  expect(build(db, before)[0]!.groupKey).toBe(`parcel-${id}`)
+  expect(build(db)[0]!.groupKey).toBe(`parcel-${id}`)
 })
 
 test('url points at http://127.0.0.1:<port>/parcel/<id>', () => {
   const db = memDb()
   const id = parcelIn(db, 'pre_transit')
-  const before = snapshot(db)
   updateParcelState(db, id, { status: 'in_transit' })
-  expect(build(db, before)[0]!.url).toBe(`http://127.0.0.1:${PORT}/parcel/${id}`)
+  expect(build(db)[0]!.url).toBe(`http://127.0.0.1:${PORT}/parcel/${id}`)
 })
 
 function fiveTransitions(db: Database, count: number) {
   const ids = Array.from({ length: count }, (_, i) => parcelIn(db, 'in_transit', {}, 'posta', `RA00000000${i}SK`))
-  const before = snapshot(db)
   for (const id of ids) updateParcelState(db, id, { status: 'out_for_delivery' })
-  return before
 }
 
 test('more than four notifications in one run collapse into a single summary', () => {
   const db = memDb()
-  const out = build(db, fiveTransitions(db, 5))
+  fiveTransitions(db, 5)
+  const out = build(db)
   expect(out).toHaveLength(1)
   expect(out[0]!.title).toMatch(/\d+ parcel updates/)
   expect(out[0]!.title).toMatch(/^5 /)
@@ -191,7 +180,8 @@ test('more than four notifications in one run collapse into a single summary', (
 
 test('exactly four notifications are sent individually', () => {
   const db = memDb()
-  expect(build(db, fiveTransitions(db, 4))).toHaveLength(4)
+  fiveTransitions(db, 4)
+  expect(build(db)).toHaveLength(4)
 })
 
 test('already-notified events are never notified again', () => {
@@ -202,17 +192,14 @@ test('already-notified events are never notified again', () => {
   db.prepare(`INSERT INTO events (parcel_id, occurred_at, occurred_at_raw, occurred_at_tz, status, description,
                                   dedup_hash, first_seen_at) VALUES (?, ?, 'raw', 'UTC', 'failed_attempt', 'd', 'h', ?)`)
     .run(id, NOW.toISOString(), NOW.toISOString())
-  expect(build(db, snapshot(db))).toEqual([])
-  markNotified(db, [1], NOW)
-  expect(build(db, snapshot(db))).toEqual([])
+  expect(build(db)).toEqual([])
 })
 
 test('ready_for_pickup without a deadline omits the collect-by clause entirely', () => {
   const db = memDb()
   const id = parcelIn(db, 'in_transit')
-  const before = snapshot(db)
   updateParcelState(db, id, { status: 'ready_for_pickup', pickup: ZBOX })
-  const n = build(db, before)[0]!
+  const n = build(db)[0]!
   expect(n.message).toContain('Z-BOX')
   expect(n.message).not.toMatch(/collect by/i)
 })
@@ -272,7 +259,7 @@ test('runPoll: a gated carrier produces one alarm across consecutive runs', asyn
   await runPoll({ db, http: bodyHttp(), adapters: [gls], config, now: NOW, notifier })
   expect(notifier.sent).toHaveLength(1)
   expect(notifier.sent[0]!.groupKey).toBe('carrier-gls')
-  // The next run falls inside the gated backoff window (nothing polled) and stays quiet.
+  // Later runs (a canary that fails again, then a longer wait) are still the same outage: no repeat alarm.
   await runPoll({ db, http: bodyHttp(), adapters: [gls], config, now: new Date(NOW.getTime() + HOUR) })
   await runPoll({ db, http: bodyHttp(), adapters: [gls], config, now: new Date(NOW.getTime() + 3 * HOUR) })
   expect(notifier.sent).toHaveLength(1)
@@ -294,4 +281,101 @@ test('runPoll without a notifier builds nothing and spends no one-shot state', a
   const gls = stubAdapter('gls', ins => ins.map(i => ({ ok: false as const, number: i.number, reason: 'gated' as const })))
   await runPoll({ db, http: bodyHttp(), adapters: [gls], config, now: NOW })
   expect(carrierHealth(db)[0]!.notifiedAt).toBeUndefined()
+})
+
+// --- durable announcements ------------------------------------------------------------------
+
+test('a transient unknown is not a transition: recovering to the announced status stays quiet', () => {
+  const db = memDb()
+  const id = parcelIn(db, 'in_transit')
+  updateParcelState(db, id, { status: 'unknown' })   // e.g. a one-off parse failure
+  expect(build(db)).toEqual([])
+  updateParcelState(db, id, { status: 'in_transit' })
+  expect(build(db)).toEqual([])
+  updateParcelState(db, id, { status: 'out_for_delivery' })
+  expect(build(db)).toHaveLength(1)
+  expect(getParcel(db, id)!.lastAnnouncedStatus).toBe('out_for_delivery')
+})
+
+test('runPoll without a notifier loses nothing: the next run with one announces the stored change', async () => {
+  const db = memDb()
+  addParcel(db, 'posta', 'RA000000001SK')
+  const posta = stubAdapter('posta', ins => ins.map(i => okResult(i.number, history())), 100)
+  const first = await runPoll({ db, http: bodyHttp(), adapters: [posta], config, now: NOW })   // e.g. a future "refresh now"
+  expect(first.newEvents).toHaveLength(3)
+
+  const notifier = recordingNotifier()
+  const second = await runPoll({ db, http: bodyHttp(), adapters: [posta], config, now: new Date(NOW.getTime() + HOUR), notifier })
+  expect(second.newEvents).toEqual([])
+  expect(notifier.sent).toHaveLength(1)
+  expect(notifier.sent[0]!.title).toMatch(/Out for delivery/)
+})
+
+// --- carrier alarms -------------------------------------------------------------------------
+
+test('a gated alarm is never folded into the summary, so it cannot be truncated away', () => {
+  const db = memDb()
+  fiveTransitions(db, 6)
+  recordHealth(db, 'gls', 'gated', 'gated for 123', NOW)
+  const out = build(db)
+  expect(out).toHaveLength(2)
+  expect(out[0]!.title).toMatch(/^6 parcel updates/)
+  expect(out[1]).toMatchObject({ groupKey: 'carrier-gls', title: 'GLS tracking is broken' })
+  expect(out[1]!.title).not.toMatch(/parcel updates/)
+  expect(carrierHealth(db)[0]!.notifiedAt).toEqual(NOW)   // stamped only because it is in the returned list
+})
+
+test('a carrier failing on transport is announced at its third consecutive failed run, once', () => {
+  const db = memDb()
+  const t = (h: number) => new Date(NOW.getTime() + h * HOUR)
+  recordHealth(db, 'dpd', 'transport', 'timeout', t(0))
+  recordHealth(db, 'dpd', 'transport', 'timeout', t(1))
+  expect(build(db, [], t(1))).toEqual([])
+  recordHealth(db, 'dpd', 'transport', 'timeout', t(2))
+  const out = build(db, [], t(2))
+  expect(out).toHaveLength(1)
+  expect(out[0]).toMatchObject({ groupKey: 'carrier-dpd', title: 'DPD tracking is stale' })
+  expect(out[0]!.message).toMatch(/3 runs/)
+  recordHealth(db, 'dpd', 'transport', 'timeout', t(3))
+  expect(build(db, [], t(3))).toEqual([])
+  recordHealth(db, 'dpd', 'ok', undefined, t(4))
+  for (const h of [5, 6, 7]) recordHealth(db, 'dpd', 'transport', 'timeout', t(h))
+  expect(build(db, [], t(7))).toHaveLength(1)   // a fresh outage is announced afresh
+})
+
+test('repeated unreadable responses are announced the same way', () => {
+  const db = memDb()
+  for (const h of [0, 1, 2]) recordHealth(db, 'sps', 'parse', 'bad json', new Date(NOW.getTime() + h * HOUR))
+  const out = build(db, [], new Date(NOW.getTime() + 2 * HOUR))
+  expect(out).toHaveLength(1)
+  expect(out[0]!.message).toMatch(/could not be read/)
+})
+
+test('when every carrier polled in the run failed (Mac offline) the stale alarm is withheld, not spent', () => {
+  const db = memDb()
+  const t = (h: number) => new Date(NOW.getTime() + h * HOUR)
+  for (const h of [0, 1, 2]) {
+    recordHealth(db, 'gls', 'transport', 'offline', t(h))
+    recordHealth(db, 'dpd', 'transport', 'offline', t(h))
+  }
+  expect(build(db, [], t(2))).toEqual([])
+  expect(carrierHealth(db).map(h => h.notifiedAt)).toEqual([undefined, undefined])
+  // The connection returns and DPD answers while GLS is still failing: now GLS alone is the problem.
+  recordHealth(db, 'dpd', 'ok', undefined, t(3))
+  recordHealth(db, 'gls', 'transport', 'timeout', t(3))
+  const out = build(db, [], t(3))
+  expect(out.map(n => n.groupKey)).toEqual(['carrier-gls'])
+})
+
+test('a lone failing carrier cannot be told apart from being offline, so it is announced', () => {
+  const db = memDb()
+  for (const h of [0, 1, 2]) recordHealth(db, 'packeta', 'transport', 'timeout', new Date(NOW.getTime() + h * HOUR))
+  expect(build(db, [], new Date(NOW.getTime() + 2 * HOUR))).toHaveLength(1)
+})
+
+test('a gated alarm is not withheld even when every carrier failed in the run', () => {
+  const db = memDb()
+  recordHealth(db, 'gls', 'gated', 'g', NOW)
+  recordHealth(db, 'dpd', 'transport', 'offline', NOW)
+  expect(build(db).map(n => n.groupKey)).toEqual(['carrier-gls'])
 })

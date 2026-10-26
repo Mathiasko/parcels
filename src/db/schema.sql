@@ -6,6 +6,11 @@ CREATE TABLE IF NOT EXISTS parcels (
   merchant        TEXT,              -- parsed from email
   postal_code     TEXT,              -- for GLS/DPD; defaults from config
   status          TEXT NOT NULL,     -- CanonicalStatus
+  last_announced_status TEXT NOT NULL DEFAULT 'unknown',
+                                     -- the status the user was last told about. A status transition is
+                                     -- `status <> last_announced_status`, so it survives a run that had
+                                     -- no notifier or a failed send, and a transient 'unknown' is not one.
+  pickup_announced INTEGER NOT NULL DEFAULT 0,   -- 1 once a pickup point has been announced
   status_raw      TEXT,
   status_detail   TEXT,              -- e.g. posta detailCode
   pickup_kind     TEXT,

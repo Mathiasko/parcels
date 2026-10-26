@@ -4,7 +4,7 @@ import type {
   CarrierAdapter, CarrierId, FetchResult, HttpClient, NewEvent, ParcelEvent,
 } from './types.js'
 import type { Notifier } from '../notify/types.js'
-import { buildNotifications, snapshot } from '../notify/rules.js'
+import { buildNotifications } from '../notify/rules.js'
 import { HttpTransportError, captureBodies } from './http.js'
 import { isDue, slotFor } from './backoff.js'
 import { dedupHash } from './dedup.js'
@@ -74,7 +74,6 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   const slot = slotFor(now)
   const report: PollReport = { polled: 0, newEvents: [], failures: [] }
 
-  const before = snapshot(db)
   const health = new Map(carrierHealth(db).map(h => [h.carrier, h]))
   const byCarrier = new Map<CarrierId, Parcel[]>()
   for (const p of listActive(db)) {
@@ -113,20 +112,21 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
       report.failures.push({ carrier, reason: `parse: ${detail}` })
     }
   }
-  if (deps.notifier) await notify(deps.notifier, db, report, now, deps.config.port, before)
+  if (deps.notifier) await notify(deps.notifier, db, report, now, deps.config.port)
   return report
 }
 
 /**
  * Delivery is best-effort: the events were marked notified when they were appended, and the rules
- * record their one-shot facts before anything is sent, so a notifier that throws loses a banner and
- * nothing else. It must never turn a completed poll into a failed run.
+ * record what they announce before anything is sent, so a notifier that throws loses a banner and
+ * nothing else. A run with no notifier announces nothing and loses nothing: the status changes it
+ * stored are still unannounced and the next run with a notifier picks them up. It must never turn a completed poll into a failed run.
  */
 async function notify(
-  notifier: Notifier, db: Database, report: PollReport, now: Date, port: number, before: ReturnType<typeof snapshot>,
+  notifier: Notifier, db: Database, report: PollReport, now: Date, port: number,
 ): Promise<void> {
   try {
-    for (const n of buildNotifications(db, report.newEvents, now, port, before)) {
+    for (const n of buildNotifications(db, report.newEvents, now, port)) {
       try { await notifier.send(n) } catch (err) { console.error(`notify: delivery failed: ${describe(err)}`) }
     }
   } catch (err) {
