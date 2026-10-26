@@ -232,10 +232,16 @@ GET https://api.posta.sk/tracking?q={codes}&l=sk&p=1
   failure, loss, and damage appear **only** in the separate `detailCode` field
   (~140 values). `failed_attempt` / `problem` mapping must key off `detailCode`:
   e.g. `ANZ` addressee not reached, `P-NOL` uncollected/returned, `ZSTR` lost,
-  `ZZNC` destroyed, `REKL` under complaint. Map the handful that matter; fall
-  through to `unknown` for the rest.
+  `ZZNC` destroyed, `REKL` under complaint. Map the handful that matter; an
+  **unmapped `detailCode` falls through to the `stateCode` mapping**, never to
+  `unknown` — `detailCode` appears on many ordinary events, so erasing a known
+  `stateCode` because its detail code is unrecognised would degrade healthy
+  parcels to `unknown`.
 - `retainedTill` is the authoritative pickup deadline — the only carrier that
-  supplies one. Drives the 48-hour reminder.
+  supplies one. Drives the 48-hour reminder. A **date-only** value means the
+  parcel can still be collected during that day, so it is interpreted as the
+  **end** of that day in `Europe/Bratislava`, not midnight at its start;
+  midnight would fire the reminder and expiry up to 24 hours early.
 - Number format: `/^[A-Z]{2}\d{9}[A-Z]{2}$/` (UPU/S10). Check digit is mod-11 on
   the 8 significant digits, weights `8,6,4,2,3,5,9,7`, `check = 11 - (sum mod 11)`
   with `10 → 0` and `11 → 5`. **The API does not enforce it** — validate locally to
