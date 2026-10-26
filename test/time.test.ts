@@ -1,4 +1,5 @@
-import { test, expect } from 'vitest'
+import { test, expect, afterEach } from 'vitest'
+import { Settings } from 'luxon'
 import { parseNaive } from '../src/core/time.js'
 
 test('parses a naive Slovak timestamp as Europe/Bratislava, not UTC', () => {
@@ -34,4 +35,19 @@ test('the spring-forward gap resolves forward to 03:30 CEST', () => {
 test('an explicit format is honoured', () => {
   expect(parseNaive('13.07.2026 15:08', 'Europe/Bratislava', 'dd.MM.yyyy HH:mm').at.toISOString())
     .toBe('2026-07-13T13:08:00.000Z')
+})
+
+// Luxon resolves an ambiguous local time using the offset in force "now", so an unpinned fold
+// test can pass in summer and fail in winter. Pin the clock and require identical results.
+afterEach(() => { Settings.now = () => Date.now() })
+test.each([
+  ['summer clock', '2026-07-01T12:00:00Z'],
+  ['winter clock', '2026-01-15T12:00:00Z'],
+  ['just after the fold', '2026-10-25T05:00:00Z'],
+])('the autumn fold resolves to the earlier offset regardless of the current time (%s)', (_name, now) => {
+  const nowMs = Date.parse(now)
+  Settings.now = () => nowMs
+  expect(parseNaive('2026-10-25T02:30:00', 'Europe/Bratislava').at.toISOString()).toBe('2026-10-25T00:30:00.000Z')
+  expect(parseNaive('2026-10-25 02:00:00', 'Europe/Bratislava').at.toISOString()).toBe('2026-10-25T00:00:00.000Z')
+  expect(parseNaive('2026-10-25T03:00:00', 'Europe/Bratislava').at.toISOString()).toBe('2026-10-25T02:00:00.000Z')
 })

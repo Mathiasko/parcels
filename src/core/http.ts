@@ -27,25 +27,24 @@ const isRetryableStatus = (s: number) => s === 429 || s >= 500
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
 
+/** Milliseconds the server asked us to wait, or undefined when absent/empty/unparseable. */
 function retryAfterMs(res: Response): number | undefined {
-  const h = res.headers.get('retry-after')
-  if (h === null) return undefined
-  const seconds = Number(h)
-  const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(h) - Date.now()
+  const h = res.headers.get('retry-after')?.trim()
+  if (!h) return undefined
+  const ms = /^\d+(\.\d+)?$/.test(h) ? Number(h) * 1000 : Date.parse(h) - Date.now()
   return Number.isFinite(ms) ? Math.min(Math.max(ms, 0), MAX_RETRY_AFTER_MS) : undefined
 }
 
 /** Exponential backoff with jitter: 250-500 ms, 500-1000 ms, ... */
 const backoffMs = (attempt: number) => BASE_BACKOFF_MS * 2 ** attempt * (0.5 + Math.random() * 0.5)
 
-function wrap(res: Response): HttpResponse {
-  let body: Promise<string> | undefined
-  const text = () => (body ??= res.text())
+/** Body already read, so `text()`/`json()` can be called repeatedly and cannot fail on transport. */
+function wrap(res: Response, body: string): HttpResponse {
   return {
     status: res.status,
     headers: Object.fromEntries(res.headers),   // Headers keys are already lowercased
-    text,
-    json: async <T>() => JSON.parse(await text()) as T,
+    text: async () => body,
+    json: async <T>() => JSON.parse(body) as T,
   }
 }
 
@@ -58,19 +57,21 @@ export function createHttpClient(opts: HttpClientOptions = {}): HttpClient {
       const timeout = AbortSignal.timeout(timeoutMs)
       const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout
 
-      let res: Response
+      let wait: number
       try {
-        res = await fetchImpl(url, { ...init, signal })
+        const res = await fetchImpl(url, { ...init, signal })
+        if (!isRetryableStatus(res.status) || lastAttempt) {
+          // Read inside the try: a connection dropped mid-body is a transport failure too,
+          // and is retried like one. The timeout signal stays armed while the body streams.
+          return wrap(res, await res.text())
+        }
+        await res.body?.cancel().catch(() => {})
+        wait = retryAfterMs(res) ?? backoffMs(attempt)
       } catch (err) {
         if (lastAttempt) throw new HttpTransportError(url, err)
-        await sleep(backoffMs(attempt))
-        continue
+        wait = backoffMs(attempt)
       }
-
-      if (!isRetryableStatus(res.status) || lastAttempt) return wrap(res)
-
-      await res.body?.cancel().catch(() => {})
-      await sleep(retryAfterMs(res) ?? backoffMs(attempt))
+      await sleep(wait)
     }
   }
 }

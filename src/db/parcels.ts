@@ -34,8 +34,9 @@ export interface Parcel {
 
 /**
  * `status`, `statusRaw` and `statusDetail` always overwrite (undefined clears the raw/detail
- * columns so a stale detail never outlives its status). Every other field is only written when
- * supplied; omitted fields keep their stored value.
+ * columns so a stale detail never outlives its status). `pickup`, when supplied, replaces the
+ * stored pickup point entirely; when omitted it is left alone. The timestamp fields are only
+ * written when supplied; omitted ones keep their stored value.
  */
 export interface ParcelStateUpdate {
   status: CanonicalStatus
@@ -123,18 +124,22 @@ export function listActive(db: Database): Parcel[] {
 }
 
 export function updateParcelState(db: Database, id: number, s: ParcelStateUpdate): void {
+  // A supplied pickup point REPLACES the stored one wholesale (unspecified fields become NULL),
+  // so a parcel that moves to a point without coordinates never keeps the old point's lat/lon.
+  // An omitted pickup leaves every pickup_* column untouched.
+  const replacePickup = s.pickup !== undefined
   db.prepare(`
     UPDATE parcels SET
       status          = @status,
       status_raw      = @statusRaw,
       status_detail   = @statusDetail,
-      pickup_kind     = COALESCE(@pickupKind,   pickup_kind),
-      pickup_name     = COALESCE(@pickupName,   pickup_name),
-      pickup_street   = COALESCE(@pickupStreet, pickup_street),
-      pickup_city     = COALESCE(@pickupCity,   pickup_city),
-      pickup_zip      = COALESCE(@pickupZip,    pickup_zip),
-      pickup_lat      = COALESCE(@pickupLat,    pickup_lat),
-      pickup_lon      = COALESCE(@pickupLon,    pickup_lon),
+      pickup_kind     = CASE WHEN @replacePickup THEN @pickupKind   ELSE pickup_kind   END,
+      pickup_name     = CASE WHEN @replacePickup THEN @pickupName   ELSE pickup_name   END,
+      pickup_street   = CASE WHEN @replacePickup THEN @pickupStreet ELSE pickup_street END,
+      pickup_city     = CASE WHEN @replacePickup THEN @pickupCity   ELSE pickup_city   END,
+      pickup_zip      = CASE WHEN @replacePickup THEN @pickupZip    ELSE pickup_zip    END,
+      pickup_lat      = CASE WHEN @replacePickup THEN @pickupLat    ELSE pickup_lat    END,
+      pickup_lon      = CASE WHEN @replacePickup THEN @pickupLon    ELSE pickup_lon    END,
       retained_till   = COALESCE(@retainedTill,  retained_till),
       last_polled_at  = COALESCE(@lastPolledAt,  last_polled_at),
       last_changed_at = COALESCE(@lastChangedAt, last_changed_at),
@@ -145,6 +150,7 @@ export function updateParcelState(db: Database, id: number, s: ParcelStateUpdate
     status: s.status,
     statusRaw: s.statusRaw ?? null,
     statusDetail: s.statusDetail ?? null,
+    replacePickup: replacePickup ? 1 : 0,
     pickupKind: s.pickup?.kind ?? null,
     pickupName: s.pickup?.name ?? null,
     pickupStreet: s.pickup?.street ?? null,

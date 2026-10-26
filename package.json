@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc && cp src/db/schema.sql dist/db/schema.sql",
     "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
     "poll": "node dist/poll.js",
     "serve": "node dist/server.js",
     "cli": "node dist/cli.js"
@@ -23,7 +24,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
     "@types/luxon": "^3.7.6",
-    "@types/node": "^26.6.5",
+    "@types/node": "^24.19.2",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   }

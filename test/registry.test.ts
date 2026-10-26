@@ -41,8 +41,9 @@ test('detectCarrier returns SPS for a 703-prefixed 16-digit number', () => {
   expect(detectCarrier('7031234567890123')).toContain('sps')
 })
 test('detectCarrier returns multiple candidates for a bare 14-digit number', () => {
-  const c = detectCarrier('01234567890123')
-  expect(c).toContain('dpd'); expect(c.length).toBeGreaterThan(0)
+  // gls is loosened here so both ambiguous carriers claim the number
+  register(stub('gls', /^\d{11,14}$/))
+  expect(detectCarrier('01234567890123')).toEqual(['dpd', 'gls'])
 })
 test('detectCarrier returns gls for a bare 11-digit number', () => {
   expect(detectCarrier('31217533227')).toContain('gls')

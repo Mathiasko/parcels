@@ -1,5 +1,5 @@
 import { test, expect, beforeEach } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openDb, type Database } from '../src/db/index.js'
@@ -13,8 +13,11 @@ beforeEach(() => { db = openDb(':memory:') })
 
 const base: NewParcel = { carrier: 'packeta', trackingNumber: 'Z1234567890', source: 'manual' }
 
-test('openDb creates all tables and is idempotent', () => {
-  expect(() => { openDb(':memory:'); openDb(':memory:') }).not.toThrow()
+test('openDb creates all tables and re-applying the schema on the same handle is idempotent', () => {
+  const schema = readFileSync(new URL('../src/db/schema.sql', import.meta.url), 'utf8')
+  insertParcel(db, base)
+  expect(() => db.exec(schema)).not.toThrow()
+  expect(findParcel(db, 'packeta', 'Z1234567890')).toBeDefined()   // data survived the re-exec
   const names = (db.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
   ).all() as { name: string }[]).map(r => r.name)
@@ -33,6 +36,17 @@ test('openDb enables WAL and foreign keys, and reopens a file-backed database', 
     const b = openDb(path)
     expect(findParcel(b, 'packeta', 'Z1234567890')).toBeDefined()
     b.close()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('openDb creates a missing parent directory', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'parcels-db-'))
+  try {
+    const path = join(dir, 'nested', 'data', 'p.db')
+    openDb(path).close()
+    expect(existsSync(path)).toBe(true)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -80,6 +94,26 @@ test('updateParcelState writes status, pickup and timestamps', () => {
   expect(p.retainedTill?.toISOString()).toBe('2026-07-20T00:00:00.000Z')
   expect(p.lastPolledAt?.toISOString()).toBe(at.toISOString())
   expect(p.lastChangedAt?.toISOString()).toBe(at.toISOString())
+})
+
+test('a new pickup point replaces the old one wholesale; omitting pickup leaves it alone', () => {
+  const id = insertParcel(db, base)
+  const get = () => findParcel(db, 'packeta', 'Z1234567890')!
+  updateParcelState(db, id, {
+    status: 'ready_for_pickup',
+    pickup: { kind: 'locker', name: 'Locker 1', street: 'Hlavna 1', city: 'Kosice', postalCode: '04001', lat: 48.7, lon: 21.2 },
+  })
+  expect(get().pickup).toMatchObject({ lat: 48.7, lon: 21.2, street: 'Hlavna 1' })
+
+  // omitted pickup: untouched
+  updateParcelState(db, id, { status: 'ready_for_pickup' })
+  expect(get().pickup).toMatchObject({ name: 'Locker 1', lat: 48.7, lon: 21.2 })
+
+  // replaced by a point without coordinates/street: stale values must be gone
+  updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'parcelshop', name: 'Shop 2', city: 'Presov' } })
+  expect(get().pickup).toEqual({ kind: 'parcelshop', name: 'Shop 2', city: 'Presov' })
+  const row = db.prepare('SELECT pickup_lat, pickup_lon, pickup_street, pickup_zip FROM parcels WHERE id = ?').get(id)
+  expect(row).toEqual({ pickup_lat: null, pickup_lon: null, pickup_street: null, pickup_zip: null })
 })
 
 test('listActive excludes delivered, returned and archived parcels', () => {

@@ -49,7 +49,7 @@ test('honours Retry-After on 429 by waiting the stated seconds', async () => {
 
 test('rejects with a transport error after the timeout', async () => {
   // a fetch that never answers on its own, but honours the abort signal like the real one
-  const fetchImpl = vi.fn((_url: string, init?: RequestInit) =>
+  const fetchImpl = vi.fn((_url: string | URL | Request, init?: RequestInit) =>
     new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))
     }))
@@ -81,4 +81,43 @@ test('retries a network error, and throws a transport error once retries run out
   await vi.advanceTimersByTimeAsync(5_000)
   await assertion
   expect(down).toHaveBeenCalledTimes(2)
+})
+
+test('an empty or unparseable Retry-After falls back to normal backoff, not a zero wait', async () => {
+  for (const header of ['', '   ', 'soon']) {
+    vi.useFakeTimers()
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(respond(429, '', { 'Retry-After': header }))
+      .mockResolvedValueOnce(respond(200, 'ok'))
+    const p = createHttpClient({ fetchImpl })('https://example.test/x')
+    await vi.advanceTimersByTimeAsync(100)   // backoff is >= 250 ms, so a 0 ms wait would have retried by now
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect((await p).status).toBe(200)
+    vi.useRealTimers()
+  }
+})
+
+const brokenBody = () => new Response(new ReadableStream({
+  start(controller) { controller.error(new TypeError('terminated')) },
+}), { status: 200 })
+
+test('a body that fails mid-read is retried like a network error', async () => {
+  vi.useFakeTimers()
+  const fetchImpl = vi.fn()
+    .mockResolvedValueOnce(brokenBody())
+    .mockResolvedValueOnce(respond(200, '{"ok":true}'))
+  const p = createHttpClient({ fetchImpl })('https://example.test/x')
+  await vi.advanceTimersByTimeAsync(5_000)
+  expect(await (await p).json()).toEqual({ ok: true })
+  expect(fetchImpl).toHaveBeenCalledTimes(2)
+})
+
+test('a body that keeps failing surfaces as HttpTransportError, not a raw TypeError', async () => {
+  vi.useFakeTimers()
+  const fetchImpl = vi.fn(async () => brokenBody())
+  const p = createHttpClient({ fetchImpl, retries: 1 })('https://example.test/x')
+  const assertion = expect(p).rejects.toBeInstanceOf(HttpTransportError)
+  await vi.advanceTimersByTimeAsync(5_000)
+  await assertion
 })
