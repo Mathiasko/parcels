@@ -1,7 +1,7 @@
 // Behaviours the orchestrator must have beyond the brief's listed tests: chunking, notified
 // bookkeeping, raw-response pruning, and containment of a carrier whose result cannot be stored.
-import { test, expect } from 'vitest'
-import { runPoll, NEEDS_POSTCODE } from '../src/core/poll.js'
+import { test, expect, describe } from 'vitest'
+import { runPoll } from '../src/core/poll.js'
 import { findParcel, updateParcelState } from '../src/db/parcels.js'
 import type { HttpClient } from '../src/core/types.js'
 import { carrierHealth } from '../src/db/health.js'
@@ -147,21 +147,122 @@ test('a chunk that throws still fails the carrier when a sibling chunk succeeded
   expect(carrierHealth(db)[0]).toMatchObject({ lastErrorKind: 'parse', consecutiveFailures: 1 })
 })
 
-test('needs_postcode is flagged on the parcel row, is not polled-ok, and clears once it resolves', async () => {
+test('needs_postcode flags the parcel, keeps its carrier detail, is not a health answer, and stops calling the carrier', async () => {
   const db = memDb()
   const id = addParcel(db, 'gls', '31217533227')
-  updateParcelState(db, id, { status: 'in_transit', statusRaw: 'IT' })
-  let answer: 'needs_postcode' | 'ok' = 'needs_postcode'
-  const gls = stubAdapter('gls', ins => ins.map(i =>
-    answer === 'ok' ? okResult(i.number, [ev('2026-10-26 09:00:00', 'in_transit')]) : failResult(i.number, 'needs_postcode')))
+  updateParcelState(db, id, { status: 'in_transit', statusRaw: 'IT', statusDetail: 'D1' })
+  const gls = stubAdapter('gls', ins => ins.map(i => failResult(i.number, 'needs_postcode')))
   const deps = { db, http: bodyHttp(), adapters: [gls], config, now: NOW }
 
   const first = await runPoll(deps)
   expect(first.failures).toEqual([])
-  expect(findParcel(db, 'gls', '31217533227')).toMatchObject({ status: 'in_transit', statusRaw: 'IT', statusDetail: NEEDS_POSTCODE })
+  expect(findParcel(db, 'gls', '31217533227')).toMatchObject({
+    status: 'in_transit', statusRaw: 'IT', statusDetail: 'D1', needsPostcode: true,
+  })
   expect(findParcel(db, 'gls', '31217533227')?.lastPolledAt).toBeUndefined()
+  expect(carrierHealth(db)).toEqual([])   // neither a fresh lastOkAt nor a failure
 
+  await runPoll(deps)
+  await runPoll({ ...deps, now: new Date(NOW.getTime() + 3_600_000) })
+  expect(gls.calls).toHaveLength(1)   // flagged and still without a postcode: never asked again
+})
+
+test('setting a postcode clears the needs_postcode flag and the parcel is polled again', async () => {
+  const db = memDb()
+  const id = addParcel(db, 'gls', '31217533227')
+  let answer: 'needs_postcode' | 'ok' = 'needs_postcode'
+  const gls = stubAdapter('gls', ins => ins.map(i =>
+    answer === 'ok' ? okResult(i.number, [ev('2026-10-26 09:00:00', 'in_transit')]) : failResult(i.number, 'needs_postcode')))
+  const deps = { db, http: bodyHttp(), adapters: [gls], config, now: NOW }
+  await runPoll(deps)
+  expect(findParcel(db, 'gls', '31217533227')?.needsPostcode).toBe(true)
+
+  db.prepare('UPDATE parcels SET postal_code = ? WHERE id = ?').run('81101', id)
   answer = 'ok'
   await runPoll(deps)
-  expect(findParcel(db, 'gls', '31217533227')?.statusDetail).toBeUndefined()
+
+  expect(gls.calls).toHaveLength(2)
+  expect(gls.calls[1]).toEqual([{ number: '31217533227', postalCode: '81101' }])
+  expect(findParcel(db, 'gls', '31217533227')).toMatchObject({ needsPostcode: false, status: 'in_transit' })
+})
+
+const HOUR = 3_600_000
+const hoursAfter = (h: number) => new Date(NOW.getTime() + h * HOUR)
+
+test('a failing parcel in the slow tier backs off like a healthy one instead of retrying every slot', async () => {
+  const db = memDb()
+  const id = addParcel(db, 'packeta', 'Z0000000001')
+  db.prepare('UPDATE parcels SET last_changed_at = ? WHERE id = ?')
+    .run(new Date(NOW.getTime() - 10 * 24 * HOUR).toISOString(), id)
+  const packeta = stubAdapter('packeta', ins => ins.map(i => failResult(i.number, 'transport')))
+  const run = (now: Date) => runPoll({ db, http: bodyHttp(), adapters: [packeta], config, now })
+
+  await run(NOW)
+  expect(packeta.calls).toHaveLength(1)
+  expect(findParcel(db, 'packeta', 'Z0000000001')).toMatchObject({ lastAttemptedAt: NOW })
+  expect(findParcel(db, 'packeta', 'Z0000000001')?.lastPolledAt).toBeUndefined()   // still "last real answer"
+
+  await run(hoursAfter(1))
+  await run(hoursAfter(19))
+  expect(packeta.calls).toHaveLength(1)
+  await run(hoursAfter(20))
+  expect(packeta.calls).toHaveLength(2)
+})
+
+test('a thrown chunk also stamps the attempt', async () => {
+  const db = memDb()
+  const id = addParcel(db, 'packeta', 'Z0000000001')
+  const packeta = stubAdapter('packeta', () => { throw new Error('boom') })
+  await runPoll({ db, http: bodyHttp(), adapters: [packeta], config, now: NOW })
+  expect(findParcel(db, 'packeta', 'Z0000000001')).toMatchObject({ id, lastAttemptedAt: NOW })
+})
+
+describe('gated carrier backoff', () => {
+  const seed = (n: number, lastErrorAgoHours: number) => {
+    const db = memDb()
+    for (const num of ['Z0000000001', 'Z0000000002', 'Z0000000003']) addParcel(db, 'packeta', num)
+    db.prepare(`INSERT INTO carrier_health (carrier, last_error_at, last_error_kind, consecutive_failures)
+                VALUES ('packeta', ?, 'gated', ?)`).run(new Date(NOW.getTime() - lastErrorAgoHours * HOUR).toISOString(), n)
+    return db
+  }
+  const poll = (db: ReturnType<typeof memDb>, answer: 'gated' | 'ok' = 'gated') => {
+    const packeta = stubAdapter('packeta', ins => ins.map(i =>
+      answer === 'gated' ? failResult(i.number, 'gated') : okResult(i.number, [ev('2026-10-26 09:00:00', 'in_transit')])), 100)
+    return runPoll({ db, http: bodyHttp(), adapters: [packeta], config, now: NOW }).then(report => ({ report, packeta }))
+  }
+
+  test('inside the window only one canary parcel is sent', async () => {
+    const db = seed(2, 1)   // wait = 2h, last error 1h ago
+    const { report, packeta } = await poll(db)
+    expect(packeta.calls.map(c => c.length)).toEqual([1])
+    expect(report.polled).toBe(1)
+    expect(carrierHealth(db)[0]).toMatchObject({ lastErrorKind: 'gated', consecutiveFailures: 3 })
+  })
+
+  test('once the window has passed every parcel is polled again', async () => {
+    const db = seed(2, 2)   // wait = 2h, last error exactly 2h ago
+    const { packeta } = await poll(db)
+    expect(packeta.calls.map(c => c.length)).toEqual([3])
+  })
+
+  test('the first failure waits one hour and the wait is capped at 24 hours', async () => {
+    expect((await poll(seed(1, 0.5))).packeta.calls.map(c => c.length)).toEqual([1])
+    expect((await poll(seed(1, 1))).packeta.calls.map(c => c.length)).toEqual([3])
+    expect((await poll(seed(30, 23))).packeta.calls.map(c => c.length)).toEqual([1])
+    expect((await poll(seed(30, 24))).packeta.calls.map(c => c.length)).toEqual([3])
+  })
+
+  test('a canary that succeeds clears the streak so the next run polls everyone', async () => {
+    const db = seed(4, 1)
+    await poll(db, 'ok')
+    expect(carrierHealth(db)[0]).toMatchObject({ consecutiveFailures: 0 })
+    const { packeta } = await poll(db)
+    expect(packeta.calls.map(c => c.length)).toEqual([3])
+  })
+
+  test('a non-gated carrier is never throttled', async () => {
+    const db = seed(5, 0.1)
+    db.prepare("UPDATE carrier_health SET last_error_kind = 'transport'").run()
+    expect((await poll(db)).packeta.calls.map(c => c.length)).toEqual([3])
+  })
 })

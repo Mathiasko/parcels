@@ -25,6 +25,8 @@ export interface Parcel {
   retainedTill?: Date
   firstSeenAt: Date
   lastPolledAt?: Date
+  lastAttemptedAt?: Date
+  needsPostcode: boolean
   lastChangedAt?: Date
   deliveredAt?: Date
   source: 'email' | 'manual'
@@ -81,6 +83,8 @@ function toParcel(r: Row): Parcel {
     retainedTill: date(r.retained_till),
     firstSeenAt: new Date(r.first_seen_at as string),
     lastPolledAt: date(r.last_polled_at),
+    lastAttemptedAt: date(r.last_attempted_at),
+    needsPostcode: r.needs_postcode === 1,
     lastChangedAt: date(r.last_changed_at),
     deliveredAt: date(r.delivered_at),
     source: r.source as 'email' | 'manual',
@@ -168,6 +172,17 @@ export function updateParcelState(db: Database, id: number, s: ParcelStateUpdate
     lastChangedAt: iso(s.lastChangedAt),
     deliveredAt: iso(s.deliveredAt),
   })
+}
+
+/** Stamps every attempt, answered or not. `lastPolledAt` stays "last real answer". */
+export function markAttempted(db: Database, ids: number[], at: Date): void {
+  const mark = db.prepare('UPDATE parcels SET last_attempted_at = ? WHERE id = ?')
+  const iso = at.toISOString()
+  db.transaction(() => { for (const id of ids) mark.run(iso, id) })()
+}
+
+export function setNeedsPostcode(db: Database, id: number, needs: boolean): void {
+  db.prepare('UPDATE parcels SET needs_postcode = ? WHERE id = ?').run(needs ? 1 : 0, id)
 }
 
 export function setArchived(db: Database, id: number, at: Date): void {

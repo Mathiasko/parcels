@@ -7,8 +7,10 @@ import { HttpTransportError, captureBodies } from './http.js'
 import { isDue, slotFor } from './backoff.js'
 import { dedupHash } from './dedup.js'
 import { appendEvents, markNotified, recomputeParcelStatus } from '../db/events.js'
-import { recordHealth, type HealthOutcome } from '../db/health.js'
-import { listActive, updateParcelState, type Parcel } from '../db/parcels.js'
+import { carrierHealth, recordHealth, type HealthOutcome, type HealthRow } from '../db/health.js'
+import {
+  listActive, markAttempted, setNeedsPostcode, updateParcelState, type Parcel,
+} from '../db/parcels.js'
 
 export interface PollDeps {
   db: Database
@@ -31,11 +33,14 @@ export interface PollReport {
 const RAW_RESPONSES_KEPT = 5
 
 type Failure = Exclude<HealthOutcome, 'ok'>
-/** `thrown`: the adapter call itself threw, which no sibling chunk's success may paper over. */
-interface Outcome { kind: HealthOutcome; detail?: string; thrown?: boolean }
+const HOUR = 3_600_000
+const GATED_MAX_WAIT = 24 * HOUR
 
-/** Value of `parcels.status_detail` for a parcel the carrier cannot look up without a postcode (the UI keys on it). */
-export const NEEDS_POSTCODE = 'needs_postcode'
+/**
+ * `thrown`: the adapter call itself threw, which no sibling chunk's success may paper over.
+ * `neutral`: the carrier answered but told us nothing about its own health (needs_postcode).
+ */
+interface Outcome { kind: HealthOutcome | 'neutral'; detail?: string; thrown?: boolean }
 
 /** What one adapter call produced (a result list, or the throw), plus the response bodies it read. */
 type Fetched =
@@ -59,18 +64,27 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   const slot = slotFor(now)
   const report: PollReport = { polled: 0, newEvents: [], failures: [] }
 
+  const health = new Map(carrierHealth(db).map(h => [h.carrier, h]))
   const byCarrier = new Map<CarrierId, Parcel[]>()
   for (const p of listActive(db)) {
     if (!isDue(p, now, slot)) continue
+    if (p.needsPostcode) {
+      // Deterministic: the carrier will answer the same until a postcode exists, so do not ask.
+      if (!p.postalCode) continue
+      setNeedsPostcode(db, p.id, false)
+    }
     byCarrier.set(p.carrier, [...(byCarrier.get(p.carrier) ?? []), p])
   }
 
-  for (const [carrier, parcels] of byCarrier) {
+  for (const [carrier, due] of byCarrier) {
     const adapter = deps.adapters.find(a => a.id === carrier)
     if (!adapter) {
       report.failures.push({ carrier, reason: 'no adapter registered' })
       continue
     }
+    // A broken adapter (gated) is not hammered once per parcel per slot: while its backoff window
+    // is open, a single canary parcel is sent so recovery is still noticed.
+    const parcels = gatedBackoffOpen(health.get(carrier), now) ? due.slice(0, 1) : due
     report.polled += parcels.length
 
     const fetched = await fetchCarrier(adapter, parcels, http)
@@ -79,13 +93,24 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
       report.newEvents.push(...applied.newEvents)
       if (applied.failure) report.failures.push({ carrier, reason: applied.failure })
     } catch (err) {
-      // The carrier's writes rolled back as a unit; only the health row is kept.
+      // The carrier's writes rolled back as a unit; only the attempt stamps and health are kept.
       const detail = describe(err)
+      markAttempted(db, parcels.map(p => p.id), now)
       recordHealth(db, carrier, 'parse', detail, now)
       report.failures.push({ carrier, reason: `parse: ${detail}` })
     }
   }
   return report
+}
+
+/**
+ * True while a carrier whose last failure was `gated` should only be sent a canary: the wait is
+ * min(2^(failures-1) hours, 24h) from the last error (1h, 2h, 4h ... capped at a day).
+ */
+function gatedBackoffOpen(h: HealthRow | undefined, now: Date): boolean {
+  if (!h || h.lastErrorKind !== 'gated' || h.consecutiveFailures <= 0 || !h.lastErrorAt) return false
+  const wait = Math.min(2 ** (h.consecutiveFailures - 1) * HOUR, GATED_MAX_WAIT)
+  return now.getTime() - h.lastErrorAt.getTime() < wait
 }
 
 /** Calls the adapter once per `batchSize` chunk; each call is isolated so one throw loses one chunk. */
@@ -113,6 +138,7 @@ function applyCarrier(
   const outcomes: Outcome[] = []
 
   for (const f of fetched) {
+    markAttempted(db, f.chunk.map(p => p.id), now)
     if ('error' in f) {
       outcomes.push({ ...f.error, thrown: true })
       for (const body of f.bodies) storeRaw(db, rawOwner(f.chunk), carrier, body, now)
@@ -140,17 +166,14 @@ function applyCarrier(
       } else if (r.reason === 'gated' || r.reason === 'transport') {
         outcomes.push({ kind: r.reason, detail: `${r.reason} for ${p.trackingNumber}` })
       } else if (r.reason === 'needs_postcode') {
-        // Not an alarm, but the parcel is not being tracked either: flag it on the row so the UI can
-        // ask for a postcode. lastPolledAt stays put because nothing was actually polled.
-        updateParcelState(db, p.id, { status: p.status, statusRaw: p.statusRaw, statusDetail: NEEDS_POSTCODE })
-        outcomes.push({ kind: 'ok' })
+        // The parcel is not being tracked: flag it for the UI. The carrier's own statusDetail is
+        // left alone and lastPolledAt stays put, since nothing was actually polled.
+        setNeedsPostcode(db, p.id, true)
+        outcomes.push({ kind: 'neutral' })
       } else {
         // not_found (a freshly announced parcel) is normal, not an alarm.
         updateParcelState(db, p.id, {
-          status: p.status,
-          statusRaw: p.statusRaw,
-          statusDetail: p.statusDetail === NEEDS_POSTCODE ? undefined : p.statusDetail,
-          lastPolledAt: now,
+          status: p.status, statusRaw: p.statusRaw, statusDetail: p.statusDetail, lastPolledAt: now,
         })
         outcomes.push({ kind: 'ok' })
       }
@@ -158,6 +181,7 @@ function applyCarrier(
   }
 
   const verdict = carrierVerdict(outcomes)
+  if (!verdict) return { newEvents }   // only needs_postcode answers: no information about carrier health
   recordHealth(db, carrier, verdict.kind, verdict.detail, now)
   return { newEvents, failure: verdict.kind === 'ok' ? undefined : `${verdict.kind}: ${verdict.detail}` }
 }
@@ -167,13 +191,14 @@ function applyCarrier(
  * chunk succeeding does not make that carrier healthy. Otherwise one parcel's trouble does not
  * indict the carrier while any other parcel got a real answer; with none, the first failure does.
  */
-function carrierVerdict(outcomes: Outcome[]): Outcome {
-  const gated = outcomes.find(o => o.kind === 'gated')
+function carrierVerdict(outcomes: Outcome[]): (Outcome & { kind: HealthOutcome }) | undefined {
+  const informative = outcomes.filter((o): o is Outcome & { kind: HealthOutcome } => o.kind !== 'neutral')
+  const gated = informative.find(o => o.kind === 'gated')
   if (gated) return gated
-  const thrown = outcomes.find(o => o.thrown)
+  const thrown = informative.find(o => o.thrown)
   if (thrown) return thrown
-  if (outcomes.some(o => o.kind === 'ok')) return { kind: 'ok' }
-  return outcomes[0] ?? { kind: 'ok' }
+  if (informative.some(o => o.kind === 'ok')) return { kind: 'ok' }
+  return informative[0]
 }
 
 function applyOk(db: Database, p: Parcel, r: Extract<FetchResult, { ok: true }>, now: Date): ParcelEvent[] {

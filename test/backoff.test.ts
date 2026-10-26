@@ -14,7 +14,7 @@ const ahead = (ms: number) => new Date(NOW.getTime() + ms)
 function parcel(over: Partial<Parcel> = {}): Parcel {
   return {
     id: 1, carrier: 'posta', trackingNumber: 'RA123456785SK', status: 'in_transit',
-    firstSeenAt: ago(60 * DAY), lastChangedAt: ago(HOUR), source: 'manual', ...over,
+    firstSeenAt: ago(60 * DAY), lastChangedAt: ago(HOUR), source: 'manual', needsPostcode: false, ...over,
   }
 }
 
@@ -73,4 +73,23 @@ test('no events for over 30 days is never due', () => {
   const at29 = { ...noEvents, firstSeenAt: ago(29 * DAY) }
   expect(isDue(parcel({ ...at29, lastPolledAt: ago(HOUR) }), NOW, ANY_SLOT)).toBe(false)
   expect(isDue(parcel({ ...at29, lastPolledAt: ago(21 * HOUR) }), NOW, ANY_SLOT)).toBe(true)
+})
+
+test('the 2.5 hour and 20 hour gaps are pinned exactly, and a failed attempt counts as a poll', () => {
+  const MIN = 60_000
+  const mid = { lastChangedAt: ago(3 * DAY) }
+  expect(isDue(parcel({ ...mid, lastPolledAt: ago(2.5 * HOUR - 1) }), NOW, ANY_SLOT)).toBe(false)
+  expect(isDue(parcel({ ...mid, lastPolledAt: ago(2.5 * HOUR) }), NOW, ANY_SLOT)).toBe(true)
+  expect(isDue(parcel({ ...mid, lastPolledAt: ago(2.5 * HOUR + 1) }), NOW, ANY_SLOT)).toBe(true)
+
+  const slow = { lastChangedAt: ago(8 * DAY) }
+  expect(isDue(parcel({ ...slow, lastPolledAt: ago(20 * HOUR - 1) }), NOW, ANY_SLOT)).toBe(false)
+  expect(isDue(parcel({ ...slow, lastPolledAt: ago(20 * HOUR) }), NOW, ANY_SLOT)).toBe(true)
+  expect(isDue(parcel({ ...slow, lastPolledAt: ago(20 * HOUR + 1) }), NOW, ANY_SLOT)).toBe(true)
+
+  // the later of lastPolledAt and lastAttemptedAt wins, in either order
+  const failing = { ...slow, lastPolledAt: ago(3 * DAY) }
+  expect(isDue(parcel({ ...failing, lastAttemptedAt: ago(10 * MIN) }), NOW, ANY_SLOT)).toBe(false)
+  expect(isDue(parcel({ ...slow, lastPolledAt: ago(10 * MIN), lastAttemptedAt: ago(3 * DAY) }), NOW, ANY_SLOT)).toBe(false)
+  expect(isDue(parcel({ ...failing, lastAttemptedAt: ago(21 * HOUR) }), NOW, ANY_SLOT)).toBe(true)
 })

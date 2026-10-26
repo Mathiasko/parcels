@@ -29,9 +29,10 @@ export function slotFor(now: Date): number {
  *
  * The slower tiers are expressed as time since `lastPolledAt`, not as a position in the slot grid:
  * this Mac sleeps through whole slots, and a rule keyed on "slot 0" or "slot % 3" would skip a
- * parcel for a day if the Mac happened not to be awake then. `lastPolledAt` advances only on a real
- * answer, so a failed poll leaves the parcel due. `slot` stays in the signature as part of the
- * contract; the every-slot tiers need no gap check.
+ * parcel for a day if the Mac happened not to be awake then. The gap runs from the later of
+ * `lastPolledAt` (last real answer) and `lastAttemptedAt` (last try, answered or not), so a parcel
+ * that keeps failing backs off exactly like a healthy one instead of retrying every slot. `slot`
+ * stays in the signature as part of the contract; the every-slot tiers need no gap check.
  */
 export function isDue(p: Parcel, now: Date, _slot: number): boolean {
   if (p.status === 'delivered' || p.status === 'returned') return false
@@ -45,6 +46,6 @@ export function isDue(p: Parcel, now: Date, _slot: number): boolean {
   if (p.lastChangedAt === undefined && idle > 30 * DAY) return false   // dormant: never had an event
   if (idle <= 2 * DAY) return true
 
-  const sincePoll = p.lastPolledAt ? now.getTime() - p.lastPolledAt.getTime() : Infinity
-  return sincePoll >= (idle <= 7 * DAY ? MID_TIER_MIN_GAP : SLOW_TIER_MIN_GAP)
+  const lastTried = Math.max(p.lastPolledAt?.getTime() ?? -Infinity, p.lastAttemptedAt?.getTime() ?? -Infinity)
+  return now.getTime() - lastTried >= (idle <= 7 * DAY ? MID_TIER_MIN_GAP : SLOW_TIER_MIN_GAP)
 }
