@@ -432,13 +432,38 @@ Three-step chain; steps 1–2 are cacheable.
    (empty body)
 ```
 
+**Exact request detail for the Firebase step, VERIFIED live.** Both Firebase calls
+carry these headers: `X-Goog-Api-Key: AIzaSyDHMkUNUyUwFrQzKJhdC_J-L7QEwNUzwrc`,
+`X-Android-Package: com.dpdgroup.chatbot.lemny.prod`,
+`X-Android-Cert: 3872ACD98DE975F69C68CAF5119A5A1B2024B873`,
+`Content-Type: application/json`. The Remote Config call additionally needs
+`X-Goog-Firebase-Installations-Auth: <authToken from step 1>` and this body:
+
+```json
+{"appId":"1:959401347543:android:8d1a84133332291109e392",
+ "appInstanceId":"<fid>","appInstanceIdToken":"<authToken>",
+ "languageCode":"sk-SK","countryCode":"SK","platformVersion":"36",
+ "appVersion":"3.79.14","packageName":"com.dpdgroup.chatbot.lemny.prod",
+ "sdkVersion":"22.1.2","analyticsUserProperties":{}}
+```
+
+It returns `entries.basic_dpd_token`, whose observed value base64-decodes to
+`myDPD Mobile App:<secret>`. Steps 2 and 3 carry
+`User-Agent: myDPD/3.79.14 (Android)`, `Accept: application/json` and
+`Content-Type: application/json`.
+
 - **Must be POST with an empty body.** `GET` returns 405.
 - **Cache the OAuth token** (~5h). Re-running the chain per lookup is wasteful and
   the behaviour most likely to attract rate limiting.
 - **Implement the Firebase step; do not hardcode the Basic credential.** It lives in
   Firebase Remote Config and DPD can rotate it at will. Hardcoding is the single
   most likely cause of silent future breakage. Refetch on 400/401.
-- **Send the postcode.** Without it you get `parcelHistory` only — milestones with
+- **Send the postcode when you have one; degrade when you do not.** With no
+  postcode, set `continueWithoutVerification=true` and accept `parcelHistory`
+  only — milestones without cities. **Never return `needs_postcode`**: the
+  orchestrator would stop polling the parcel entirely, and DPD can report on it
+  perfectly well without one. Same for a `PROVIDE_ZIP_CODE` rejection. Without a
+  postcode you get `parcelHistory` only — milestones with
   no city. With it you additionally get `parcelEvents[]` (scan code, depot, city,
   PUDO id, proof-of-delivery URL), sender/receiver, weight, and the pickup pass.
 - Not found: HTTP 400 (or 404) with `exceptionType: "PARCEL_NOT_FOUND"`. A 400 with
