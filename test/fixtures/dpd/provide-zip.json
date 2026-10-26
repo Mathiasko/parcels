@@ -1,0 +1,4 @@
+{"error":"pl.eo.geoccp.feign.exception.parcel.ParcelException",
+ "message":"Zip code verification failed for given parcel",
+ "exceptionType":"PROVIDE_ZIP_CODE",
+ "exceptionKey":"pl.eo.geoccp.feign.exception.parcel.ParcelException.PROVIDE_ZIP_CODE"}

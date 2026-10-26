@@ -1,0 +1,4 @@
+{"error":"pl.eo.geoccp.feign.exception.parcel.ParcelException",
+ "message":"Data returned from FT for given criteria: customerReference= 06215217497757, businessUnitShortName= DPD-SK didn't contain parcel details.",
+ "exceptionType":"PARCEL_NOT_FOUND",
+ "exceptionKey":"pl.eo.geoccp.feign.exception.parcel.ParcelException.PARCEL_NOT_FOUND"}

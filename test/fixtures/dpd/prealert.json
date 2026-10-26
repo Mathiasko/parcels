@@ -1,0 +1,19 @@
+{
+  "parcelNumber": "01234567890123",
+  "shipmentId": "01234567890123",
+  "status": {
+    "status": 0, "description": "ORDER_CREATED", "deliveryType": "HOME",
+    "eventDateAndTime": "2026-08-14T13:20:17",
+    "eventDateAndTimeZoneId": "Europe/Bratislava",
+    "city": null, "countryCode": "GB", "homeDelivery": true
+  },
+  "parcelSearchType": "BY_PARCEL_NUMBER",
+  "parcelHistory": [
+    { "status": 0, "description": "ORDER_CREATED", "deliveryType": null,
+      "eventDateAndTime": "2026-08-14T12:20:17", "eventDateAndTimeZoneId": "+01:00",
+      "city": null, "countryCode": null, "homeDelivery": false }
+  ],
+  "actionBoxStatus": "DISABLED", "parcelType": "INCOMING",
+  "type": "PREALERT", "refused": false, "confirmation": "PREALERT",
+  "returning": false, "isMasterParcel": false, "shipmentType": "SHIPMENT"
+}
