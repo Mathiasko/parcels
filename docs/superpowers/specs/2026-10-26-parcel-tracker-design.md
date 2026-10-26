@@ -397,6 +397,16 @@ Content-Type: application/json
   the tracking payload. Pickup-point directory is public at
   `https://balikomat.sps-sro.sk/alternativneMiesta.xml` — resolve name → address
   from there if needed.
+- **Response envelope and field names.** Every response is HTTP 200 with the real
+  code in the body. Not found, VERIFIED live:
+  `{"status":false,"code":404,"message":"Error getShipmentTrackAndTrace","data":{"errorData":""}}`.
+  Missing key, VERIFIED live: HTTP **401** `{"status":false,"code":401,"message":"Unauthorized"}`.
+  Success, INFERRED from their React render code:
+  `{"status":true,"code":200,"message":"Success","data":{"shipmentStatus":"inTransit","showParcelShopStatus":false,"states":[{"time":"…","statusDescr":"…"}],"actions":{}}}`.
+  Each `states[]` entry carries **only `time` and `statusDescr`** — no code, and no
+  location field the mySPS UI displays. The known `Api-Key` literal is
+  `6VS314WZ+YtFPrYqqV2EZAoxKJNIyr13JGKTWjlOy6jz5zWKr-C8ZnpCJ7ChvZfW`; the API base
+  is published in `https://mysps.sk/static/script.js` as `api: 'https://rest.mysps.sk/'`.
 - `data.states[]` success shape is INFERRED from their React render code.
   **Confirm against the first real `703…` number; log the raw JSON that first time.**
 - Avoid the `backend.sps-sro.sk/api/tracking/*` family — two of its three
