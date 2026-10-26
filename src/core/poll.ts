@@ -22,6 +22,8 @@ export interface PollDeps {
   now: Date
   /** When present, the run's notifications are built and sent; when absent nothing is built at all. */
   notifier?: Notifier
+  /** Poll every active parcel regardless of its backoff tier (set after a long sleep gap). */
+  forceAll?: boolean
   /** Wired by email ingest (Task 18); not consumed yet. */
   ingest?: unknown
 }
@@ -77,7 +79,7 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   const health = new Map(carrierHealth(db).map(h => [h.carrier, h]))
   const byCarrier = new Map<CarrierId, Parcel[]>()
   for (const p of listActive(db)) {
-    if (!isDue(p, now, slot)) continue
+    if (!deps.forceAll && !isDue(p, now, slot)) continue
     // Deterministic: the carrier rejected this exact postcode and would reject it identically for
     // ever, so do not ask. The flag is NOT cleared here: clearing at selection would unflag a
     // parcel whose carrier has no adapter or is throttled, i.e. one that never gets polled at all.

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: scripts/install-agents.sh replaces __ABS_DIR__ with the project directory. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.parcels.web</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/you/.nvm/versions/node/v24.21.0/bin/node</string>
+    <string>__ABS_DIR__/dist/server.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__ABS_DIR__</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>__ABS_DIR__/data/web.log</string>
+  <key>StandardErrorPath</key>
+  <string>__ABS_DIR__/data/web.err.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/you/.nvm/versions/node/v24.21.0/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>
