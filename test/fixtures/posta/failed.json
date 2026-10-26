@@ -1,4 +1,4 @@
 {"results":[{"number":"RA123456785SK","status":"ok","events":[
-  {"localDate":"2016-07-14T06:45:30","stateCode":"transit","description":"Zasielka je na ceste"},
-  {"localDate":"2016-07-15T11:02:10","stateCode":"transit","detailCode":"ANZ","description":"Adresat nebol zastihnuty"}
+  {"localDate":"2016-07-14T06:45:30","stateCode":"transit","detailDescription":"Zasielka je na ceste"},
+  {"localDate":"2016-07-15T11:02:10","stateCode":"transit","detailCode":"ANZ","detailDescription":"Adresat nebol zastihnuty"}
 ]}],"status":"ok"}

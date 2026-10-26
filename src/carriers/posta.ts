@@ -9,14 +9,12 @@ const ENDPOINT = 'https://api.posta.sk/tracking'
 const NUMBER_SHAPE = /^[A-Z]{2}\d{9}SK$/
 const CHECK_WEIGHTS = [8, 6, 4, 2, 3, 5, 9, 7]
 
-interface RawPostOffice {
-  name?: string; street?: string; city?: string; zip?: string; lat?: number; lon?: number
-}
+interface RawPostOffice { name?: string; street?: string; city?: string; postcode?: string; districtStamp?: string }
 interface RawEvent {
   localDate: string
   stateCode?: string
   detailCode?: string
-  description?: string
+  detailDescription?: string
   retainedTill?: string
   postOffice?: RawPostOffice
 }
@@ -34,8 +32,17 @@ function checkDigitOk(number: string): boolean {
 function toPickup(po: RawPostOffice): PickupPoint {
   return {
     kind: 'post_office',
-    name: po.name, street: po.street, city: po.city, postalCode: po.zip,
-    lat: po.lat, lon: po.lon,
+    name: po.name, street: po.street, city: po.city, postalCode: po.postcode,
+  }
+}
+
+/** A date-only deadline means "collectable all that day", so it is the END of that day, not midnight. */
+function parseDeadline(raw: string): Date | undefined {
+  try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return parseNaive(`${raw} 23:59:59.999`, ZONE, 'yyyy-MM-dd HH:mm:ss.SSS').at
+    return parseNaive(raw, ZONE).at
+  } catch {
+    return undefined   // a bad deadline must not discard a perfectly good status
   }
 }
 
@@ -51,7 +58,7 @@ function toResult(raw: RawResult): FetchResult {
       occurredAt: at,
       status: mapPostaStatus(e.stateCode, e.detailCode),
       code: e.detailCode ?? e.stateCode,
-      description: e.description ?? e.detailCode ?? e.stateCode ?? '',
+      description: e.detailDescription ?? e.detailCode ?? e.stateCode ?? '',
       location: e.postOffice?.name,
     }
     return { event, raw: e }
@@ -75,8 +82,13 @@ function toResult(raw: RawResult): FetchResult {
     raw,
   }
   if (latest.event.status === 'ready_for_pickup') {
-    if (latest.raw.postOffice) result.pickup = toPickup(latest.raw.postOffice)
-    if (latest.raw.retainedTill) result.retainedTill = parseNaive(latest.raw.retainedTill, ZONE).at
+    // A later scan may omit these, so use the newest event that actually carries each.
+    const withOffice = entries.findLast(x => x.raw.postOffice)
+    if (withOffice?.raw.postOffice) result.pickup = toPickup(withOffice.raw.postOffice)
+    for (const x of entries.toReversed()) {
+      const deadline = x.raw.retainedTill ? parseDeadline(x.raw.retainedTill) : undefined
+      if (deadline) { result.retainedTill = deadline; break }
+    }
   }
   return result
 }
@@ -84,20 +96,20 @@ function toResult(raw: RawResult): FetchResult {
 async function fetchBatch(inputs: FetchInput[], http: HttpClient): Promise<FetchResult[]> {
   const transport = (): FetchResult[] => inputs.map(i => ({ ok: false, number: i.number, reason: 'transport' }))
   const q = inputs.map(i => encodeURIComponent(i.number)).join(',')
-  let envelope: RawEnvelope
+  const byNumber = new Map<string, RawResult>()
   try {
     const res = await http(`${ENDPOINT}?q=${q}&l=sk&p=1`)
     if (res.status !== 200) return transport()
-    envelope = JSON.parse(await res.text()) as RawEnvelope
+    const envelope = JSON.parse(await res.text()) as RawEnvelope
     if (!Array.isArray(envelope.results)) return transport()
+    // The API does not promise request order, so index by each result's own number.
+    for (const r of envelope.results) {
+      if (r && typeof r.number === 'string') byNumber.set(r.number, r)
+    }
   } catch {
     // Non-JSON bodies (e.g. an Erlang tuple), truncated bodies and transport errors all land here.
     return transport()
   }
-
-  // The API does not promise request order, so index by each result's own number.
-  const byNumber = new Map<string, RawResult>()
-  for (const r of envelope.results) byNumber.set(r.number, r)
 
   return inputs.map(({ number }): FetchResult => {
     const raw = byNumber.get(number)
