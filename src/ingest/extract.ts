@@ -1,6 +1,7 @@
 import { simpleParser } from 'mailparser'
 import type { CarrierId } from '../core/types.js'
 import { normalizeNumber } from '../carriers/registry.js'
+import { decodeEntities } from '../core/entities.js'
 
 export interface Extraction {
   carrier?: CarrierId
@@ -80,22 +81,16 @@ function glsNumber(haystack: string): string | undefined {
   return best && normalizeNumber(best.number)
 }
 
-const ENTITIES: Record<string, string> = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
-
 /**
  * Plain text from html, for mail that has no text part. mailparser only derives `text` from `html` for
  * some structures; a `multipart/mixed` html mail with an attachment (DPD's pickup-pass mails) gets none.
  * Good enough to find a number in prose; not a renderer.
  */
 export function htmlToText(html: string): string {
-  return stripBlocks(html)
+  return decodeEntities(stripBlocks(html)
     .replace(/<br\s*\/?>|<\/(?:p|div|tr|td|th|li|h[1-6]|table)\s*>/gi, '\n')
     .replace(/<[^<>]*>/g, ' ')   // `[^<>]`, so a stray `<` costs one character, not a scan to the end
-    .replace(/&(?:#(\d+)|#x([0-9a-f]+)|([a-z]+));/gi, (whole, dec: string, hex: string, name: string) => {
-      if (name) return ENTITIES[name.toLowerCase()] ?? whole
-      const code = dec ? Number(dec) : parseInt(hex, 16)
-      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole
-    })
+  )
 }
 
 /**

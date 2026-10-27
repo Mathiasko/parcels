@@ -322,3 +322,76 @@ test('adapter metadata: one parcel per call, postcode required', () => {
   expect(glsAdapter.batchSize).toBe(1)
   expect(glsAdapter.needsPostalCode).toBe(true)
 })
+
+// ---- the live rstt028 capture (2026-10-27): a BARE object, not wrapped in tuStatus[] ----
+
+const LIVE_NUMBER = '1234567890'
+const liveOnly = async (body = fixture('rstt028-live-redacted.json')) => {
+  const { http } = stubHttp(detail(body))
+  const [r] = await glsAdapter.fetch([{ number: LIVE_NUMBER, postalCode: '00000' }], http)
+  return r as FetchResult
+}
+
+test('live rstt028: the bare, unwrapped detail object parses (it used to come back as transport)', async () => {
+  const body = JSON.parse(fixture('rstt028-live-redacted.json'))
+  expect(body.tuStatus).toBeUndefined()   // the point of this fixture
+  const r = ok(await liveOnly())
+  expect(r.status).toBe('in_transit')
+  expect(r.statusRaw).toBe('INTRANSIT')
+  expect(r.number).toBe(LIVE_NUMBER)
+})
+
+test('live rstt028: both response shapes normalise to the same result', async () => {
+  const bare = JSON.parse(fixture('rstt028-live-redacted.json'))
+  const wrapped = JSON.stringify({ tuStatus: [bare] })
+  const a = ok(await liveOnly())
+  const b = ok(await liveOnly(wrapped))
+  expect(b).toEqual(a)
+})
+
+test('live rstt028: date and time are separate fields, joined and read as Europe/Bratislava', async () => {
+  const r = ok(await liveOnly())
+  expect(r.events.map(e => e.occurredAtRaw)).toEqual(['2026-10-26 14:02:24', '2026-10-27 02:18:05'])
+  expect(r.events[0]!.occurredAt.toISOString()).toBe('2026-10-26T13:02:24.000Z')   // CET, UTC+1 (DST ended 25 Oct)
+  expect(r.events[1]!.occurredAt.toISOString()).toBe('2026-10-27T01:18:05.000Z')
+  expect(r.events.map(e => e.code)).toEqual(['0.100', '0.0'])
+  expect(r.events.map(e => e.status)).toEqual(['unknown', 'in_transit'])   // status sits on the newest
+})
+
+test('live rstt028: a country name in address.city is kept as the location', async () => {
+  const r = ok(await liveOnly())
+  expect(r.events.map(e => e.location)).toEqual(['Slovakia', 'Slovakia'])
+})
+
+test('live rstt028: HTML numeric entities in event text are decoded', async () => {
+  const r = ok(await liveOnly())
+  expect(r.events[1]!.description).toBe('Balík prijatý do systému GLS.')
+  expect(r.events[0]!.description).toBe('Údaje o zásielke boli zadané do systému GLS, čakáme na odovzdanie balíka GLS.')
+  expect(r.events.every(e => !/&#\d+;/.test(e.description))).toBe(true)
+})
+
+test('history is ordered by timestamp whichever way GLS sorts it (oldest-first input, shuffled input)', async () => {
+  const live = JSON.parse(fixture('rstt028-live-redacted.json'))
+  const [newest, oldest] = live.history
+  for (const history of [[oldest, newest], [newest, oldest]]) {
+    const r = ok(await liveOnly(JSON.stringify({ ...live, history })))
+    expect(r.events.map(e => e.occurredAtRaw)).toEqual(['2026-10-26 14:02:24', '2026-10-27 02:18:05'])
+    expect(r.events.map(e => e.status)).toEqual(['unknown', 'in_transit'])
+  }
+})
+
+test('events sharing a timestamp keep the newest-first reading (the sort does not reshuffle ties)', async () => {
+  const live = JSON.parse(fixture('rstt028-live-redacted.json'))
+  const same = { ...live.history[0] }
+  const history = [{ ...same, evtNo: 'B' }, { ...same, evtNo: 'A' }]   // newest-first: B happened after A
+  const r = ok(await liveOnly(JSON.stringify({ ...live, history })))
+  expect(r.events.map(e => e.code)).toEqual(['A', 'B'])
+})
+
+test('a bare object with neither a progress bar nor a parcel number is still transport, not a parcel', async () => {
+  expect(await liveOnly('{"foo":1}')).toEqual({ ok: false, number: LIVE_NUMBER, reason: 'transport' })
+})
+
+test('a bare error body still maps by lastError (E000 stays not_found)', async () => {
+  expect(await liveOnly(fixture('e000.json'))).toEqual({ ok: false, number: LIVE_NUMBER, reason: 'not_found' })
+})

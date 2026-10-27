@@ -1,3 +1,4 @@
+import { decodeEntities } from '../core/entities.js'
 import { parseNaive } from '../core/time.js'
 import type {
   CanonicalStatus, CarrierAdapter, FetchInput, FetchResult, HttpClient, ParcelEvent, PickupPoint,
@@ -49,6 +50,7 @@ interface RawAddress {
 }
 interface RawItem {
   tuNo?: string
+  referenceNo?: string
   progressBar?: { statusInfo?: string }
   parcelShop?: { parcelShopID?: string }
   addresses?: RawAddress[]
@@ -82,6 +84,9 @@ function coordinate(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
+/** GLS text fields carry HTML numeric entities (`&#268;`), which are decoded for display. */
+const text = (s: string | undefined): string | undefined => (s === undefined ? undefined : decodeEntities(s))
+
 /** `parcelShop` only says a shop is involved (`parcelShopID`); where it is lives in `addresses[]`. */
 function toPickup(item: RawItem): PickupPoint | undefined {
   if (!item.parcelShop || typeof item.parcelShop !== 'object') return undefined
@@ -93,7 +98,7 @@ function toPickup(item: RawItem): PickupPoint | undefined {
   if (!where) return { kind: 'parcelshop' }
   return {
     kind: 'parcelshop',
-    name: where.name, street: where.blockNo1, city: where.city, postalCode: where.postalCode,
+    name: text(where.name), street: text(where.blockNo1), city: text(where.city), postalCode: where.postalCode,
     lat: coordinate(where.latitude), lon: coordinate(where.longitude),
   }
 }
@@ -103,13 +108,14 @@ function toResult(number: string, item: RawItem): FetchResult {
   if (typeof statusInfo !== 'string' || statusInfo === '') return { ok: false, number, reason: 'transport' }
   const status = mapStatus(statusInfo)
 
-  // `history[]` is newest-first, so reversing it gives oldest-first without a re-sort (which could
-  // reorder events sharing a timestamp). rstt029 carries no history at all.
+  // `history[]` arrived newest-first in the one live capture, but that is not relied on: events are
+  // ordered by their own timestamp. The array is reversed first, so ties (same second) keep the
+  // newest-first reading and the sort, being stable, does not reshuffle them. rstt029 carries none.
   const entries = (item.history ?? []).toReversed().map(h => {
     const raw = `${h.date} ${h.time}`
     const { at, tz } = parseNaive(raw, ZONE)
     return { raw, h, at, tz }
-  })
+  }).sort((a, b) => a.at.getTime() - b.at.getTime())
   // GLS supplies no machine code per event, so no per-event status can be derived. The parcel's
   // status belongs to the newest event; older ones are unknown.
   const events = entries.map((e, i): ParcelEvent => ({
@@ -118,8 +124,8 @@ function toResult(number: string, item: RawItem): FetchResult {
     occurredAt: e.at,
     status: i === entries.length - 1 ? status : 'unknown',
     code: e.h.evtNo,
-    description: e.h.evtDscr ?? '',
-    location: typeof e.h.address === 'string' ? e.h.address : e.h.address?.city,
+    description: decodeEntities(e.h.evtDscr ?? ''),
+    location: text(typeof e.h.address === 'string' ? e.h.address : e.h.address?.city),
   }))
 
   const result: FetchResult = { ok: true, number, status, statusRaw: statusInfo, events, raw: item }
@@ -128,6 +134,17 @@ function toResult(number: string, item: RawItem): FetchResult {
     if (pickup) result.pickup = pickup
   }
   return result   // no retainedTill: GLS supplies no deadline
+}
+
+/**
+ * The two endpoints disagree on shape (both verified live): rstt029 wraps its item in `tuStatus[]`,
+ * rstt028 answers with the bare item. `ask` normalises both to one `RawItem`, so nothing below it knows.
+ * A bare answer is recognised by carrying the parcel itself (error bodies have none of these markers).
+ */
+function bareItem(body: RawBody | null): RawItem | undefined {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return undefined
+  const b = body as RawBody & RawItem
+  return b.progressBar || b.tuNo || b.referenceNo ? b : undefined
 }
 
 /** One GET, classified. Throws only on transport errors and unparseable JSON; the caller maps those. */
@@ -144,7 +161,7 @@ async function ask(url: string, http: HttpClient): Promise<Answer> {
   } catch {
     return { kind: 'failed', reason: 'transport' }
   }
-  const item = body?.tuStatus?.[0]
+  const item = body?.tuStatus?.[0] ?? bareItem(body)
   // Only a `zipcode` complaint counts: a 400 about any other attribute (e.g. a malformed `match`)
   // is a different problem with no evidence behind it, so it stays `transport` below.
   if (res.status === 400 && Array.isArray(body?.fieldExceptions)
