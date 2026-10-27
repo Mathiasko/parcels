@@ -8,7 +8,8 @@ import { describe, expect, test } from 'vitest'
  * but it has exactly one way of being catastrophically wrong, and it fails silently: Gmail's filter
  * form ANDs its From / Subject / Has-the-words boxes together, so a filter split across them matches
  * no message at all and looks identical to "no parcels have arrived". These tests pin the shape that
- * cannot do that - one field, one OR-expression, no field-restricting operator inside it.
+ * cannot do that - one field, one OR-expression. Operators inside it are fine and necessary:
+ * they still OR, and without them a bare term matches the whole message body.
  */
 const FILE = fileURLToPath(new URL('../gmail-filter.xml', import.meta.url))
 const xml = readFileSync(FILE, 'utf8')
@@ -47,10 +48,16 @@ describe('gmail-filter.xml', () => {
     expect(properties().filter(([, v]) => / OR /.test(v))).toHaveLength(1)
   })
 
-  test('the query contains no from: or subject: restriction to AND with the rest', () => {
+  test('operators scope the terms, and they live inside the single field', () => {
+    // A bare term is matched against the WHOLE MESSAGE, not just its headers. The first version of
+    // this filter relied on that and labelled 95 unrelated mails in one import: "na ceste" is
+    // everyday Slovak for "on the way", so a friend's email and an Airbnb receipt both matched.
+    // Operators are therefore required - but INSIDE hasTheWord, where they still OR. The trap this
+    // file exists to avoid is splitting them across Gmail's From and Subject boxes, which ANDs.
     const q = prop('hasTheWord')!
-    expect(q).not.toMatch(/\bfrom:/)
-    expect(q).not.toMatch(/\bsubject:/)
+    expect(q).toMatch(/^from:\(/)
+    expect(q).toMatch(/\bOR subject:\(/)
+    expect(q).not.toMatch(/\bna ceste\b/)   // matched half the mailbox
     expect(q).not.toMatch(/\bto:/)
     expect(q).not.toMatch(/\blabel:/)
     expect(q).not.toMatch(/\bAND\b/)
@@ -62,9 +69,11 @@ describe('gmail-filter.xml', () => {
     const terms = q.split(' OR ')
     expect(terms.length).toBeGreaterThan(20)
     expect(terms.every(t => t.trim() !== '')).toBe(true)
+    expect(q).not.toMatch(/OR\s*$/)                    // no dangling operator
     expect((q.match(/"/g) ?? []).length % 2).toBe(0)   // every phrase is closed
-    expect(q).not.toContain('(')                       // nothing to group: it is one flat OR
-    expect(q).not.toContain(')')
+    // Parentheses are expected now: they group the terms under from:/subject:. What must not appear
+    // is a second FIELD, which is what Gmail would AND - asserted in the test above.
+    expect((q.match(/\(/g) ?? []).length).toBe((q.match(/\)/g) ?? []).length)
   })
 
   test('covers all five carriers', () => {
@@ -81,7 +90,7 @@ describe('gmail-filter.xml', () => {
   test('covers e-shop dispatch wording, in several word forms', () => {
     const q = prop('hasTheWord')!
     for (const word of ['odoslana', 'odoslane', 'odoslany', 'expedovana', 'expedovane', 'shipped', 'dispatched']) {
-      expect(q.split(/[ "]+/)).toContain(word)
+      expect(q.split(/[ "()]+/)).toContain(word)   // terms now sit inside subject:( ... )
     }
     expect(q).toContain('"tracking number"')
     expect(q).toContain('"cislo zasielky"')
