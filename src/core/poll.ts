@@ -57,7 +57,7 @@ export interface PollReport {
   ingest?: IngestReport
   /** What the map preview did this run; absent when it is turned off or not configured. */
   map?: MapPreviewReport
-  /** Z-BOX codes read out of stored mail this run; absent when nothing needed scanning. */
+  /** What stored mail yielded this run (codes, pickup points); absent when nothing needed scanning. */
   codes?: PickupCodeReport
 }
 
@@ -154,9 +154,14 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
 }
 
 /**
- * Reading Z-BOX codes out of the parcel's own stored mail. Local file reads only, so unlike the map
- * step this costs nothing external - but it is still wrapped, because a malformed .eml must not be
- * able to turn a successful poll into a failed one.
+ * Reading the Z-BOX code - and, for a parcel the carrier never located, the pickup point itself - out
+ * of the parcel's own stored mail. Local file reads only, so unlike the map step this costs nothing
+ * external; but it is still wrapped, because a malformed .eml must not be able to turn a successful
+ * poll into a failed one.
+ *
+ * Its place in the run matters: AFTER the carriers (whose answer wins, and whose wholesale replace of
+ * the pickup columns this pass then tops up) and BEFORE the map preview, so a point that only the mail
+ * knew about is geocoded and drawn in the same run that found it.
  */
 async function pickupCodes(deps: PollDeps): Promise<PickupCodeReport | undefined> {
   try {
@@ -454,6 +459,9 @@ export function summarize(report: PollReport): string {
     : `, mail: ${i.read} new, ${i.created} parcel(s) created${i.archivedOld ? ` (${i.archivedOld} archived as old)` : ''}${i.needsAttention ? `, ${i.needsAttention} need attention` : ''}${i.failed ? `, ${i.failed} failed (will retry)` : ''}`
   const map = report.map ? summarizeMapPreview(report.map) : ''
   // The code itself is deliberately NOT logged: it opens a physical locker and this line lands in a file.
-  const codes = report.codes ? `, ${report.codes.found} pickup code(s) found` : ''
-  return `polled ${c.polled} parcel(s), ${c.newEvents} new event(s)${mail}${codes}${map}${failed}`
+  // The pickup point is not logged either - it says where the reader lives, near enough.
+  const scan = report.codes
+    ? `, ${report.codes.found} pickup code(s) found${report.codes.points ? `, ${report.codes.points} pickup point(s) read from mail` : ''}`
+    : ''
+  return `polled ${c.polled} parcel(s), ${c.newEvents} new event(s)${mail}${scan}${map}${failed}`
 }

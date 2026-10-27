@@ -1,5 +1,5 @@
 import { simpleParser } from 'mailparser'
-import type { CarrierId } from '../core/types.js'
+import type { CarrierId, PickupPoint } from '../core/types.js'
 import { isEmailOnlyCarrier } from '../core/types.js'
 import { normalizeNumber } from '../carriers/registry.js'
 import { decodeEntities } from '../core/entities.js'
@@ -297,4 +297,165 @@ export function extractPickupCode(text: string): string | undefined {
   if (!m) return undefined
   const digits = m[1]!.replace(/\D/g, '')
   return digits.length >= 4 && digits.length <= 10 ? digits : undefined
+}
+
+/**
+ * A pickup point read out of the carrier's own email, for the parcels where the carrier's API never
+ * says where the parcel is. GLS is the case that forced it: a parcel handed to a Balikomat answers
+ * `DELIVEREDPS` with no `parcelShop` and no `addresses` at all, so the app could say "ready for
+ * pickup" and nothing else - no address, no map, no card. The mail that announced it has the address,
+ * and Packeta's has the postcode its API omits.
+ *
+ * Every field here is one the mail printed. There is deliberately no `lat`/`lon`: some templates do
+ * carry a maps link with coordinates in it, but a pin is the one thing that is wrong in a way the
+ * reader cannot see, so coordinates stay the geocoder's job.
+ *
+ * `street`, `city` and `postalCode` are REQUIRED, which is the whole safety rule of this extractor:
+ *   - a town on its own ("Bratislava 5") is not a pickup point. Writing one would assert a place the
+ *     carrier never gave, and the panel and map would both point at the middle of a city.
+ *   - the postcode is also the anchor the parser needs: it is what tells the street apart from the
+ *     town when a template prints them on one line ("Nevädzová 6 821 01 Bratislava").
+ * A block that gives less than that yields nothing at all, which leaves the parcel exactly as the
+ * carrier left it.
+ */
+export interface MailPickupPoint {
+  kind: PickupPoint['kind']
+  name?: string
+  street: string
+  city: string
+  postalCode: string
+}
+
+/**
+ * The labels that introduce a pickup-point block, one per template actually seen in the user's
+ * mailbox. Each is anchored the way that template anchors it, so prose that merely mentions a pickup
+ * point is not mistaken for a block:
+ *
+ *   - GLS writes `Odberné miesto:` on a line of its own, with the block under it. The label must own
+ *     its line and end in a colon, which is what keeps DPD's link text ("Zobraziť odberné miesto
+ *     Pickup Station na mape") and SPS's sentence ("v odbernom mieste balíkovo Lekáreň ...") out.
+ *   - Packeta heads the block `Miesto, kde je vaša zásielka uložená`. PRESENT tense only: the
+ *     acceptance mail prints the same block under `Miesto, kde BUDE vaša zásielka uložená`, naming a
+ *     box the parcel has not reached yet and may never reach.
+ *   - DPD writes `Adresa samoobslužného boxu Pickup Station:`.
+ *
+ * A template nobody has a real message for is deliberately absent (DHL, SPS): a guessed label reads a
+ * guessed address, and the whole point of this module is that nothing here is guessed.
+ */
+const PICKUP_LABELS: readonly RegExp[] = [
+  /^[ \t>]*odbern[ée]\s+miesto[ \t]*:/gim,
+  /miesto,?[ \t]*kde[ \t]+je[ \t]+va[šs]a[ \t]+z[áa]sielka[ \t]+ulo[žz]en[áa]/gi,
+  /adresa[ \t]+samoobslu[žz]n[ée]ho[ \t]+boxu[^:\n]{0,40}:/gi,
+]
+
+/** A Slovak postcode, printed either way round the carriers print it: `82101` or `821 01`. */
+const POSTCODE = /(?<!\d)(\d{3}[  ]?\d{2})(?!\d)/
+/** The postcode inside its part, with whatever precedes it (a street) and follows it (a town). */
+const POSTCODE_IN_PART = /^(.*?)[  ]*(?<!\d)(\d{3}[  ]?\d{2})(?!\d)[  ]*(.*)$/
+
+/**
+ * A town: a capitalised word, up to three more words after it (`Ivanka pri Dunaji`), and optionally a
+ * district number (`Bratislava 5`). Nothing else - no colons, no digits in the middle, no sentences.
+ * This is the last line of defence when a template prints something unexpected after the town: a
+ * value that is not a town is no pickup point rather than a wrong one.
+ */
+const CITY = /^\p{Lu}[\p{L}'’.-]*(?:[ -]\p{L}[\p{L}'’.-]*){0,3}(?:[ ]\d{1,2})?$/u
+
+/** What the place calls itself, where the name says it plainly. Nothing is inferred from the carrier. */
+const KINDS: ReadonlyArray<readonly [RegExp, PickupPoint['kind']]> = [
+  [/z-?box/i, 'zbox'],
+  [/bal[ií]komat|box\b|boxu\b|automat|packomat|packstation|parcel ?locker/i, 'locker'],
+  [/po[šs]t[aou]\b|post office/i, 'post_office'],
+]
+
+/**
+ * How far past the label the block may reach, and how many parts of it are considered. The character
+ * window is wide because Packeta's template puts ~650 characters of empty table cells between its
+ * label and the address; what actually bounds the search is the PART count, since only non-empty
+ * parts are counted and the parser stops as soon as it has that many.
+ */
+const PICKUP_REGION = 2000
+const PICKUP_PARTS = 8
+const PICKUP_LABELS_TRIED = 8
+const NAME_MAX = 80
+const STREET_MAX = 80
+const CITY_MAX = 40
+
+/**
+ * The pickup point a carrier's mail prints, or undefined - which is the answer for most mail and for
+ * every block that does not give a street, a town and a postcode.
+ *
+ * Works on the plain-text rendering (the mail's own text part, or `htmlToText`), because the two
+ * differ: GLS lays the block out as `<br>`-separated lines inside one `<strong>`, so the town arrives
+ * after a comma in one rendering and after a newline in the other. Both are read the same way here -
+ * the lesson of the Z-BOX code, whose digits turned out to be newline-separated in the real bytes.
+ */
+export function pickupFromMail(text: string): MailPickupPoint | undefined {
+  const haystack = text.slice(0, MAX_TEXT).normalize('NFC')
+  const labels = PICKUP_LABELS
+    .flatMap(re => [...haystack.matchAll(re)].map(m => m.index + m[0].length))
+    .sort((a, b) => a - b)
+    .slice(0, PICKUP_LABELS_TRIED)
+  for (const from of labels) {
+    const point = parsePickupBlock(haystack.slice(from, from + PICKUP_REGION))
+    if (point) return point
+  }
+  return undefined
+}
+
+/**
+ * One block, as the parts the templates separate it into: commas, newlines, and a run of two or more
+ * spaces - which is what a collapsed table-cell boundary looks like in the text rendering, and the
+ * only thing that tells `000 00 TESTVILLE   Otváracie hodiny: ...` apart from a town with two words.
+ *
+ * The postcode is the anchor. Everything before it in its own part is the street; everything after it
+ * is the town; when its part holds nothing but the postcode (GLS prints `82101, Bratislava`), the
+ * street is the part above and the town the part below. Whatever is left above that is the name - and
+ * it is re-joined with the comma it was split on, so `Z-BOX Bratislava, Nevädzová 6 (OC Retro)` comes
+ * back whole.
+ */
+function parsePickupBlock(region: string): MailPickupPoint | undefined {
+  const parts: string[] = []
+  for (const raw of region.split(/[,;\n\r]|[ \t ]{2,}/)) {
+    const part = cleanPart(raw)
+    if (part) parts.push(part)
+    if (parts.length >= PICKUP_PARTS) break
+  }
+  const at = parts.findIndex(p => POSTCODE.test(p))
+  if (at < 0) return undefined
+  const m = POSTCODE_IN_PART.exec(parts[at]!)
+  if (!m) return undefined
+
+  // How many parts above the postcode belong to the address rather than to the name: none when the
+  // street sits in the postcode's own part, one normally, and two when a table cell split a street
+  // from its house number ("NEVÄDZOVÁ" | "6", DPD's html with no text part to fall back on).
+  const bareNumber = at >= 2 && /^\d+[a-z]?$/i.test(parts[at - 1]!)
+  const above = m[1] ? 0 : bareNumber ? 2 : 1
+  const name = parts.slice(0, Math.max(0, at - above))
+  const street = cleanPart(m[1]!) ?? (above > 0 ? parts.slice(at - above, at).join(' ') : undefined)
+  const city = cleanPart(m[3]!) ?? parts[at + 1]
+  if (!street || !city) return undefined
+  // A street with no house number is a fragment of prose, not an address.
+  if (!/\d/.test(street) || !/\p{L}/u.test(street) || street.length > STREET_MAX) return undefined
+  if (city.length > CITY_MAX || !CITY.test(city)) return undefined
+
+  const label = name.join(', ')
+  return {
+    kind: KINDS.find(([re]) => re.test(label))?.[1] ?? 'unknown',
+    ...(label && label.length <= NAME_MAX && { name: label }),
+    street,
+    city,
+    postalCode: m[2]!,
+  }
+}
+
+/** One part of a block, with the link text, the bullets and the stray punctuation taken off. */
+function cleanPart(raw: string): string | undefined {
+  const out = raw
+    .replace(/\[[^\]]*\]/g, ' ')                  // htmlToText's and mailparser's [https://...] link text
+    .replace(/\b(?:https?|mailto):\S+/gi, ' ')
+    .replace(/[\u0000-\u001f\u007f-\u009f​-‏­͏]+/g, ' ')
+    .replace(/[\s ]+/g, ' ')
+    .replace(/^[\s»«·•|:–-]+|[\s»«·•|:]+$/g, '')
+  return out === '' ? undefined : out
 }

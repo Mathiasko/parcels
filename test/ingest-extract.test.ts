@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { carrierForAddress, extract, htmlToText } from '../src/ingest/extract.js'
+import { simpleParser } from 'mailparser'
+import { carrierForAddress, extract, htmlToText, pickupFromMail } from '../src/ingest/extract.js'
 import {
   ARCHIVE_AFTER_DAYS, ingestMessages, reprocessMessages, type IngestDeps,
 } from '../src/ingest/ingest.js'
@@ -854,5 +855,178 @@ describe('mail directory permissions through the ingest', () => {
     expect(statSync(deps.mailDir).mode & 0o777).toBe(0o700)
     const path = (db.prepare('SELECT raw_path FROM messages').get() as { raw_path: string }).raw_path
     expect(statSync(path).mode & 0o777).toBe(0o600)
+  })
+})
+
+describe('pickupFromMail (where the carrier never said, but the mail did)', () => {
+  /** Exactly what the poll-side scan feeds the extractor: the text part, or the html flattened. */
+  const mailText = async (name: string): Promise<string> => {
+    const mail = await simpleParser(fx(name))
+    return mail.text || (typeof mail.html === 'string' ? htmlToText(mail.html) : '')
+  }
+
+  test('the real GLS pickup mail yields the box, its street, its postcode and its town', async () => {
+    // The fixture is message 147 of the live mailbox, with the names, numbers and the PIN replaced.
+    // Its block reads (one `<br>` per line, inside one `<strong>`):
+    //   Odberné miesto:
+    //   ExampleBox Testville - Príklad (Example Mall),
+    //   Príkladová 6,
+    //   00001, Testville
+    expect(pickupFromMail(await mailText('gls-ready-for-pickup'))).toEqual({
+      kind: 'locker',
+      name: 'ExampleBox Testville - Príklad (Example Mall)',
+      street: 'Príkladová 6',
+      postalCode: '00001',
+      city: 'Testville',
+    })
+  })
+
+  test('the GLS block reads the same when the html has to be flattened by hand', async () => {
+    // mailparser derives `text` for this mail, but a multipart/mixed one gets none and goes through
+    // htmlToText instead - where `<br>` becomes a newline and the town lands on its own line.
+    const mail = await simpleParser(fx('gls-ready-for-pickup'))
+    const flattened = htmlToText(mail.html as string)
+    expect(flattened).toContain('00001,')
+    expect(pickupFromMail(flattened)?.city).toBe('Testville')
+    expect(pickupFromMail(flattened)?.street).toBe('Príkladová 6')
+  })
+
+  test('the real Packeta Z-BOX mail yields the postcode its API never sends', async () => {
+    expect(pickupFromMail(await mailText('packeta-ready-zbox'))).toEqual({
+      kind: 'zbox',
+      name: 'Z-BOX Testville, Example Street 1',
+      street: 'Example Street 1',
+      postalCode: '000 00',
+      city: 'Testville',
+    })
+  })
+
+  test('the real DPD Pickup Station mail yields the box and leaves its opening hours out', async () => {
+    // The town and the next label share a line, separated only by the collapsed table cell:
+    // "000 00 TESTVILLE   Otváracie hodiny: Pondelok: ..."
+    expect(pickupFromMail(await mailText('dpd-pickup-station'))).toEqual({
+      kind: 'locker',
+      name: 'ExampleBox (Example Mall)',
+      street: 'EXAMPLE STREET 1',
+      postalCode: '000 00',
+      city: 'TESTVILLE',
+    })
+  })
+
+  test('a mail with no pickup block yields nothing', async () => {
+    expect(pickupFromMail(await mailText('synthetic-gls-notification'))).toBeUndefined()
+    expect(pickupFromMail(await mailText('sps-number-in-subject'))).toBeUndefined()
+  })
+
+  test('where a parcel WILL be stored is not where it is', async () => {
+    // Packeta's acceptance mail prints the same block under "Miesto, kde BUDE vaša zásielka uložená",
+    // naming a box the parcel has not reached and may never reach.
+    const text = await mailText('packeta-accepted')
+    expect(text).toContain('Miesto, kde bude vaša zásielka uložená')
+    expect(pickupFromMail(text)).toBeUndefined()
+  })
+
+  test('a block with only a town is not a pickup point', () => {
+    expect(pickupFromMail('Odberné miesto:\nBratislava 5\n')).toBeUndefined()
+    expect(pickupFromMail('Odberné miesto:\nAlzaBox Bratislava,\nBratislava\n')).toBeUndefined()
+  })
+
+  test('a town and a postcode with no street is not a pickup point either', () => {
+    expect(pickupFromMail('Odberné miesto:\nAlzaBox Bratislava,\n821 01 Bratislava\n')).toBeUndefined()
+  })
+
+  test('a street with no house number is not a street', () => {
+    expect(pickupFromMail('Odberné miesto:\nZ-BOX Hlavna,\nHlavna,\n821 01 Bratislava\n')).toBeUndefined()
+  })
+
+  test('a sentence that merely mentions a pickup point is not a block', () => {
+    // DPD's own mail says this under the address, as link text; GLS's label owns a line and ends in a colon.
+    expect(pickupFromMail('Zobraziť odberné miesto Pickup Station na mape\nBratislava 821 01\n')).toBeUndefined()
+    expect(pickupFromMail(
+      'Vaša zásielka je pripravená na vyzdvihnutie v odbernom mieste balíkovo Lekáreň Nádej, Mateja Belu 24/239, Kalinovo.',
+    )).toBeUndefined()
+  })
+
+  test('the postcode may be written with or without its space, and keeps the spelling it had', () => {
+    const block = (zip: string) => `Odberné miesto:\nAlzaBox Nivy,\nMlynské nivy 16,\n${zip}, Bratislava\n`
+    expect(pickupFromMail(block('82109'))?.postalCode).toBe('82109')
+    expect(pickupFromMail(block('821 09'))?.postalCode).toBe('821 09')
+  })
+
+  test('a block that names a post office or a shop is kinded as what it says it is', () => {
+    const at = (name: string) => pickupFromMail(`Odberné miesto:\n${name},\nHlavna 6,\n821 01 Bratislava\n`)?.kind
+    expect(at('Z-BOX Bratislava')).toBe('zbox')
+    expect(at('AlzaBox Bratislava')).toBe('locker')
+    expect(at('Balíkomat Bratislava')).toBe('locker')
+    expect(at('Pošta Bratislava 5')).toBe('post_office')
+    expect(at('Lekáreň Nádej')).toBe('unknown')   // a counter in a pharmacy: nothing in the name says what it is
+  })
+
+  test('nothing is read from the hours, the deadline or the links that follow the block', () => {
+    const point = pickupFromMail(
+      'Odberné miesto:\nAlzaBox Nivy,\nMlynské nivy 16,\n82109, Bratislava   Otváracie hodiny: Pondelok: 00:00 - 23:59\n'
+      + 'Zobraziť na mape [https://maps.example/?q=48.1,17.1]\n',
+    )
+    expect(point).toEqual({
+      kind: 'locker', name: 'AlzaBox Nivy', street: 'Mlynské nivy 16', postalCode: '82109', city: 'Bratislava',
+    })
+  })
+})
+
+describe('pickupFromMail: a street a table cell split in two', () => {
+  test('a house number left alone on its line is joined back to the street above it', () => {
+    // Real bytes, from message 77 of the live mailbox flattened by `htmlToText`: DPD's template puts
+    // the street name and the house number in separate cells, so the number arrives on its own.
+    //   "Adresa samoobslužného boxu Pickup Station: | AlzaBox (OC Retro), | NEVÄDZOVÁ | 6, | 821 01 BRATISLAVA"
+    const point = pickupFromMail(
+      'Adresa samoobslužného boxu Pickup Station:    AlzaBox (OC Retro),   NEVÄDZOVÁ   6,   821 01 BRATISLAVA   Otváracie hodiny: Pondelok: 00:01 - 23:59',
+    )
+    expect(point).toEqual({
+      kind: 'locker', name: 'AlzaBox (OC Retro)', street: 'NEVÄDZOVÁ 6', postalCode: '821 01', city: 'BRATISLAVA',
+    })
+  })
+
+  test('a bare number with no street above it is still not a street', () => {
+    expect(pickupFromMail('Odberné miesto:\n6,\n821 01 Bratislava\n')).toBeUndefined()
+  })
+})
+
+describe('pickupFromMail: what a town and a street may not be', () => {
+  test('a sentence that follows the town on the same line is not part of the town', () => {
+    // No table-cell gap to split on here, so the town validator is the only thing standing between
+    // "Bratislava" and a pickup point whose town is a sentence.
+    expect(pickupFromMail(
+      'Odberné miesto:\nAlzaBox Nivy,\nMlynské nivy 16,\n82109 Bratislava od 8:00\n',
+    )).toBeUndefined()
+    expect(pickupFromMail(
+      'Odberné miesto:\nAlzaBox Nivy,\nMlynské nivy 16,\n82109 Bratislava otvorené denne od 8:00 do 20:00\n',
+    )).toBeUndefined()
+  })
+
+  test('a block that stops at the postcode names no town, so it is no pickup point', () => {
+    expect(pickupFromMail('Odberné miesto:\nAlzaBox Nivy,\nMlynské nivy 16,\n82109\n')).toBeUndefined()
+  })
+
+  test('a block with no postcode is refused, even with a street and a town', () => {
+    // Deliberate: the postcode is the anchor that tells the street from the town. Without it the
+    // parser would have to guess which part is which, and a guessed town is a pin in a wrong place.
+    expect(pickupFromMail('Odberné miesto:\nLekáreň Nádej,\nMateja Belu 24/239,\nKalinovo\n')).toBeUndefined()
+  })
+
+  test('a mail that mentions a pickup point in passing does not hand over the reader\'s own address', () => {
+    // The danger the anchoring exists for: "odberné miesto" in a sentence, with the delivery address
+    // printed under it. A loose label would store the reader's home as the place to collect from.
+    expect(pickupFromMail(
+      'Svoje odberné miesto si môžete zmeniť na našej stránke.\n'
+      + 'Doručovacia adresa: Jane Doe,\nHlavná 12,\n821 01 Bratislava\n',
+    )).toBeUndefined()
+  })
+
+  test('prose that happens to carry a postcode is not an address', () => {
+    const prose = 'Odberné miesto:\n'
+      + 'Vašu zásielku sme uložili a môžete si ju vyzdvihnúť kedykoľvek počas otváracích hodín, '
+      + 'pričom na vyzdvihnutie je potrebný PIN kód 4 zo dňa 11. 9. 2026 a doklad totožnosti,\n'
+      + '82101, Bratislava\n'
+    expect(pickupFromMail(prose)).toBeUndefined()
   })
 })

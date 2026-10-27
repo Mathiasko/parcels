@@ -1,10 +1,11 @@
 import { test, expect, beforeEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { openDb, type Database } from '../src/db/index.js'
-import { insertParcel, updateParcelState, deleteParcel } from '../src/db/parcels.js'
+import { getParcel, insertParcel, updateParcelState, deleteParcel } from '../src/db/parcels.js'
 import { getPickupCode, needsPickupCodeCheck, recordPickupCode, pickupCodesFor } from '../src/db/pickup-codes.js'
 import { extractPickupCode } from '../src/ingest/extract.js'
 import { runPickupCodes } from '../src/core/pickup-code.js'
+import type { CarrierId, PickupPoint } from '../src/core/types.js'
 
 let db: Database
 beforeEach(() => { db = openDb(':memory:') })
@@ -13,7 +14,9 @@ const NOW = new Date('2026-10-27T10:00:00Z')
 
 function readyParcel(number = 'Z1234567890'): number {
   const id = insertParcel(db, { carrier: 'packeta', trackingNumber: number, source: 'manual' })
-  updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX', street: 'Hlavna 6', city: 'Bratislava' } })
+  // A pickup point the carrier located fully, postcode and all: these tests are about the opening
+  // code, and a point with a blank worth filling would have the location pass open the mail too.
+  updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX', street: 'Hlavna 6', city: 'Bratislava', postalCode: '821 01' } })
   return id
 }
 
@@ -209,4 +212,219 @@ test('the code never reaches a notification: banners show on the lock screen', a
 test('the digits are found when the mail separates them with newlines, one per table cell', () => {
   // How the real .eml renders: this is what made a live poll find nothing while the unit tests passed.
   expect(extractPickupCode('Kód pre otvorenie schránky\n9\n8\n7\n6\n5\n4\nMiesto, kde je vaša zásielka')).toBe('987654')
+})
+
+// --- the pickup point the carrier never gave ----------------------------------------------------
+
+const GLS_MAIL = readFileSync(new URL('./fixtures/mail/gls-ready-for-pickup.eml', import.meta.url))
+
+/** What that fixture's block says, which is what the fill must produce. */
+const FROM_MAIL = {
+  kind: 'locker',
+  name: 'ExampleBox Testville - Príklad (Example Mall)',
+  street: 'Príkladová 6',
+  city: 'Testville',
+  postalCode: '00001',
+} as const
+
+/** A parcel waiting for collection, with exactly the pickup point the carrier gave (or none at all). */
+function waiting(pickup?: PickupPoint, carrier: CarrierId = 'gls'): number {
+  const id = insertParcel(db, { carrier, trackingNumber: carrier === 'gls' ? '000000000001' : 'Z1234567891', source: 'manual' })
+  updateParcelState(db, id, { status: 'ready_for_pickup', statusRaw: 'DELIVEREDPS', pickup })
+  mail(id, '/mail/gls.eml')
+  return id
+}
+
+const pickupOf = (id: number) => getParcel(db, id)?.pickup
+
+test('a parcel the carrier gave no pickup point for gets one from its own mail', async () => {
+  const id = waiting()
+  const report = await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  expect(pickupOf(id)).toEqual(FROM_MAIL)
+  expect(report.points).toBe(1)
+})
+
+test('the carrier\'s own pickup point is never overwritten', async () => {
+  const carrierPoint: PickupPoint = { kind: 'parcelshop', name: 'Lekáreň Nádej', street: 'Mateja Belu 24', city: 'Kalinovo' }
+  const id = waiting(carrierPoint)
+  const report = await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  expect(pickupOf(id)).toEqual(carrierPoint)
+  expect(report.points).toBe(0)
+})
+
+test('a pickup point with no location detail keeps what it has and gains the street and postcode', async () => {
+  // SPS answers `{ kind: 'parcelshop' }` and DPD `{ kind: 'parcelshop' }` with nothing else: a card
+  // with no address and a map pin that would land in the middle of a town, or nowhere at all.
+  const id = waiting({ kind: 'parcelshop', city: 'TESTVILLE' })
+  await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  expect(pickupOf(id)).toEqual({
+    kind: 'parcelshop',                 // the carrier said what sort of place it is; the mail does not
+    name: FROM_MAIL.name,
+    street: FROM_MAIL.street,
+    postalCode: FROM_MAIL.postalCode,
+    city: 'TESTVILLE',                  // the carrier's own spelling of the town, not the mail's
+  })
+})
+
+test('a name and a postcode the carrier did give are kept, not replaced by the mail\'s', async () => {
+  const id = waiting({ kind: 'zbox', name: 'Z-BOX Testville', city: 'Testville', postalCode: '00009' })
+  await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  expect(pickupOf(id)).toEqual({
+    kind: 'zbox', name: 'Z-BOX Testville', street: FROM_MAIL.street, city: 'Testville', postalCode: '00009',
+  })
+})
+
+test('a postal district number does not make it a different town', async () => {
+  // The carrier writes the district ("Bratislava 5"), the mail writes the town. Refusing the fill
+  // over that digit would lose the street for nothing.
+  const id = waiting({ kind: 'parcelshop', city: 'Testville 5' })
+  await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  expect(pickupOf(id)?.street).toBe(FROM_MAIL.street)
+  expect(pickupOf(id)?.city).toBe('Testville 5')
+})
+
+test('the postcode the carrier never sends is added to the point it did give', async () => {
+  // Packeta's API sends a name, a street and a town, and no postcode at all; the mail has one. Note
+  // the carrier's own spelling of the street has no diacritics, and is the spelling that is kept.
+  const id = waiting({ kind: 'zbox', name: 'Z-BOX Testville', street: 'Prikladova 6', city: 'Testville' })
+  await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  expect(pickupOf(id)).toEqual({
+    kind: 'zbox', name: 'Z-BOX Testville', street: 'Prikladova 6', city: 'Testville', postalCode: '00001',
+  })
+})
+
+test('a postcode is not taken from a mail that is talking about another street', async () => {
+  const other: PickupPoint = { kind: 'zbox', name: 'Z-BOX Testville', street: 'Other Street 9', city: 'Testville' }
+  const id = waiting(other)
+  await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  expect(pickupOf(id)).toEqual(other)
+})
+
+test('nor from a mail about a different house number on the same street', async () => {
+  // Two doors on one street are two places, and a long street can cross a postcode boundary.
+  const nextDoor: PickupPoint = { kind: 'zbox', name: 'Z-BOX', street: 'Príkladová 12', city: 'Testville' }
+  const id = waiting(nextDoor)
+  await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  expect(pickupOf(id)).toEqual(nextDoor)
+})
+
+test('a parcel the carrier has located is not opened at all', async () => {
+  const id = waiting({ kind: 'locker', name: 'ExampleBox', street: 'Example Street 1', city: 'Testville', postalCode: '00009' })
+  recordPickupCode(db, id, '000000', 1, NOW)        // the code pass is settled, so only a location could want this mail
+  let reads = 0
+  const report = await runPickupCodes({ db, now: NOW, readMail: () => { reads++; return GLS_MAIL } })
+  expect(reads).toBe(0)
+  expect(report.scanned).toBe(0)
+})
+
+test('the newest mail decides where the parcel is', async () => {
+  // A parcel moved to another box gets a second mail; the older one must not win.
+  const id = waiting()
+  mail(id, '/mail/moved.eml', '2026-10-26T20:00:00Z')
+  const moved = Buffer.from(
+    'Subject: x\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n'
+    + 'Odberné miesto:\r\nOtherBox Testville,\r\nOther Street 2,\r\n00002, Testville\r\n',
+  )
+  const read = (p: string) => (p === '/mail/moved.eml' ? moved : GLS_MAIL)
+  await runPickupCodes({ db, now: NOW, readMail: read })
+  expect(pickupOf(id)).toEqual({
+    kind: 'locker', name: 'OtherBox Testville', street: 'Other Street 2', city: 'Testville', postalCode: '00002',
+  })
+})
+
+test('a pickup point that already has coordinates is left exactly as it was', async () => {
+  const located: PickupPoint = { kind: 'zbox', name: 'Z-BOX', city: 'Testville', lat: 48.15127, lon: 17.15755 }
+  const id = waiting(located)
+  await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  expect(pickupOf(id)).toEqual(located)
+})
+
+test('the mail is not used when it names a different town than the carrier did', async () => {
+  // A redirected parcel, or a mail about an earlier leg: a street from one town under another town's
+  // name is the wrong-pin error, so the fill is refused outright.
+  const elsewhere: PickupPoint = { kind: 'parcelshop', city: 'Košice' }
+  const id = waiting(elsewhere)
+  await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  expect(pickupOf(id)).toEqual(elsewhere)
+})
+
+test('what the carrier said about the status, its detail and its deadline survives the fill', async () => {
+  const id = waiting()
+  const till = new Date('2026-11-02T18:00:00Z')
+  updateParcelState(db, id, { status: 'ready_for_pickup', statusRaw: 'DELIVEREDPS', statusDetail: 'Balikomat', retainedTill: till, lastPolledAt: NOW })
+  await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  const p = getParcel(db, id)!
+  expect(p.pickup).toEqual(FROM_MAIL)
+  expect(p.status).toBe('ready_for_pickup')
+  expect(p.statusRaw).toBe('DELIVEREDPS')
+  expect(p.statusDetail).toBe('Balikomat')
+  expect(p.retainedTill).toEqual(till)
+  expect(p.lastPolledAt).toEqual(NOW)
+})
+
+test('a parcel whose mail has no pickup block is not read again on the next poll', async () => {
+  const id = waiting()
+  const body = Buffer.from('Subject: x\r\n\r\nVáš balík je na ceste. Odberné miesto zatiaľ nepoznáme.')
+  let reads = 0
+  const read = () => { reads++; return body }
+  await runPickupCodes({ db, now: NOW, readMail: read })
+  expect(pickupOf(id)).toBeUndefined()
+  expect(reads).toBe(1)
+  await runPickupCodes({ db, now: NOW, readMail: read })
+  expect(reads).toBe(1)              // nothing new arrived, so nothing was opened again
+})
+
+test('a point the carrier replaces on every poll is refilled on every poll', async () => {
+  // `updateParcelState` replaces the pickup point wholesale, so the carrier's next answer wipes the
+  // street and postcode this scan added. Re-reading is what keeps the address on the page.
+  const thin: PickupPoint = { kind: 'parcelshop' }
+  const id = waiting(thin)
+  let reads = 0
+  const read = () => { reads++; return GLS_MAIL }
+  await runPickupCodes({ db, now: NOW, readMail: read })
+  expect(pickupOf(id)?.street).toBe(FROM_MAIL.street)
+  updateParcelState(db, id, { status: 'ready_for_pickup', pickup: thin })   // as the next poll does
+  await runPickupCodes({ db, now: NOW, readMail: read })
+  expect(pickupOf(id)?.street).toBe(FROM_MAIL.street)
+  expect(reads).toBe(2)
+})
+
+test('an unreadable .eml does not stop the parcel\'s other mail being tried for a location', async () => {
+  const id = waiting()
+  mail(id, '/mail/broken.eml', '2026-10-26T20:00:00Z')      // newer, so it is opened first
+  const read = (p: string) => {
+    if (p === '/mail/broken.eml') throw new Error('ENOENT')
+    return GLS_MAIL
+  }
+  await runPickupCodes({ db, now: NOW, readMail: read })
+  expect(pickupOf(id)).toEqual(FROM_MAIL)
+})
+
+test('the scan asks nobody: no request leaves the machine', async () => {
+  const id = waiting()
+  const real = globalThis.fetch
+  globalThis.fetch = (() => { throw new Error('the scan must not use the network') }) as typeof fetch
+  try {
+    await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  } finally { globalThis.fetch = real }
+  expect(pickupOf(id)).toEqual(FROM_MAIL)
+})
+
+test('a parcel that is not waiting for collection is given no location', async () => {
+  const id = insertParcel(db, { carrier: 'gls', trackingNumber: '000000000002', source: 'manual' })
+  updateParcelState(db, id, { status: 'in_transit' })
+  mail(id, '/mail/gls.eml')
+  const report = await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  expect(pickupOf(id)).toBeUndefined()
+  expect(report.points).toBe(0)
+})
+
+test('the point read from mail is what the parcel page then shows', async () => {
+  const { buildServer } = await import('../src/web/server.js')
+  const { config } = await import('./poll-helpers.js')
+  const id = waiting()
+  await runPickupCodes({ db, now: NOW, readMail: () => GLS_MAIL })
+  const body = (await buildServer({ db, config }).inject({ method: 'GET', url: `/parcel/${id}` })).body
+  expect(body).toContain('Príkladová 6')
+  expect(body).toContain('Testville')
 })
