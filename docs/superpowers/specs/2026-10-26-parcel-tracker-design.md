@@ -909,7 +909,7 @@ Server-rendered pages, no build step, no frontend framework. Bound to
 - **Injection test:** a parcel label containing quotes, backslashes, and newlines
   passes through the notifier without breaking or executing.
 - No live carrier calls in the test suite. A separate, manually-run
-  `npm run probe -- <carrier> <number>` script exercises real endpoints and prints
+  `node dist/cli.js probe <carrier> <number>` command exercises real endpoints and prints
   the raw response — the tool for the first-real-parcel confirmations in §15.
 
 ---
@@ -927,7 +927,7 @@ Assumptions, correctable at review:
 5. One default postal code (the user's own) for GLS/DPD, overridable per parcel.
 
 Confirmations owed against the first real parcel of each carrier, via
-`npm run probe`:
+`node dist/cli.js probe <carrier> <number>`:
 
 | Carrier | To confirm |
 |---|---|

@@ -43,3 +43,10 @@ test('every entry point that can poll calls initRuntime(config)', () => {
     expect(source, entry).not.toMatch(/setDpdAuthStore/)   // one place sets it
   }
 })
+
+test('poll.ts and cli.ts build their run with buildPollDeps, so they cannot drift', () => {
+  for (const entry of ['poll.ts', 'cli.ts']) {
+    const source = readFileSync(new URL(`../src/${entry}`, import.meta.url), 'utf8')
+    expect(source, entry).toMatch(/runPoll\(buildPollDeps\(/)
+  }
+})

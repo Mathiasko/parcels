@@ -5,7 +5,7 @@ import { loadRuntimeConfig, type Config } from './core/config.js'
 import { captureBodies, createHttpClient } from './core/http.js'
 import { runPoll, summarize } from './core/poll.js'
 import type { CarrierAdapter, CarrierId, HttpClient } from './core/types.js'
-import { initRuntime } from './core/runtime.js'
+import { buildPollDeps, initRuntime } from './core/runtime.js'
 import { allAdapters, getAdapter, normalizeNumber, resolveCarrier } from './carriers/registry.js'
 import { openDb, type Database } from './db/index.js'
 import { createNotifier, type SpawnFn } from './notify/send.js'
@@ -109,16 +109,13 @@ function show(argv: string[], ctx: CliContext): void {
 }
 
 async function poll(ctx: CliContext): Promise<void> {
-  const report = await runPoll({
-    db: ctx.db,
-    http: ctx.http ?? createHttpClient(),
-    adapters: ctx.adapters ?? allAdapters(),
-    config: ctx.config,
-    now: new Date(),
-    // A manual poll stores the very status changes the hourly run would have announced, so it must
-    // announce them itself or they would be lost.
-    notifier: ctx.notifier ?? createNotifier(ctx.config.notifier),
-  })
+  // The same run the hourly agent does (including mail ingest), built by the same function. A manual poll
+  // stores the very status changes the hourly run would have announced, so it announces them too.
+  const report = await runPoll(buildPollDeps(ctx.db, ctx.config, {
+    ...(ctx.http && { http: ctx.http }),
+    ...(ctx.adapters && { adapters: ctx.adapters }),
+    ...(ctx.notifier && { notifier: ctx.notifier }),
+  }))
   ctx.out(summarize(report))
 }
 

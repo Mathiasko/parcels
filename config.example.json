@@ -4,10 +4,10 @@
   "port": 8787,
   "notifier": "auto",
   "imap": {
-    "host": "imap.example.com",
+    "host": "imap.gmail.com",
     "port": 993,
-    "user": "parcels@example.com",
-    "pass": "app-password",
-    "mailbox": "INBOX"
+    "user": "your.address@gmail.com",
+    "pass": "your-16-character-app-password",
+    "mailbox": "parcels"
   }
 }

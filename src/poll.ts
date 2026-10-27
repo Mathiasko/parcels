@@ -1,11 +1,7 @@
-import { dirname, join } from 'node:path'
-import { createHttpClient } from './core/http.js'
 import { loadRuntimeConfig } from './core/config.js'
 import { runPoll, summarize } from './core/poll.js'
-import { allAdapters } from './carriers/registry.js'
-import { initRuntime } from './core/runtime.js'
+import { buildPollDeps, initRuntime } from './core/runtime.js'
 import { openDb } from './db/index.js'
-import { createNotifier } from './notify/send.js'
 import { checkSleepGap, recordPoll } from './core/sleepgap.js'
 
 /**
@@ -22,12 +18,7 @@ async function main(): Promise<void> {
     // (tier backoff only; the gated-carrier throttle and needs_postcode skip still apply).
     const startedMs = Date.now()
     const gap = checkSleepGap(db)
-    const report = await runPoll({
-      db, http: createHttpClient(), adapters: allAdapters(), config, now: new Date(),
-      notifier: createNotifier(config.notifier), forceAll: gap.longGap,
-      // Raw mail lands in data/mail beside the database. Read-only against the mailbox; see ingest/imap.ts.
-      ingest: config.imap && { imap: config.imap, mailDir: join(dirname(config.dbPath), 'mail') },
-    })
+    const report = await runPoll(buildPollDeps(db, config, { forceAll: gap.longGap }))
     // Only after the run completed (a crash mid-refresh leaves the gap to be retried), and never fatal:
     // failing to note the time must not turn a good poll into exit 1.
     try { recordPoll(db, startedMs) } catch (err) {
