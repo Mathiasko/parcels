@@ -34,6 +34,15 @@ function delivered(
   return id
 }
 
+const JUNK_SUBJECT = 'Verification of your e-mail in the Packeta app'
+
+/** A stored message the ingest could not turn into a parcel: the needs-attention case. */
+const junkMail = (db: Database, messageId = '<junk@x>', subject = JUNK_SUBJECT): number =>
+  Number(db.prepare(`
+    INSERT INTO messages (message_id, received_at, from_addr, subject, raw_path, parsed_ok, parse_note)
+    VALUES (?, ?, 'noreply@packeta.com', ?, '/tmp/junk.eml', 0, 'no tracking number found in this message')
+  `).run(messageId, new Date(NOW.getTime() - 3_600_000).toISOString(), subject).lastInsertRowid)
+
 const form = (fields: Record<string, string>) => ({
   payload: new URLSearchParams(fields).toString(),
   headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -251,6 +260,89 @@ describe('web pages', () => {
     expect((await post(db, '/attention/999/assign', { number: 'RA123456785SK' })).statusCode).toBe(404)
   })
 
+  test('GET /attention offers Dismiss in a form of its own, secondary to Assign', async () => {
+    const db = memDb()
+    const id = junkMail(db)
+    const body = (await get(db, '/attention')).body
+    const assign = body.indexOf(`action="/attention/${id}/assign"`)
+    const dismiss = body.indexOf(`action="/attention/${id}/dismiss"`)
+    expect(assign).toBeGreaterThan(-1)
+    expect(dismiss).toBeGreaterThan(-1)
+    // A second button INSIDE the assign form would submit the assign fields, so the dismiss form
+    // must open after the assign form has closed.
+    expect(dismiss).toBeGreaterThan(body.indexOf('</form>', assign))
+    const dismissForm = body.slice(body.lastIndexOf('<form', dismiss), body.indexOf('</form>', dismiss))
+    expect(dismissForm).toContain('Dismiss')
+    expect(dismissForm).toContain('method="post"')
+    expect(dismissForm).not.toContain('class="pri"')   // never competes with Assign (design-language §6.7)
+    expect(dismissForm).not.toContain('name="number"') // and carries no assign field
+  })
+
+  test('POST /attention/:messageId/dismiss clears the item from the list and keeps the mail', async () => {
+    const db = memDb()
+    const id = junkMail(db)
+    const res = await post(db, `/attention/${id}/dismiss`, {})
+    expect(res.statusCode).toBe(303)
+    expect(res.headers.location).toBe('/attention')
+    // parsed_ok = 1 with no parcel: out of /attention and out of every future reprocess run.
+    expect(db.prepare('SELECT parsed_ok, parcel_id, parse_note, raw_path FROM messages WHERE id = ?').get(id))
+      .toMatchObject({ parsed_ok: 1, parcel_id: null, parse_note: 'Dismissed', raw_path: '/tmp/junk.eml' })
+    expect((await get(db, '/attention')).body).not.toContain(JUNK_SUBJECT)
+    expect(db.prepare('SELECT COUNT(*) n FROM messages').get()).toEqual({ n: 1 })   // the row is never deleted
+  })
+
+  test('dismissing twice, dismissing an assigned message, or an unknown id is a 404 rather than a surprise', async () => {
+    const db = memDb()
+    const id = junkMail(db)
+    expect((await post(db, `/attention/${id}/dismiss`, {})).statusCode).toBe(303)
+    expect((await post(db, `/attention/${id}/dismiss`, {})).statusCode).toBe(404)   // stale page / double submit
+    expect((await post(db, '/attention/999/dismiss', {})).statusCode).toBe(404)
+    expect((await post(db, '/attention/not-a-number/dismiss', {})).statusCode).toBe(404)
+
+    const assigned = junkMail(db, '<m2@x>', 'Shipped')
+    const parcel = insertParcel(db, { carrier: 'posta', trackingNumber: 'RR9', source: 'email' })
+    db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = ? WHERE id = ?').run(parcel, assigned)
+    expect((await post(db, `/attention/${assigned}/dismiss`, {})).statusCode).toBe(404)
+    expect(db.prepare('SELECT parcel_id FROM messages WHERE id = ?').get(assigned)).toEqual({ parcel_id: parcel })
+  })
+
+  test('GET /parcel/:id puts Delete behind a disclosure, below the content, with the consequence spelled out', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'posta', trackingNumber: 'RR1', label: 'Doomed', source: 'manual' })
+    appendEvents(db, id, [ev('scan', 'in_transit')])
+    const body = (await get(db, `/parcel/${id}`)).body
+    const del = body.indexOf(`action="/parcel/${id}/delete"`)
+    expect(del).toBeGreaterThan(-1)
+    expect(body.lastIndexOf('<details', del)).toBeGreaterThan(-1)       // revealed, not sitting out in the open
+    expect(del).toBeGreaterThan(body.indexOf('Timeline'))               // low on the page, not competing
+    expect(body).toMatch(/tracking history are deleted for good/)       // what goes
+    expect(body).toMatch(/emails it came from are kept/)                // and what stays
+    expect(body).not.toMatch(/<script|onclick|confirm\(/i)              // the CSP ships zero JS
+  })
+
+  test('POST /parcel/:id/delete deletes the parcel and goes back to the in-flight list', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'posta', trackingNumber: 'RR1', label: 'Doomed', source: 'manual' })
+    appendEvents(db, id, [ev('scan', 'in_transit')])
+    const res = await post(db, `/parcel/${id}/delete`, {})
+    expect(res.statusCode).toBe(303)
+    expect(res.headers.location).toBe('/')
+    expect(getParcel(db, id)).toBeUndefined()
+    expect(db.prepare('SELECT COUNT(*) n FROM events').get()).toEqual({ n: 0 })
+    expect((await get(db, `/parcel/${id}`)).statusCode).toBe(404)
+    expect((await post(db, `/parcel/${id}/delete`, {})).statusCode).toBe(404)
+    expect((await post(db, '/parcel/999/delete', {})).statusCode).toBe(404)
+  })
+
+  test('an archived parcel, reachable from /history, can be deleted too', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'posta', trackingNumber: 'RR1', label: 'Old mail', source: 'email' })
+    setArchived(db, id, new Date(NOW.getTime() - 5 * DAY))
+    expect((await get(db, `/parcel/${id}`)).body).toContain(`action="/parcel/${id}/delete"`)
+    expect((await post(db, `/parcel/${id}/delete`, {})).statusCode).toBe(303)
+    expect(getParcel(db, id)).toBeUndefined()
+  })
+
   test('POST /refresh triggers a poll of the given parcel only', async () => {
     const db = memDb()
     const a = insertParcel(db, { carrier: 'posta', trackingNumber: 'RR1', label: 'A', source: 'manual' })
@@ -439,7 +531,7 @@ describe('web pages: fix round 1', () => {
     const ok = await app.inject({ method: 'GET', url: '/' })
     const refused = await app.inject({ method: 'GET', url: '/', headers: { host: 'evil.example' } })
     for (const res of [ok, refused]) {
-      expect(res.headers['content-security-policy']).toBe("default-src 'none'; style-src 'unsafe-inline'; form-action 'self'")
+      expect(res.headers['content-security-policy']).toBe("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'")
       expect(res.headers['x-content-type-options']).toBe('nosniff')
     }
   })
@@ -666,7 +758,7 @@ describe('GET /: the lede', () => {
     const body = (await get(db, '/')).body
     expect(body.match(/class="pk"/g)).toHaveLength(1)
     expect(body.match(/Z-BOX Hlavna 6/g)).toHaveLength(1)
-    expect(body).toContain('Packeta gives no pickup deadline.')   // stated, not omitted: the reader would assume there is none
+    expect(body).toContain('Packeta did not give a pickup deadline.')   // stated, not omitted: the reader would assume there is none
     expect(body.indexOf('On the van')).toBeLessThan(body.indexOf('class="pk"'))
   })
 })

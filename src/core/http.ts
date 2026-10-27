@@ -76,6 +76,49 @@ export function createHttpClient(opts: HttpClientOptions = {}): HttpClient {
   }
 }
 
+/** What one binary GET produced. `bytes` is empty on any status that carried no body. */
+export interface BinaryResponse { status: number; bytes: Uint8Array }
+
+/** A single binary GET. Separate from `HttpClient`, whose `HttpResponse` only speaks text. */
+export type BinaryFetch = (url: string, init?: RequestInit) => Promise<BinaryResponse>
+
+/** Bodies above this are not a map tile and are discarded unread-into-memory-whole. A 256px PNG is a few kB. */
+export const MAX_BINARY_BYTES = 512 * 1024
+
+/**
+ * A fetcher for responses that are not text. `HttpClient` cannot be used for a PNG: it reads every
+ * body with `text()`, and decoding image bytes as UTF-8 destroys them irrecoverably. Rather than
+ * widen the interface every carrier adapter and every test stub implements, binary GETs get their
+ * own two dozen lines here, beside the client they are a sibling of.
+ *
+ * Deliberately without retries, unlike `createHttpClient`: the only caller fetches map tiles from a
+ * free community service during a poll, where a missing tile costs nothing (the page simply shows no
+ * map) and a retry storm costs that service. The next poll tries again, an hour later.
+ */
+export function createBinaryFetch(opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {}): BinaryFetch {
+  const { timeoutMs = 15_000, fetchImpl = fetch } = opts
+  return async (url, init) => {
+    const timeout = AbortSignal.timeout(timeoutMs)
+    const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout
+    let res: Response
+    try {
+      res = await fetchImpl(url, { ...init, signal })
+    } catch (err) {
+      throw new HttpTransportError(url, err)
+    }
+    try {
+      const buf = await res.arrayBuffer()
+      // An oversized body is not a map tile; report the status and drop the bytes rather than cache it.
+      return {
+        status: res.status,
+        bytes: buf.byteLength > MAX_BINARY_BYTES ? new Uint8Array(0) : new Uint8Array(buf),
+      }
+    } catch (err) {
+      throw new HttpTransportError(url, err)
+    }
+  }
+}
+
 /**
  * Longest body `captureBodies` keeps. Captured bodies end up in `raw_responses` as diagnostics for a
  * wrong status mapping; an adapter that has to fetch a page or script on the way (SPS reads its key

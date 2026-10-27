@@ -38,4 +38,10 @@ test('buildPollDeps lets a caller override pieces without losing ingest', () => 
   expect(deps.forceAll).toBe(true)
   expect(deps.adapters).toEqual([])
   expect(deps.ingest?.mailDir).toBe('/tmp/parcels-test/mail')
+  expect(deps.mapPreview?.tileDir).toBe('/tmp/parcels-test/tiles')
+})
+
+test('buildPollDeps leaves out the map preview entirely when the config turns it off', () => {
+  const deps = buildPollDeps(memDb(), { ...config, dbPath: '/tmp/parcels-test/parcels.db', mapPreview: false })
+  expect(deps.mapPreview).toBeUndefined()
 })

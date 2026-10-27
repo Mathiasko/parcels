@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { fetchMessages, receivedAt, type RawMessage } from '../src/ingest/imap.js'
-import { storeMessage } from '../src/db/messages.js'
+import { dismissMessage, storeMessage } from '../src/db/messages.js'
 import { fakeImap, type FakeMessage } from './imap-fake.js'
 import { memDb } from './poll-helpers.js'
 
@@ -158,5 +158,35 @@ describe('storeMessage', () => {
     const db = memDb()
     expect(() => storeMessage(db, raw(), '/dev/null/not-a-dir')).toThrow()
     expect((db.prepare('SELECT COUNT(*) n FROM messages').get() as { n: number }).n).toBe(0)
+  })
+})
+
+describe('dismissMessage', () => {
+  const row = (db: ReturnType<typeof memDb>, id: number) =>
+    db.prepare('SELECT parsed_ok, parcel_id, parse_note, raw_path FROM messages WHERE id = ?').get(id) as Record<string, unknown>
+  const unparsed = (db: ReturnType<typeof memDb>) =>
+    Number(db.prepare("INSERT INTO messages (message_id, subject, raw_path, parsed_ok) VALUES ('<junk@x>', 'Verification of your e-mail', '/tmp/1.eml', 0)")
+      .run().lastInsertRowid)
+
+  test('marks junk mail parsed with a note, leaving it unassigned and its .eml path alone', () => {
+    const db = memDb()
+    const id = unparsed(db)
+    expect(dismissMessage(db, id)).toBe(true)
+    expect(row(db, id)).toMatchObject({ parsed_ok: 1, parcel_id: null, parse_note: 'Dismissed', raw_path: '/tmp/1.eml' })
+  })
+
+  test('a second dismiss, an assigned message and an unknown id are all no-ops', () => {
+    const db = memDb()
+    const id = unparsed(db)
+    dismissMessage(db, id)
+    expect(dismissMessage(db, id)).toBe(false)
+
+    const assigned = Number(db.prepare("INSERT INTO messages (message_id, subject, parsed_ok) VALUES ('<ok@x>', 'Shipped', 0)").run().lastInsertRowid)
+    db.prepare("INSERT INTO parcels (carrier, tracking_number, status, first_seen_at, source) VALUES ('gls','000000000009','unknown','x','manual')").run()
+    db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = 1 WHERE id = ?').run(assigned)
+    expect(dismissMessage(db, assigned)).toBe(false)
+    expect(row(db, assigned)).toMatchObject({ parcel_id: 1, parse_note: null })   // the link is not overwritten
+
+    expect(dismissMessage(db, 404)).toBe(false)
   })
 })

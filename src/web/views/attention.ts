@@ -14,13 +14,15 @@ export function attentionPage(
   return layout('Attention', '/attention', html`
 <h1>Needs attention</h1>
 <div class="col"><h2>Emails that did not yield a parcel</h2>
-${messages.length === 0 ? html`<p class="empty">Nothing waiting.</p>` : messages.map(m => html`<div class="item">
+${messages.length === 0 ? html`<p class="empty">Nothing waiting.</p>` : html`<p class="meta">Assign one to a parcel, or dismiss it as junk. Dismissing only takes it off this list: the email itself is kept.</p>
+${messages.map(m => html`<div class="item">
   <h3>${m.subject ?? '(no subject)'}</h3>
   <div class="meta">${m.from ?? 'unknown sender'}${m.receivedAt ? html` · ${formatDateTime(m.receivedAt, ctx.now)}` : ''}${m.note ? html` · ${m.note}` : ''}</div>
   ${error?.messageId === m.id ? notice('warn', html`<p>${error.message}</p>`, true) : ''}
-  <form method="post" action="/attention/${m.id}/assign">${parcelFields(error?.messageId === m.id ? error.values : {})}
+  <div class="acts"><form method="post" action="/attention/${m.id}/assign">${parcelFields(error?.messageId === m.id ? error.values : {})}
   <p><button class="pri">Assign to a parcel</button></p></form>
-</div>`)}</div>
+  <form method="post" action="/attention/${m.id}/dismiss"><button class="link">Dismiss<span class="vh"> ${m.subject ?? '(no subject)'}</span></button></form></div>
+</div>`)}`}</div>
 <h2>Dormant parcels</h2>
 <p class="meta">No tracking event for over 30 days, so they are no longer polled.</p>
 ${dormant.length === 0 ? html`<p class="empty">None.</p>` : scroller('Dormant parcels', html`<table><thead><tr><th scope="col">Parcel</th><th scope="col">Number</th><th scope="col" class="d">Waiting</th></tr></thead><tbody>${dormant.map(p => html`<tr>

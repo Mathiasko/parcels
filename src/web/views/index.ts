@@ -18,11 +18,27 @@ export function pickupSummary(p: Parcel): string | undefined {
   return [place, p.pickup.city].filter(Boolean).join(', ') || undefined
 }
 
-/** A Maps link only when the carrier gave coordinates: a link built from a name alone would be a guess. */
+/**
+ * A Maps link for the pickup point. Coordinates are a pin and win when present, but only Packeta ever
+ * sends them and not for every point, so insisting on them left the link off almost every parcel that
+ * has somewhere to go. Without them the link is a SEARCH for the address instead: less precise, and
+ * occasionally the wrong branch of a chain, but it gets you walking rather than leaving you to retype
+ * the address by hand.
+ *
+ * The search text is exactly the string the panel displays, so the place you read is the place you open.
+ */
 export function mapsUrl(p: Parcel): string | undefined {
   const { lat, lon, name } = p.pickup ?? {}
-  if (lat === undefined || lon === undefined) return undefined
-  return `https://maps.apple.com/?ll=${lat},${lon}${name ? `&q=${encodeURIComponent(name)}` : ''}`
+  if (lat !== undefined && lon !== undefined) {
+    return `https://maps.apple.com/?ll=${lat},${lon}${name ? `&q=${encodeURIComponent(name)}` : ''}`
+  }
+  // A postal address, not the place's name. Searching a name drags in the wrong branch of a chain, and a
+  // name that embeds its city ahead of its street ("Z-BOX Bratislava, Hlavna 6") sends the search to
+  // whichever town matches the street first. Only when there is no street at all is the name the best we have.
+  const { street, city, postalCode } = p.pickup ?? {}
+  const where = [postalCode, city].filter(Boolean).join(' ')
+  const query = street ? [street, where].filter(Boolean).join(', ') : [name, where].filter(Boolean).join(', ')
+  return query === '' ? undefined : `https://maps.apple.com/?q=${encodeURIComponent(query)}`
 }
 
 /** The result of the last "refresh now" click, carried through the redirect as plain counters. */
@@ -83,7 +99,9 @@ export function noDeadlineNote(entries: Entry[]): string {
   const carriers = [...new Set(entries.filter(e => !e.parcel.retainedTill).map(e => e.parcel.carrier))]
   if (carriers.length === 0) return ''
   const names = carriers.map(c => CARRIER_NAME[c])
-  return `${listNames(names)} ${names.length === 1 ? 'gives' : 'give'} no pickup deadline.`
+  // "gives no deadline" is a claim about the carrier, and it was wrong: Packeta sends one in `storedUntil`
+  // and this app simply did not read it. What can honestly be said is what THIS response contained.
+  return `${listNames(names)} did not give a pickup deadline.`
 }
 
 // --- the page ---------------------------------------------------------------------------------------

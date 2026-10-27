@@ -189,6 +189,17 @@ export function updateParcelState(db: Database, id: number, s: ParcelStateUpdate
   })
 }
 
+/**
+ * Writes coordinates onto an existing pickup point and touches nothing else. Deliberately not part of
+ * `ParcelStateUpdate`: that one replaces the pickup point wholesale, which is right for a carrier
+ * answer and wrong here, where the geocoder has learned one extra fact about the place the carrier
+ * named. The row is left alone when it has no pickup point at all, so a lookup can never invent one.
+ */
+export function setPickupCoords(db: Database, id: number, lat: number, lon: number): void {
+  db.prepare('UPDATE parcels SET pickup_lat = ?, pickup_lon = ? WHERE id = ? AND pickup_kind IS NOT NULL')
+    .run(lat, lon, id)
+}
+
 /** Stamps every attempt, answered or not. `lastPolledAt` stays "last real answer". */
 export function markAttempted(db: Database, ids: number[], at: Date): void {
   const mark = db.prepare('UPDATE parcels SET last_attempted_at = ? WHERE id = ?')
@@ -236,6 +247,30 @@ export function setLabel(db: Database, id: number, label: string): void {
  */
 export function setPostalCode(db: Database, id: number, postalCode: string): void {
   db.prepare('UPDATE parcels SET postal_code = ? WHERE id = ?').run(postalCode === '' ? null : postalCode, id)
+}
+
+/**
+ * Deletes a parcel for good, in one transaction (`foreign_keys = ON`, so the order is the point: every
+ * child row goes before the parcel itself).
+ *
+ * The parcel's own `events`, `raw_responses` and `deadline_reminders` rows are deleted; a carrier-level
+ * raw body (`parcel_id IS NULL`, from a failed batch) belongs to the carrier and is left alone.
+ *
+ * The `messages` rows are NOT deleted, they are unlinked, and that is load-bearing twice over:
+ *   - the ingest dedupes by Message-ID against this table, so deleting the rows would make the next
+ *     poll re-ingest the same mail and RECREATE the parcel that was just deleted;
+ *   - `parsed_ok = 1` (not 0) keeps the orphaned mail off /attention, because deleting a parcel must
+ *     not dump its emails into the attention queue as fresh alerts.
+ * The `.eml` files stay on disk; the note says why the row no longer points anywhere.
+ */
+export function deleteParcel(db: Database, id: number): void {
+  db.transaction(() => {
+    db.prepare('DELETE FROM events WHERE parcel_id = ?').run(id)
+    db.prepare('DELETE FROM raw_responses WHERE parcel_id = ?').run(id)
+    db.prepare('DELETE FROM deadline_reminders WHERE parcel_id = ?').run(id)
+    db.prepare("UPDATE messages SET parcel_id = NULL, parsed_ok = 1, parse_note = 'Parcel deleted; email kept' WHERE parcel_id = ?").run(id)
+    db.prepare('DELETE FROM parcels WHERE id = ?').run(id)
+  })()
 }
 
 export interface DeliveredFilter {

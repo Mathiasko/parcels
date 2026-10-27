@@ -163,6 +163,21 @@ form.inline{display:inline}
 .er .w{display:block;font-size:.8125rem;line-height:1.3846;font-weight:600;margin-bottom:.125rem}
 .er .loc{font-size:.8125rem;color:var(--ink-3)}
 
+/* the pickup map: a window onto a block of cached tiles, offset in CSS so the point is dead centre.
+   The frame is fixed-size and clips; the 3x3 block is 768px square, so the point can never be nearer
+   than 256px to its edge and a frame up to 512px across shows no gap. The marker earns --signal: a
+   parcel waiting for collection is the one thing on this site that is genuinely waiting on you. */
+.map{margin:.75rem 0 0;max-width:24rem}
+.map-f{position:relative;height:12rem;overflow:hidden;border:1px solid var(--rule-s);border-radius:8px;background:var(--hover)}
+.map-g{position:absolute;display:grid;line-height:0}
+.map-g img{display:block;max-width:none}
+.map-pin{position:absolute;left:50%;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--signal);box-shadow:0 0 0 2.5px var(--surface),0 0 0 4px var(--signal)}
+/* the OpenStreetMap credit is a licence condition, so it is part of the map and not a caption that
+   could be cropped away: on the map, opaque, and the only link inside the frame. */
+.map-c{position:absolute;right:0;bottom:0;margin:0;padding:.0625rem .375rem;background:var(--surface);border-top-left-radius:6px;font-size:.6875rem;line-height:1.4545;color:var(--ink-3)}
+.map-c a{color:var(--ink-3)}
+@media(forced-colors:active){.map-pin{background:Highlight;box-shadow:0 0 0 2.5px Canvas,0 0 0 4px Highlight}}
+
 /* tables */
 table{width:100%;border-collapse:collapse}
 .scroll{overflow-x:auto}
@@ -186,10 +201,19 @@ td .st{line-height:1.375rem}
 .item h3{overflow-wrap:break-word}
 .item form{margin-top:1rem}
 .item .notice{margin-top:.75rem}
+/* Assign and Dismiss are two sibling forms: Dismiss cannot be a second button inside the assign form
+   (it would submit the assign fields), so they sit side by side, bottoms aligned. The margins move to
+   this container, because a stray margin below either form would pull the two buttons out of line. */
+.acts{display:flex;gap:.5rem 1rem;align-items:flex-end;flex-wrap:wrap;margin-top:1rem}
+.acts form{margin:0}
+.acts p{margin:1rem 0 0}
 
 /* raw responses */
 details{margin:.25rem 0}
 summary{font-size:.8125rem;color:var(--ink-3);cursor:pointer;padding:.25rem 0}
+/* the destructive action: last on the page, below a rule of its own, and quiet until it is opened */
+.del{margin:3rem 0 0;border-top:1px solid var(--rule);padding-top:.75rem}
+.del p{max-width:34rem;color:var(--ink-2);margin:.5rem 0 .75rem}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:20rem;overflow:auto;background:var(--surface);border:1px solid var(--rule-s);border-radius:8px;padding:.75rem;margin:.25rem 0 .75rem;font:400 .75rem/1.5 ui-monospace,"SF Mono",Menlo,monospace}
 
 @media(max-width:40rem){.row{grid-template-columns:1rem minmax(0,1fr)}.row time{grid-column:2;grid-row:auto;text-align:left}.pk-h{flex-direction:column}}

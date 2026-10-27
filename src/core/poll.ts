@@ -7,6 +7,7 @@ import type { Notifier } from '../notify/types.js'
 import { buildNotifications } from '../notify/rules.js'
 import { ingestMessages, type IngestDeps, type IngestReport } from '../ingest/ingest.js'
 import { HttpTransportError, captureBodies } from './http.js'
+import { runMapPreview, summarizeMapPreview, type MapPreviewDeps, type MapPreviewReport } from './map-preview.js'
 import { isDormant, isDue, slotFor } from './backoff.js'
 import { dedupHash } from './dedup.js'
 import { appendEvents, markNotified, recomputeParcelStatus } from '../db/events.js'
@@ -37,6 +38,12 @@ export interface PollDeps {
    * starts, so a new parcel is polled in the very run that found it. Absent: no mail is touched.
    */
   ingest?: Pick<IngestDeps, 'imap' | 'mailDir' | 'client' | 'maxBytes'>
+  /**
+   * Where the map preview may cache tiles, and how to fetch them. Absent: no geocoding and no tile
+   * fetching happen at all, exactly as with `config.mapPreview: false` - which is checked here too,
+   * so the user's opt-out holds whatever a caller passes.
+   */
+  mapPreview?: Pick<MapPreviewDeps, 'tileDir' | 'fetchBytes' | 'sleep'>
 }
 
 export interface PollReport {
@@ -45,6 +52,8 @@ export interface PollReport {
   failures: Array<{ carrier: CarrierId; reason: string }>
   /** What the mail ingest did this run; absent when no ingest is configured. */
   ingest?: IngestReport
+  /** What the map preview did this run; absent when it is turned off or not configured. */
+  map?: MapPreviewReport
 }
 
 const RAW_RESPONSES_KEPT = 5
@@ -127,7 +136,26 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
     }
   }
   if (deps.notifier) await notify(deps.notifier, db, report, now, deps.config.port)
+  // Last, and after the notifications: this is the only step that deliberately sleeps (both services
+  // it uses are free and rate-limited), and nothing else in the run depends on it.
+  report.map = await mapPreview(deps)
   return report
+}
+
+/**
+ * Geocoding and tile fetching, which are an optional nicety on top of a poll. Two switches have to be
+ * on: `config.mapPreview` (the user's) and `deps.mapPreview` (the caller supplying somewhere to cache).
+ * Whatever goes wrong inside is logged and dropped: a map that cannot be drawn must never be able to
+ * turn a successful poll into a failed one, nor make the process exit non-zero.
+ */
+async function mapPreview(deps: PollDeps): Promise<MapPreviewReport | undefined> {
+  if (!deps.config.mapPreview || !deps.mapPreview) return undefined
+  try {
+    return await runMapPreview({ ...deps.mapPreview, db: deps.db, http: deps.http, now: deps.now })
+  } catch (err) {
+    console.error(`map preview: ${describe(err)}`)
+    return undefined
+  }
 }
 
 /**
@@ -358,5 +386,6 @@ export function summarize(report: PollReport): string {
     : i.error ? `, mail ingest failed: ${i.error}`
     : i.read === 0 ? ''
     : `, mail: ${i.read} new, ${i.created} parcel(s) created${i.archivedOld ? ` (${i.archivedOld} archived as old)` : ''}${i.needsAttention ? `, ${i.needsAttention} need attention` : ''}${i.failed ? `, ${i.failed} failed (will retry)` : ''}`
-  return `polled ${report.polled} parcel(s), ${report.newEvents.length} new event(s)${mail}${failed}`
+  const map = report.map ? summarizeMapPreview(report.map) : ''
+  return `polled ${report.polled} parcel(s), ${report.newEvents.length} new event(s)${mail}${map}${failed}`
 }

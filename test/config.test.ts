@@ -17,6 +17,13 @@ test('loadConfig throws a named error when defaultPostalCode is missing', () => 
 test('loadConfig leaves imap undefined when absent', () => {
   expect(loadConfig(fixturePath('minimal.json')).imap).toBeUndefined()
 })
+test('loadConfig turns the map preview on by default and takes false as the opt-out', () => {
+  expect(loadConfig(fixturePath('minimal.json')).mapPreview).toBe(true)
+  expect(loadConfig(fixturePath('no-map-preview.json')).mapPreview).toBe(false)
+})
+test('loadConfig rejects a mapPreview that is not a boolean', () => {
+  expect(() => loadConfig(fixturePath('bad-map-preview.json'))).toThrow(/mapPreview/)
+})
 
 test('loadRuntimeConfig resolves a relative dbPath against the config file, not the cwd', () => {
   const c = loadRuntimeConfig(fixturePath('minimal.json'))

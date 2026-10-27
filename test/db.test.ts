@@ -5,9 +5,10 @@ import { join } from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
 import { openDb, type Database } from '../src/db/index.js'
 import {
-  insertParcel, findParcel, listActive, updateParcelState, setArchived,
+  insertParcel, findParcel, getParcel, listActive, updateParcelState, setArchived, deleteParcel,
   type NewParcel,
 } from '../src/db/parcels.js'
+import { appendEvents } from '../src/db/events.js'
 
 let db: Database
 beforeEach(() => { db = openDb(':memory:') })
@@ -22,7 +23,7 @@ test('openDb creates all tables and re-applying the schema on the same handle is
   const names = (db.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
   ).all() as { name: string }[]).map(r => r.name)
-  expect(names).toEqual(['carrier_health', 'deadline_reminders', 'events', 'ingest_status', 'last_poll', 'messages', 'parcels', 'raw_responses', 'stale_poll_notice'])
+  expect(names).toEqual(['carrier_health', 'deadline_reminders', 'events', 'geocode_cache', 'ingest_status', 'last_poll', 'messages', 'parcels', 'raw_responses', 'stale_poll_notice'])
 })
 
 test('openDb enables WAL and foreign keys, and reopens a file-backed database', () => {
@@ -128,6 +129,66 @@ test('listActive excludes delivered, returned and archived parcels', () => {
   setArchived(db, archived, new Date('2026-07-14T00:00:00.000Z'))
   const list = listActive(db)
   expect(list.map(p => p.id)).toEqual([active])
+})
+
+/** One scan, reusable for two parcels (the dedup hash is per parcel). */
+const scan = {
+  occurredAtRaw: '13.07.2026 13:08', occurredAtTz: 'Europe/Bratislava',
+  occurredAt: new Date('2026-07-13T11:08:00.000Z'), status: 'in_transit' as const, description: 'Scanned',
+}
+const count = (db: Database, sql: string, ...args: unknown[]) =>
+  (db.prepare(`SELECT COUNT(*) n FROM ${sql}`).get(...args as never[]) as { n: number }).n
+
+test('deleteParcel removes the parcel with its events, raw responses and deadline reminder, and nothing else', () => {
+  const id = insertParcel(db, base)
+  const other = insertParcel(db, { ...base, trackingNumber: 'Z0000000099' })
+  appendEvents(db, id, [scan])
+  appendEvents(db, other, [scan])
+  const raws = db.prepare('INSERT INTO raw_responses (parcel_id, carrier, fetched_at, body) VALUES (?, ?, ?, ?)')
+  raws.run(id, 'packeta', '2026-07-13T11:08:00.000Z', 'this parcel')
+  raws.run(other, 'packeta', '2026-07-13T11:08:00.000Z', 'the other parcel')
+  raws.run(null, 'packeta', '2026-07-13T11:08:00.000Z', 'a failed batch, carrier-level')
+  const reminders = db.prepare('INSERT INTO deadline_reminders (parcel_id, notified_at) VALUES (?, ?)')
+  reminders.run(id, '2026-07-13T11:08:00.000Z')
+  reminders.run(other, '2026-07-13T11:08:00.000Z')
+
+  deleteParcel(db, id)
+
+  expect(getParcel(db, id)).toBeUndefined()
+  expect(count(db, 'events WHERE parcel_id = ?', id)).toBe(0)
+  expect(count(db, 'raw_responses WHERE parcel_id = ?', id)).toBe(0)
+  expect(count(db, 'deadline_reminders WHERE parcel_id = ?', id)).toBe(0)
+  // The other parcel keeps everything, and the carrier-level body belongs to the carrier, not to this parcel.
+  expect(getParcel(db, other)).toBeDefined()
+  expect(count(db, 'events')).toBe(1)
+  expect(count(db, 'deadline_reminders')).toBe(1)
+  expect(count(db, 'raw_responses')).toBe(2)
+  expect(count(db, 'raw_responses WHERE parcel_id IS NULL')).toBe(1)
+  // Nothing may be left pointing at the row that is gone.
+  expect(db.pragma('foreign_key_check')).toEqual([])
+})
+
+test('deleteParcel keeps the emails, unlinked and parsed_ok = 1: no re-ingest, and not dumped into needs-attention', () => {
+  const id = insertParcel(db, base)
+  db.prepare(`
+    INSERT INTO messages (message_id, received_at, from_addr, subject, raw_path, parsed_ok, parse_note, parcel_id)
+    VALUES ('<m1@x>', '2026-07-13T11:08:00.000Z', 'shop@example.com', 'Shipped', '/tmp/1.eml', 1, NULL, ?)
+  `).run(id)
+
+  deleteParcel(db, id)
+
+  // The row is what the ingest dedupes against: delete it and the next poll would recreate the parcel.
+  const row = db.prepare('SELECT message_id, parsed_ok, parcel_id, raw_path FROM messages').get()
+  expect(row).toMatchObject({ message_id: '<m1@x>', parsed_ok: 1, parcel_id: null, raw_path: '/tmp/1.eml' })
+  // parsed_ok = 1, so the attention predicate (parsed_ok = 0 AND parcel_id IS NULL) does not match it.
+  expect(count(db, 'messages WHERE parsed_ok = 0 AND parcel_id IS NULL')).toBe(0)
+  expect(db.pragma('foreign_key_check')).toEqual([])
+})
+
+test('deleteParcel on an id that is not there changes nothing', () => {
+  const id = insertParcel(db, base)
+  expect(() => deleteParcel(db, 404)).not.toThrow()
+  expect(getParcel(db, id)).toBeDefined()
 })
 
 test('openDb on a database from an older schema fails at open, naming the missing column', () => {

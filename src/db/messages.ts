@@ -40,3 +40,22 @@ export function storeMessage(db: Database, m: RawMessage, dir: string): number {
     return id
   })()
 }
+
+/**
+ * Dismisses a message the ingest could not place: junk mail (a verification notice with no tracking
+ * number) that would otherwise sit on /attention as a permanent false alert.
+ *
+ * Dismissing is `parsed_ok = 1` with `parcel_id` still NULL. Both the attention list and `reprocess`
+ * select on `parsed_ok = 0 AND parcel_id IS NULL`, so this removes it from the page AND from every
+ * future reprocess run, with no schema change; the assign path already writes the same column the
+ * same way. Nothing is destroyed: the row stays, with a note saying why, and its `.eml` stays on disk.
+ *
+ * The predicate is repeated in the WHERE so a second dismiss, or one aimed at a message that has since
+ * been assigned, changes nothing. Returns whether this call was the one that dismissed it.
+ */
+export function dismissMessage(db: Database, id: number): boolean {
+  const info = db.prepare(
+    "UPDATE messages SET parsed_ok = 1, parse_note = 'Dismissed' WHERE id = ? AND parsed_ok = 0 AND parcel_id IS NULL",
+  ).run(id)
+  return info.changes > 0
+}

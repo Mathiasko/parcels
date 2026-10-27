@@ -4,7 +4,8 @@ import { authStorePathFor, setDpdAuthStore } from '../carriers/dpd.js'
 import type { Database } from '../db/index.js'
 import { createNotifier } from '../notify/send.js'
 import type { Config } from './config.js'
-import { createHttpClient } from './http.js'
+import { createBinaryFetch, createHttpClient } from './http.js'
+import { tileDirFor } from './tiles.js'
 import type { PollDeps } from './poll.js'
 
 /**
@@ -33,6 +34,11 @@ export function buildPollDeps(db: Database, config: Config, overrides: Partial<P
     notifier: createNotifier(config.notifier),
     // Raw mail lands in data/mail beside the database. Read-only against the mailbox; see ingest/imap.ts.
     ingest: config.imap && { imap: config.imap, mailDir: join(dirname(config.dbPath), 'mail') },
+    // Map tiles land in data/tiles, beside the mail. Omitted entirely when the preview is off, so the
+    // opt-out is visible in the dependencies and not only in a check inside the run.
+    mapPreview: config.mapPreview
+      ? { tileDir: tileDirFor(config.dbPath), fetchBytes: createBinaryFetch() }
+      : undefined,
     ...overrides,
   }
 }

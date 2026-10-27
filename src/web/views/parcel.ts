@@ -10,6 +10,7 @@ import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
 import { mapsUrl, noDeadlineNote, parcelName, pickupSummary, refreshBanner, sinceOf, type RefreshNote } from './index.js'
+import type { TileGrid } from '../../core/slippy.js'
 
 const RAW_SHOWN_CHARS = 20_000
 
@@ -65,8 +66,30 @@ function postcodeNotice(p: Parcel): Html {
   return html``
 }
 
+/**
+ * The static map: a grid of cached tiles inside a fixed window, shifted so the pickup point lands dead
+ * centre, with a marker over it. No JavaScript and no map library; the only moving part is the CSS
+ * offset, which is why the arithmetic behind it (`src/core/slippy.ts`) is unit-tested on its own.
+ *
+ * Every `<img>` is a path on this server. The caller has already checked that each tile is on disk, so
+ * nothing here can produce a broken image, and nothing here can produce a request to anyone else.
+ *
+ * The credit is not decoration: OpenStreetMap's licence requires visible attribution wherever its
+ * data is shown, so it sits on the map itself and goes away only when the map does.
+ */
+function mapPanel(grid: TileGrid, where: string): Html {
+  // Rounded to whole pixels: a sub-pixel offset blurs a raster tile, and the error is under half a pixel.
+  const offset = `left:calc(50% - ${Math.round(grid.pointX)}px);top:calc(50% - ${Math.round(grid.pointY)}px);width:${grid.width}px;height:${grid.height}px;grid-template-columns:repeat(${grid.size},${grid.tileSize}px)`
+  return html`<div class="map"><div class="map-f">
+<div class="map-g" role="img" aria-label="Map of ${where}" style="${offset}">${grid.tiles.map(t =>
+    html`<img src="/tile/${t.z}/${t.x}/${t.y}.png" alt="" width="${grid.tileSize}" height="${grid.tileSize}">`)}</div>
+<span class="map-pin"></span>
+<p class="map-c">© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a></p>
+</div></div>`
+}
+
 /** The place, how long it has been waiting (or the deadline), and a Maps link only if the carrier gave coordinates. */
-function pickupPanel(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx): Html {
+function pickupPanel(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx, map?: TileGrid): Html {
   const where = pickupSummary(p)
   if (!where) return html``
   const maps = mapsUrl(p)
@@ -80,7 +103,7 @@ function pickupPanel(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx): Ht
       ? html`<p class="clock">Since ${formatDateTime(since, ctx.now)}${days >= 1 ? html` · <b>${plural(days, 'day')}</b>` : ''}</p>` : ''
   const note = ready ? noDeadlineNote([{ parcel: p, last }]) : ''
   return html`<section class="pk" aria-label="Pickup point"><div class="pk-h${ready ? '' : raw(' plain')}${ready && left !== undefined && left <= 0 ? raw(' due-now') : ''}"><div class="where">${where}</div>${ready ? statusIndicator('ready_for_pickup') : html`<span class="meta">Pickup point</span>`}</div>
-<div class="pk-b">${clock}${note || maps ? html`<p class="meta">${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps ↗</a>` : ''}</p>` : ''}</div></section>`
+<div class="pk-b">${clock}${ready && map ? mapPanel(map, where) : ''}${note || maps ? html`<p class="meta">${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps ↗</a>` : ''}</p>` : ''}</div></section>`
 }
 
 function rawSection(raws: RawResponse[], ctx: PageCtx): Html {
@@ -89,6 +112,26 @@ function rawSection(raws: RawResponse[], ctx: PageCtx): Html {
   <summary>${formatDateTime(r.fetchedAt, ctx.now)}${r.carrierLevel ? ' · carrier-level (a failed batch of several parcels, not specific to this one)' : ''}</summary>
   <pre tabindex="0">${r.body.length > RAW_SHOWN_CHARS ? `${r.body.slice(0, RAW_SHOWN_CHARS)}\n... (${r.body.length - RAW_SHOWN_CHARS} more characters)` : r.body}</pre>
 </details>`)}`
+}
+
+/**
+ * Deleting is irreversible and needs a confirm step, and with no JS there are two ways to get one: a
+ * `GET /parcel/:id/delete` confirm page, or a disclosure here. The disclosure wins because the thing
+ * being confirmed is already on screen - the name, the number, the timeline the user is about to lose -
+ * so a confirm page would be a second route that re-renders what this page already shows, plus a way
+ * back from it. It also keeps the action on the page that owns the parcel.
+ *
+ * Collapsed by default, last on the page, with the tertiary register the design language reserves for
+ * actions that must not compete (design-language §6.7): no `--signal` (blue means "this needs you", never a destructive
+ * action), no warn wash either - nothing is wrong here, it is simply final. The copy says exactly what
+ * goes and what stays, because the emails staying is the non-obvious half.
+ */
+function deleteSection(p: Parcel): Html {
+  return html`<details class="del">
+  <summary>Delete this parcel</summary>
+  <p>The parcel and its whole tracking history are deleted for good; there is no undo. The emails it came from are kept and simply unlinked, so the next mail check will not bring it back, and they will not turn up as something needing attention.</p>
+  <form method="post" action="/parcel/${p.id}/delete"><button>Delete ${parcelName(p)}</button></form>
+</details>`
 }
 
 /**
@@ -113,8 +156,13 @@ function timelineSection(p: Parcel, events: StoredEvent[], ctx: PageCtx): Html {
   return html`<h2 class="sec">Timeline</h2><p class="empty">${why}</p>`
 }
 
+/**
+ * `map` is the tile grid the server found in the cache for this parcel's pickup point, or undefined
+ * when there is none to draw (no coordinates, a tile missing, or the preview turned off). The view
+ * never looks at the disk itself: a page render reads the database and nothing else.
+ */
 export function parcelPage(
-  p: Parcel, events: StoredEvent[], raws: RawResponse[], ctx: PageCtx, note?: RefreshNote,
+  p: Parcel, events: StoredEvent[], raws: RawResponse[], ctx: PageCtx, note?: RefreshNote, map?: TileGrid,
 ): Html {
   const last = events.at(-1)
   const plain = postcodeRejected(p) || p.needsPostcode !== undefined
@@ -124,9 +172,10 @@ export function parcelPage(
   ${isTracked(p) ? html`<form class="inline" method="post" action="/refresh"><input type="hidden" name="parcel" value="${p.id}"><button>Refresh this parcel</button></form>` : ''}</div>
 <div class="status">${statusLine(p, events)}</div>
 <p class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span>${p.merchant && p.merchant !== parcelName(p) ? html` · ${p.merchant}` : ''}${p.statusRaw ? html` · carrier says: ${p.statusRaw}` : ''}</p>
-${refreshBanner(note)}${postcodeNotice(p)}${pickupPanel(p, last, ctx)}
+${refreshBanner(note)}${postcodeNotice(p)}${pickupPanel(p, last, ctx, map)}
 ${timelineSection(p, events, ctx)}
 ${rawSection(raws, ctx)}
+${deleteSection(p)}
 </div>
 <aside class="side"><h3 class="sec">Label</h3>
 <form class="inl" method="post" action="/parcel/${p.id}/label">

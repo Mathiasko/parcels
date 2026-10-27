@@ -86,13 +86,46 @@ describe('web core', () => {
     expect(body).toMatch(/href="https:\/\/maps\.apple\.com\/\?[^"]*ll=48\.1486(,|%2C)17\.1077/)
   })
 
-  test('GET /parcel/:id omits the maps link when coordinates are absent', async () => {
+  test('without coordinates the maps link falls back to searching the address', async () => {
     const db = memDb()
     const id = parcel(db)
-    scan(db, id, [ev('x', 'ready_for_pickup')], 'ready_for_pickup', { kind: 'parcelshop', name: 'Výdajné miesto' })
+    // The shape of every real pickup point here: four of the five carriers never send coordinates.
+    scan(db, id, [ev('x', 'ready_for_pickup')], 'ready_for_pickup',
+      { kind: 'zbox', name: 'Z-BOX Bratislava, Hlavna 6' })
     const body = (await get(db, `/parcel/${id}`)).body
-    expect(body).toContain('Výdajné miesto')
-    expect(body).not.toContain('maps.apple.com')
+    expect(body).toContain('Z-BOX Bratislava, Hlavna 6')
+    expect(body).toMatch(/href="https:\/\/maps\.apple\.com\/\?q=Z-BOX%20Bratislava%2C%20Hlavna%206"/)
+    expect(body).not.toContain('maps.apple.com/?ll=')
+  })
+
+  test('the maps search is a postal address, not the place name', async () => {
+    const db = memDb()
+    const id = parcel(db)
+    scan(db, id, [ev('x', 'ready_for_pickup')], 'ready_for_pickup',
+      { kind: 'parcelshop', name: 'Výdajné miesto', street: 'Hlavna 6', city: 'Bratislava', postalCode: '81109' })
+    const body = (await get(db, `/parcel/${id}`)).body
+    const url = decodeURIComponent(/href="(https:\/\/maps\.apple\.com\/\?q=[^"]*)"/.exec(body)![1]!)
+    // The name is deliberately absent: searching it sends the map to the wrong branch of a chain.
+    expect(url).toBe('https://maps.apple.com/?q=Hlavna 6, 81109 Bratislava')
+    expect(body).toContain('Výdajné miesto')   // still shown to the reader
+  })
+
+  test('a name that embeds its own city does not reach the maps search (the Senec regression)', async () => {
+    const db = memDb()
+    const id = parcel(db)
+    // Exactly what Packeta's display line looks like: city inside the name, ahead of the street.
+    scan(db, id, [ev('x', 'ready_for_pickup')], 'ready_for_pickup',
+      { kind: 'zbox', name: 'Z-BOX Bratislava, Hlavna 6', street: 'Hlavna 6', city: 'Bratislava' })
+    const body = (await get(db, `/parcel/${id}`)).body
+    const url = decodeURIComponent(/href="(https:\/\/maps\.apple\.com\/\?q=[^"]*)"/.exec(body)![1]!)
+    expect(url).toBe('https://maps.apple.com/?q=Hlavna 6, Bratislava')
+  })
+
+  test('a parcel with no pickup point at all has no maps link', async () => {
+    const db = memDb()
+    const id = parcel(db)
+    scan(db, id, [ev('x', 'in_transit')], 'in_transit')
+    expect((await get(db, `/parcel/${id}`)).body).not.toContain('maps.apple.com')
   })
 
   test('a parcel label containing HTML is escaped, not rendered as markup', async () => {
@@ -177,10 +210,11 @@ describe('web core: faithful rendering', () => {
     const app = buildServer({ db: memDb(), config })
     const bad = await app.inject({ method: 'GET', url: '/', headers: { host: 'evil.example' } })
     expect(bad.statusCode).toBe(403)
-    for (const host of ['127.0.0.1:8787', 'localhost:8787', 'localhost', '[::1]:8787', 'LOCALHOST:8787']) {
+    for (const host of ['127.0.0.1:8787', 'localhost:8787', 'localhost', '[::1]:8787', 'LOCALHOST:8787', 'parcels.local', 'parcels.local:8787', 'PARCELS.LOCAL']) {
       expect((await app.inject({ method: 'GET', url: '/', headers: { host } })).statusCode, host).toBe(200)
     }
-    for (const host of ['127.0.0.1.evil.example', 'localhost.evil.example:8787', '0.0.0.0:8787', '192.168.0.101:8787']) {
+    for (const host of ['127.0.0.1.evil.example', 'localhost.evil.example:8787', '0.0.0.0:8787', '192.168.0.101:8787',
+      'parcels.local.evil.example', 'evil.example:80', 'parcels.localhost', 'notparcels.local']) {
       expect((await app.inject({ method: 'GET', url: '/', headers: { host } })).statusCode, host).toBe(403)
     }
   })

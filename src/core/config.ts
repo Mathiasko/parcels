@@ -7,6 +7,13 @@ export interface Config {
   port: number
   defaultPostalCode: string
   notifier: 'auto' | 'terminal-notifier' | 'osascript'
+  /**
+   * The pickup-point map preview: geocoding through Nominatim and map tiles from OpenStreetMap, both
+   * fetched during a poll and cached on disk, both served from loopback. `false` turns off all three
+   * halves at once - no geocoding, no tile fetching, no map on the page - and is the escape hatch if
+   * either service ever objects to us. Default on.
+   */
+  mapPreview: boolean
   imap?: { host: string; port: number; user: string; pass: string; mailbox: string }
 }
 
@@ -22,12 +29,16 @@ export function loadConfig(path = 'config.json'): Config {
   if (!NOTIFIERS.includes(notifier)) {
     throw new Error(`config ${path}: "notifier" must be one of ${NOTIFIERS.join(', ')}`)
   }
+  if (raw.mapPreview !== undefined && typeof raw.mapPreview !== 'boolean') {
+    throw new Error(`config ${path}: "mapPreview" must be true or false`)
+  }
 
   return {
     dbPath: raw.dbPath ?? 'data/parcels.db',
     port: raw.port ?? 8787,
     defaultPostalCode: raw.defaultPostalCode,
     notifier,
+    mapPreview: raw.mapPreview ?? true,
     imap: raw.imap,
   }
 }

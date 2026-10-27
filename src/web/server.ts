@@ -3,9 +3,12 @@ import type { Config } from '../core/config.js'
 import type { CarrierId } from '../core/types.js'
 import type { Database } from '../db/index.js'
 import { latestEvent, listEvents } from '../db/events.js'
-import { getParcel, listActive } from '../db/parcels.js'
+import { deleteParcel, getParcel, listActive, type Parcel } from '../db/parcels.js'
 import type { CarrierAdapter, HttpClient } from '../core/types.js'
 import { createHttpClient } from '../core/http.js'
+import { cachedGrid } from '../core/map-preview.js'
+import { parseTile } from '../core/slippy.js'
+import { readTile, tileDirFor } from '../core/tiles.js'
 import { isDormant } from '../core/backoff.js'
 import { runPoll } from '../core/poll.js'
 import { allAdapters } from '../carriers/registry.js'
@@ -14,6 +17,7 @@ import type { Notifier } from '../notify/types.js'
 import { listDelivered, setLabel, setPostalCode } from '../db/parcels.js'
 import { carrierHealth } from '../db/health.js'
 import { getIngestStatus } from '../db/ingest-status.js'
+import { dismissMessage } from '../db/messages.js'
 import { addParcel, cleanPostcode, MAX_LABEL } from './actions.js'
 import { CARRIER_NAME } from './views/format.js'
 import {
@@ -38,6 +42,8 @@ export interface WebDeps {
   adapters?: CarrierAdapter[]
   notifier?: Notifier
   now?: () => Date
+  /** The map-tile cache; defaults to `data/tiles` beside the database, as the poller writes it. */
+  tileDir?: string
 }
 
 /**
@@ -53,7 +59,14 @@ export async function startServer(app: FastifyInstance, port: number): Promise<v
 /** A parcel tried within this long is left alone by the global refresh (a double click, or the hourly poll just ran). */
 const MIN_REFRESH_GAP_MS = 60_000
 
-const LOCAL_HOST = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i
+/**
+ * The Host header is part of the security boundary, not decoration: refusing a foreign one is what stops a
+ * page on the open web from resolving its own domain to 127.0.0.1 and reading this unauthenticated server
+ * (DNS rebinding). `parcels.local` is allowed because it is not a name anyone else can make a browser send
+ * here: it resolves only through this machine's /etc/hosts, so reaching the server under it means the user
+ * typed it. Keep this list exhaustive and anchored - a bare suffix match would let `parcels.local.evil.example` in.
+ */
+const LOCAL_HOST = /^(127\.0\.0\.1|localhost|\[::1\]|parcels\.local)(:\d+)?$/i
 
 const send = (reply: FastifyReply, page: Html, status = 200) =>
   reply.code(status).type('text/html; charset=utf-8').send(page.toString())
@@ -75,6 +88,7 @@ export function refreshNote(query: Record<string, unknown>): RefreshNote | undef
 
 export function buildServer(deps: WebDeps): FastifyInstance {
   const { db, config } = deps
+  const tileDir = deps.tileDir ?? tileDirFor(config.dbPath)
   const app = Fastify({ logger: false })
   const now = () => (deps.now ?? (() => new Date()))()
   /** What every page needs besides its own data: the clock, and carrier health (for the lede and the nav dot). */
@@ -86,7 +100,10 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   // server on localhost is just as foreign.
   app.addHook('onRequest', async (req, reply) => {
     // Second layer behind the structural escaping: even injected markup could load nothing and run nothing.
-    reply.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'")
+    // `img-src 'self'` is the one addition the map preview needs, and it is the narrowest one that
+    // works: the tiles are served by this server from its own on-disk cache, so no third-party origin
+    // appears here and the page still cannot load or run anything from anywhere else.
+    reply.header('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'")
     reply.header('X-Content-Type-Options', 'nosniff')
     const host = req.headers.host ?? ''
     const refuse = () => reply.code(403).type('text/plain').send('forbidden')
@@ -115,13 +132,44 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     return send(reply, indexPage(entries, ctx(), refreshNote(req.query as Record<string, unknown>)))
   })
 
+  /**
+   * The tile grid to draw for a parcel, or nothing. Three conditions, all of them cheap: the preview is
+   * on, the parcel is waiting for collection, and its point has coordinates. Then nine `existsSync`
+   * calls decide whether a complete map can be drawn. No network, ever: the cache was filled by a poll.
+   */
+  const mapFor = (parcel: Parcel) => {
+    const { lat, lon } = parcel.pickup ?? {}
+    if (!config.mapPreview || parcel.status !== 'ready_for_pickup') return undefined
+    if (lat === undefined || lon === undefined) return undefined
+    return cachedGrid(tileDir, lat, lon)
+  }
+
   app.get<{ Params: { id: string } }>('/parcel/:id', async (req, reply) => {
     const parcel = /^\d+$/.test(req.params.id) ? getParcel(db, Number(req.params.id)) : undefined
     if (!parcel) return reply.code(404).type('text/plain').send('no such parcel')
     return send(reply, parcelPage(
       parcel, listEvents(db, parcel.id), rawResponsesFor(db, parcel.id, parcel.carrier), ctx(),
-      refreshNote(req.query as Record<string, unknown>),
+      refreshNote(req.query as Record<string, unknown>), mapFor(parcel),
     ))
+  })
+
+  /**
+   * One cached map tile, read from `data/tiles` and nothing else.
+   *
+   * The three parameters arrive as arbitrary strings - Fastify percent-decodes them, so `..%2f..%2f`
+   * reaches this handler as a real `../../` - and the only defence that matters is that they are
+   * never used as strings. `parseTile` either returns three integers in range or nothing, and the
+   * path is assembled from those integers, so there is no spelling of this URL that names a file
+   * outside the cache. A tile that is not cached is a 404; this route never fetches anything.
+   */
+  app.get<{ Params: { z: string; x: string; y: string } }>('/tile/:z/:x/:y.png', async (req, reply) => {
+    if (!config.mapPreview) return notFound(reply)
+    const tile = parseTile(req.params.z, req.params.x, req.params.y)
+    const bytes = tile && readTile(tileDir, tile)
+    if (!bytes) return notFound(reply)
+    // A given z/x/y is the same picture for months, and it is already on local disk; a day of browser
+    // caching saves the re-request without ever making the page depend on a remote service.
+    return reply.code(200).type('image/png').header('cache-control', 'private, max-age=86400').send(bytes)
   })
 
   const notFound = (reply: FastifyReply) => reply.code(404).type('text/plain').send('not found')
@@ -193,6 +241,17 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     return attention(reply, { messageId, message: result.message, values }, result.status)
   })
 
+  // Junk mail with no tracking number is not a parcel and never will be, so it must be possible to
+  // take it off the list. `getUnparsedMessage` is the same guard the assign route uses, so a stale page
+  // or a double submit is a 404 rather than a second write. No confirm step: nothing is destroyed here.
+  app.post<{ Params: { messageId: string } }>('/attention/:messageId/dismiss', async (req, reply) => {
+    const messageId = Number(req.params.messageId)
+    const message = Number.isInteger(messageId) ? getUnparsedMessage(db, messageId) : undefined
+    if (!message) return notFound(reply)
+    dismissMessage(db, messageId)
+    return reply.redirect('/attention', 303)
+  })
+
   app.post<{ Params: { id: string } }>('/parcel/:id/label', async (req, reply) => {
     const parcel = parcelFor(req.params.id)
     if (!parcel) return notFound(reply)
@@ -207,11 +266,26 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     return reply.redirect(`/parcel/${parcel.id}`, 303)
   })
 
+  // Irreversible, so the confirm step is the `<details>` disclosure on the parcel page itself (there is no
+  // JS for a dialog, and a separate confirm page would be a second route showing what the page already
+  // shows). The page it redirects to cannot be this parcel's: it no longer exists.
+  app.post<{ Params: { id: string } }>('/parcel/:id/delete', async (req, reply) => {
+    const parcel = parcelFor(req.params.id)
+    if (!parcel) return notFound(reply)
+    deleteParcel(db, parcel.id)
+    return reply.redirect('/', 303)
+  })
+
   // A real poll, run from this process. The click is the user saying "now", so the per-parcel backoff tier is
   // skipped (`forceAll`), but only for the parcels they pointed at: `forceAll` skips `isDue` entirely, which
   // would also wake dormant parcels, so the set is chosen here. The gated-carrier throttle and the
   // needs_postcode skip are applied by `runPoll` regardless, so clicking cannot hammer a broken carrier.
   // A notifier is passed so a status change found here is announced, not consumed.
+  //
+  // No `mapPreview` here, deliberately: geocoding is rate-limited to one request per second and that
+  // limit can only be held if ONE process does it. The hourly poller is that process. A click would
+  // also have to wait out those politeness gaps before the redirect. So a pickup point found by a
+  // manual refresh gets its map at the next hourly poll, and shows the address link until then.
   let refreshing = false
   app.post('/refresh', async (req, reply) => {
     const target = text(form(req).parcel)

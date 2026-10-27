@@ -26,6 +26,8 @@ interface RawItem {
   packetStatusId: string | number
   packetStatus?: string
   branchAddress?: string
+  branchAddressFull?: string
+  storedUntil?: string
   trackingDetails?: RawDetail[]
 }
 
@@ -36,9 +38,51 @@ function mapStatus(id: string): CanonicalStatus {
   return 'unknown'
 }
 
-/** `branchAddress` is a single display string, so it is kept whole rather than parsed into parts. */
-function toPickup(branchAddress: string): PickupPoint {
-  return { kind: /z-?box/i.test(branchAddress) ? 'zbox' : 'unknown', name: branchAddress }
+/** A SK/CZ postal code, written `81109` or `811 09`. */
+const ZIP = /^\d{3} ?\d{2}$/
+
+/**
+ * Packeta sends the pickup point twice. `branchAddress` is one display line, and `branchAddressFull`
+ * is the same place structured, newline separated:
+ *
+ *     branchAddress:     "Z-BOX Bratislava, Hlavna 6"
+ *     branchAddressFull: "Z-BOX\nHlavna 6\nBratislava"
+ *
+ * The structured one wins, because the display line puts the city INSIDE the name and ahead of the
+ * street, which a map reads as a place name rather than an address - "Hlavna 6" then resolves to
+ * whichever town's Hlavna the geocoder prefers (Senec, not Bratislava, on the first real parcel).
+ * The display line stays the fallback for a response that omits the structured form.
+ */
+function toPickup(item: RawItem): PickupPoint | undefined {
+  const display = typeof item.branchAddress === 'string' ? item.branchAddress.trim() : ''
+  const full = typeof item.branchAddressFull === 'string' ? item.branchAddressFull : ''
+  const lines = full.split('\n').map(l => l.trim()).filter(Boolean)
+  const kind: PickupPoint['kind'] = /z-?box/i.test(full || display) ? 'zbox' : 'unknown'
+
+  if (lines.length < 2) return display ? { kind, name: display } : undefined
+  const [name, street, ...rest] = lines as [string, string, ...string[]]
+  const point: PickupPoint = { kind, name, street }
+  // The tail is usually just the city, but a zip may arrive on its own line or glued to it.
+  const tail = rest.join(' ').trim()
+  const zip = ZIP.test(tail) ? tail : /^(\d{3} ?\d{2}) +(.+)$/.exec(tail)?.[1]
+  if (zip !== undefined) point.postalCode = zip.replace(' ', '')
+  const city = zip === undefined ? tail : tail.slice(zip.length).trim()
+  if (city) point.city = city
+  return point
+}
+
+/**
+ * `storedUntil` is a bare `YYYY-MM-DD`, and the parcel can be collected throughout that day, so the
+ * deadline is its last instant local time - not midnight, which would read as a day early.
+ * A malformed value must not discard an otherwise good status.
+ */
+function parseStoredUntil(raw: string): Date | undefined {
+  try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return parseNaive(`${raw} 23:59:59.999`, ZONE, 'yyyy-MM-dd HH:mm:ss.SSS').at
+    return parseNaive(raw, ZONE).at
+  } catch {
+    return undefined
+  }
 }
 
 function toResult(number: string, item: RawItem): FetchResult {
@@ -70,10 +114,15 @@ function toResult(number: string, item: RawItem): FetchResult {
     events,
     raw: item,
   }
-  if (status === 'ready_for_pickup' && typeof item.branchAddress === 'string' && item.branchAddress) {
-    result.pickup = toPickup(item.branchAddress)
+  if (status === 'ready_for_pickup') {
+    const pickup = toPickup(item)
+    if (pickup) result.pickup = pickup
+    // Packeta DOES give a deadline, in `storedUntil`; an earlier reading of this API missed it and the
+    // UI told the user there was none, on a parcel that had two days left.
+    const till = typeof item.storedUntil === 'string' ? parseStoredUntil(item.storedUntil) : undefined
+    if (till) result.retainedTill = till
   }
-  return result   // no retainedTill: Packeta supplies no deadline
+  return result
 }
 
 async function fetchOne({ number }: FetchInput, http: HttpClient): Promise<FetchResult> {

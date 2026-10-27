@@ -8,7 +8,8 @@ import {
 } from '../src/ingest/ingest.js'
 import { runPoll, summarize } from '../src/core/poll.js'
 import { allAdapters } from '../src/carriers/registry.js'
-import { findParcel, listActive } from '../src/db/parcels.js'
+import { deleteParcel, findParcel, listActive } from '../src/db/parcels.js'
+import { dismissMessage } from '../src/db/messages.js'
 import { listUnparsedMessages } from '../src/web/queries.js'
 import { healthPage } from '../src/web/views/health.js'
 import { getIngestStatus } from '../src/db/ingest-status.js'
@@ -376,6 +377,24 @@ describe('ingestMessages', () => {
     expect(ids).toHaveLength(1)
   })
 
+  test('a deleted parcel is not resurrected by the next run over the very same mail', async () => {
+    const mailbox = [mail(1, 'packeta-accepted', 2)]
+    const { db, deps } = setup(mailbox)
+    await ingestMessages(db, deps)
+    const p = findParcel(db, 'packeta', 'Z0000000001')!
+
+    deleteParcel(db, p.id)
+    expect(counts(db)).toEqual({ parcels: 0, messages: 1 })   // the message row survives: it is the dedupe key
+
+    // The mail is still in the mailbox, exactly as before. Its Message-ID is known, so it is not even downloaded.
+    const again = fakeImap(mailbox)
+    const r = await ingestMessages(db, { ...deps, client: again.client })
+    expect(r).toMatchObject({ read: 0, created: 0, linked: 0, needsAttention: 0 })
+    expect(again.downloaded).toEqual([])
+    expect(counts(db).parcels).toBe(0)
+    expect(listUnparsedMessages(db)).toEqual([])   // nor does the orphaned mail show up as a new alert
+  })
+
   test('a re-forwarded duplicate does not create a second parcel (same Message-ID, then a new one for the same number)', async () => {
     const { db, deps } = setup([mail(1, 'packeta-accepted', 2)])
     await ingestMessages(db, deps)
@@ -564,6 +583,22 @@ describe('reprocessing', () => {
     db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = 1 WHERE id = ?').run(id)
     const r = await reprocessMessages(db, { now: NOW, adapters: allAdapters(), defaultPostalCode: '81101' })
     expect(r).toMatchObject({ created: 0, needsAttention: 0 })
+  })
+
+  test('a dismissed message is never reprocessed again, even once the parser could read it', async () => {
+    const db = memDb()
+    const dir = mkdtempSync(join(tmpdir(), 'parcels-reproc-'))
+    // Ingested while packeta had no adapter, so it waited for attention; then it was dismissed by hand.
+    const s = setup([mail(1, 'packeta-accepted', 2)], { adapters: allAdapters().filter(a => a.id !== 'packeta'), mailDir: dir })
+    await ingestMessages(db, s.deps)
+    const id = (db.prepare('SELECT id FROM messages').get() as { id: number }).id
+    expect(dismissMessage(db, id)).toBe(true)
+
+    // Every adapter is registered now, so without the dismissal this run WOULD create the parcel.
+    const r = await reprocessMessages(db, { now: NOW, adapters: allAdapters(), defaultPostalCode: '81101' })
+    expect(r).toMatchObject({ read: 0, created: 0, needsAttention: 0 })
+    expect(counts(db).parcels).toBe(0)
+    expect(listUnparsedMessages(db)).toEqual([])
   })
 })
 

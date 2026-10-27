@@ -115,3 +115,20 @@ CREATE TABLE IF NOT EXISTS ingest_status (
   consecutive_failures INTEGER NOT NULL DEFAULT 0,
   notified_at          TEXT                  -- the current outage has been announced; cleared by the next ok
 );
+
+-- Geocoding results, keyed by the NORMALISED query string rather than by parcel, because several
+-- parcels routinely wait at the same Z-BOX or post office and must cost one lookup between them.
+-- Failures are rows too: without them a query that Nominatim cannot place, or that failed in
+-- transit, would be re-sent every hour for ever, which is how a polite hourly poller turns into an
+-- abuser of a free service. `attempts` counts CONSECUTIVE failures (0 once found) and drives the
+-- back-off; `attempted_at` is when the last attempt was made, answered or not. A table of its own,
+-- so an existing database gains it from the idempotent schema exec with no migration.
+CREATE TABLE IF NOT EXISTS geocode_cache (
+  query        TEXT PRIMARY KEY,
+  outcome      TEXT NOT NULL,                 -- 'found' | 'not_found' | 'error'
+  lat          REAL,
+  lon          REAL,
+  attempts     INTEGER NOT NULL DEFAULT 0,
+  attempted_at TEXT NOT NULL,
+  detail       TEXT                           -- why the last attempt failed; diagnostics only
+);
