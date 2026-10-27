@@ -27,7 +27,32 @@ export const BASELINE = 1
  * Ordered, append-only. Never renumber or edit one that has shipped: somebody's database has already
  * recorded that it ran, and editing it changes what their database contains without telling them.
  */
-export const MIGRATIONS: Migration[] = []
+export const MIGRATIONS: Migration[] = [
+  {
+    version: 2,
+    name: 'GLS DELIVEREDPS is awaiting collection, not delivered',
+    /**
+     * `DELIVEREDPS` means GLS handed the parcel to a ParcelShop or a Balikomat, which is the START of
+     * waiting rather than the end of it. Mapping it to `delivered` took a parcel off the dashboard
+     * while it sat in a locker, with its pickup deadline and its reminders gone with it.
+     *
+     * The adapter is fixed, but a delivered parcel is terminal and is never polled again, so nothing
+     * would ever re-read these rows and correct them. That is what this migration is for: the parcels
+     * already in that state on anyone's machine, and the newest event that put them there.
+     */
+    up: db => {
+      db.prepare(`
+        UPDATE events SET status = 'ready_for_pickup'
+        WHERE status = 'delivered' AND parcel_id IN (
+          SELECT id FROM parcels WHERE carrier = 'gls' AND status_raw = 'DELIVEREDPS')
+      `).run()
+      db.prepare(`
+        UPDATE parcels SET status = 'ready_for_pickup'
+        WHERE carrier = 'gls' AND status_raw = 'DELIVEREDPS' AND status = 'delivered'
+      `).run()
+    },
+  },
+]
 
 export const latestVersion = (migrations: Migration[] = MIGRATIONS): number =>
   migrations.reduce((n, m) => Math.max(n, m.version), BASELINE)

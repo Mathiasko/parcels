@@ -198,8 +198,8 @@ test('openDb on a database from an older schema fails at open, naming the missin
     const old = new BetterSqlite3(path)
     old.exec('CREATE TABLE parcels (id INTEGER PRIMARY KEY, carrier TEXT NOT NULL, tracking_number TEXT NOT NULL)')
     old.close()
-    expect(() => openDb(path)).toThrow(/table "parcels" is missing columns .*"needs_postcode"/)
-    expect(() => openDb(path)).toThrow(/"last_attempted_at"/)
+    expect(() => openDb(path, [])).toThrow(/table "parcels" is missing columns .*"needs_postcode"/)
+    expect(() => openDb(path, [])).toThrow(/"last_attempted_at"/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

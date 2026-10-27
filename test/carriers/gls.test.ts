@@ -115,9 +115,10 @@ test('maps progressBar.statusInfo DELIVERED to delivered', async () => {
   expect(r.statusRaw).toBe('DELIVERED')
 })
 
-test('maps INDELIVERY to out_for_delivery and DELIVEREDPS to delivered', async () => {
+test('maps INDELIVERY to out_for_delivery and DELIVEREDPS to ready_for_pickup', async () => {
   expect(ok((await fetchOne(detail(detailWithStatus('INDELIVERY')))).r).status).toBe('out_for_delivery')
-  expect(ok((await fetchOne(detail(detailWithStatus('DELIVEREDPS')))).r).status).toBe('delivered')
+  // A ParcelShop handover is the beginning of waiting, not the end: see the status map.
+  expect(ok((await fetchOne(detail(detailWithStatus('DELIVEREDPS')))).r).status).toBe('ready_for_pickup')
 })
 
 test('maps NOTDELIVERED to failed_attempt and NOTPICKEDUP to problem', async () => {
@@ -296,7 +297,29 @@ test('extracts parcelShop with latitude and longitude as a parcelshop pickup poi
 })
 
 test('pickup is omitted once the parcel is no longer waiting at the shop', async () => {
+  // DELIVERED, not DELIVEREDPS: the latter IS the waiting state, which is what this used to get wrong.
+  const r = ok((await fetchOne(detail(detailWithStatus('DELIVERED')))).r)
+  expect(r.status).toBe('delivered')
+  expect(r.pickup).toBeUndefined()
+})
+
+test('a parcel put in a locker stays on the dashboard, with the shop when GLS names one', async () => {
   const r = ok((await fetchOne(detail(detailWithStatus('DELIVEREDPS')))).r)
+  expect(r.status).toBe('ready_for_pickup')
+  expect(r.pickup?.kind).toBe('parcelshop')
+})
+
+test('and no location is invented when the carrier names no shop', async () => {
+  // The shape of the real Balikomat handover: no `parcelShop` and no `addresses` at all, the only
+  // place names being history events whose address is a city. A pickup panel built from
+  // "Bratislava 5" would assert a place the carrier never gave.
+  const body = JSON.parse(fixture('rstt028-detail.json')) as { tuStatus: Record<string, unknown>[] }
+  const item = body.tuStatus[0]!
+  item.progressBar = { ...(item.progressBar as object), statusInfo: 'DELIVEREDPS' }
+  delete item.parcelShop
+  delete item.addresses
+  const r = ok((await fetchOne({ rstt028: { body: JSON.stringify(body) } })).r)
+  expect(r.status).toBe('ready_for_pickup')
   expect(r.pickup).toBeUndefined()
 })
 

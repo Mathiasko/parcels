@@ -29,7 +29,12 @@ const STATUS_INFO = new Map<string, CanonicalStatus>(Object.entries({
   INDELIVERY: 'out_for_delivery',
   INPICKUP: 'ready_for_pickup',
   DELIVERED: 'delivered',
-  DELIVEREDPS: 'delivered',   // handed over to a ParcelShop
+  // Handed over to a ParcelShop or a Balikomat, which is the START of waiting, not the end of it.
+  // Mapping this to `delivered` dropped a parcel off the dashboard while it was sitting in a locker
+  // waiting to be collected. GLS's own payload says so three ways: progressBar.level is 75 and not
+  // 100, statusText reads "Zasielka bola dorucena do Parcel Shopu", and this same vocabulary has a
+  // NOTPICKEDUP - which can only follow a parcel that was waiting to be picked up.
+  DELIVEREDPS: 'ready_for_pickup',
   NOTDELIVERED: 'failed_attempt',
   NOTPICKEDUP: 'problem',     // uncollected at the ParcelShop
   RETURNED: 'returned',

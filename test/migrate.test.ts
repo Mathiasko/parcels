@@ -6,6 +6,7 @@ import BetterSqlite3 from 'better-sqlite3'
 import { openDb, type Database } from '../src/db/index.js'
 import { applyMigrations, isEmptyDatabase, latestVersion, userVersion, BASELINE, MIGRATIONS, type Migration } from '../src/db/migrate.js'
 import { insertParcel, getParcel } from '../src/db/parcels.js'
+import { appendEvents } from '../src/db/events.js'
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'parcels-migrate-'))
 
@@ -39,7 +40,7 @@ test('a database created before migrations existed is treated as the baseline an
   try {
     const path = join(dir, 'parcels.db')
     // Born with no stamp at all, exactly like the databases already in use.
-    const before = openDb(path)
+    const before = openDb(path, [])
     const id = insertParcel(before, { carrier: 'packeta', trackingNumber: 'Z1234567890', source: 'manual' })
     before.pragma('user_version = 0')
     expect(columns(before, 'parcels')).not.toContain('nickname')
@@ -61,7 +62,7 @@ test('migrations run in order, once, and a later open is a no-op', () => {
     const track = (v: number, c: string): Migration => ({
       ...addColumn(v, c), up: db => { order.push(v); db.exec(`ALTER TABLE parcels ADD COLUMN ${c} TEXT`) },
     })
-    openDb(path).close()                                  // a baseline database first
+    openDb(path, []).close()                              // a baseline database first
     const list = [track(3, 'third'), track(2, 'second')]  // deliberately out of order in the array
 
     const db = openDb(path, list)
@@ -80,7 +81,7 @@ test('a failing migration is rolled back, and the version does not advance past 
   const dir = tmp()
   try {
     const path = join(dir, 'parcels.db')
-    openDb(path).close()
+    openDb(path, []).close()
     const boom: Migration = {
       version: 3, name: 'boom',
       up: db => { db.exec('ALTER TABLE parcels ADD COLUMN half_done TEXT'); throw new Error('bad SQL') },
@@ -113,7 +114,7 @@ test('a column added to schema.sql with no migration fails the open by name, and
   const dir = tmp()
   try {
     const path = join(dir, 'parcels.db')
-    const db = openDb(path)
+    const db = openDb(path, [])
     // Simulate the old database: drop a column that the current schema declares.
     db.exec('ALTER TABLE parcels DROP COLUMN merchant')
     db.close()
@@ -128,7 +129,7 @@ test('the migration that fixes such a database makes the open succeed', () => {
   const dir = tmp()
   try {
     const path = join(dir, 'parcels.db')
-    const db = openDb(path)
+    const db = openDb(path, [])
     db.exec('ALTER TABLE parcels DROP COLUMN merchant')
     db.close()
 
@@ -140,3 +141,31 @@ test('the migration that fixes such a database makes the open succeed', () => {
     fixed.close()
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
+
+test('migration 2 rescues a GLS parcel left sitting in a locker as "delivered"', () => {
+  const dir = tmp()
+  try {
+    const path = join(dir, 'parcels.db')
+    const db = openDb(path, [])                       // born at the baseline, before the fix
+    const id = insertParcel(db, { carrier: 'gls', trackingNumber: '1234567890', source: 'manual' })
+    db.prepare("UPDATE parcels SET status = 'delivered', status_raw = 'DELIVEREDPS' WHERE id = ?").run(id)
+    appendEvents(db, id, [{
+      occurredAtRaw: '2026-10-27 16:43:12', occurredAtTz: 'Europe/Bratislava',
+      occurredAt: new Date('2026-10-27T15:43:12Z'), status: 'delivered',
+      description: 'Balik bol doruceny pre vyzdvihnutie do Balikomatu.',
+    }])
+    // A GLS parcel genuinely delivered to the door must not be touched.
+    const doorstep = insertParcel(db, { carrier: 'gls', trackingNumber: '1234567891', source: 'manual' })
+    db.prepare("UPDATE parcels SET status = 'delivered', status_raw = 'DELIVERED' WHERE id = ?").run(doorstep)
+    db.close()
+
+    const after = openDb(path, MIGRATIONS)
+    expect(getParcel(after, id)?.status).toBe('ready_for_pickup')
+    expect(getParcel(after, doorstep)?.status).toBe('delivered')
+    expect(db2status(after, id)).toBe('ready_for_pickup')
+    after.close()
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+const db2status = (db: Database, parcelId: number): string =>
+  (db.prepare('SELECT status FROM events WHERE parcel_id = ? ORDER BY id DESC LIMIT 1').get(parcelId) as { status: string }).status
