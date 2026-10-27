@@ -53,10 +53,11 @@ describe('web core', () => {
   test('GET / renders an empty state when there are no active parcels', async () => {
     const res = await get(memDb(), '/')
     expect(res.statusCode).toBe(200)
-    expect(res.body).toContain('No parcels in flight')
+    expect(res.body).toContain('Nothing in flight')
+    expect(res.body).not.toMatch(/0 in flight/)   // an empty page does not also print a lede
   })
 
-  test('GET /parcel/:id renders the event timeline oldest-first', async () => {
+  test('GET /parcel/:id renders the event timeline newest-first (the query is oldest-first; the template reverses it)', async () => {
     const db = memDb()
     const id = parcel(db)
     scan(db, id, [
@@ -65,7 +66,7 @@ describe('web core', () => {
       ev('b', 'in_transit', 10, 'Arrived at depot'),
     ], 'delivered')
     const body = (await get(db, `/parcel/${id}`)).body
-    const order = ['Shipment registered', 'Arrived at depot', 'Delivered to recipient'].map(t => body.indexOf(t))
+    const order = ['Delivered to recipient', 'Arrived at depot', 'Shipment registered'].map(t => body.indexOf(t))
     expect(order.every(i => i >= 0)).toBe(true)
     expect(order).toEqual([...order].sort((a, b) => a - b))
   })
@@ -121,7 +122,7 @@ describe('web core', () => {
 })
 
 describe('web core: faithful rendering', () => {
-  test('an event with no code and status unknown shows the carrier text, not an unknown chip', async () => {
+  test('prose-only unknown events show the carrier text and nothing that reads as an error', async () => {
     const db = memDb()
     const id = parcel(db, { carrier: 'sps', number: 'SPS1' })
     scan(db, id, [
@@ -130,10 +131,16 @@ describe('web core: faithful rendering', () => {
       { ...ev('c', 'unknown', 3, 'Unmapped scan'), code: 'ZZ9' },
     ], 'in_transit')
     const body = (await get(db, `/parcel/${id}`)).body
-    const timeline = body.slice(body.indexOf('id="timeline"'))
+    const timeline = body.slice(body.indexOf('id="timeline"'), body.indexOf('</ol>'))
     expect(timeline).toContain('Parcel handed to courier')
-    // Only the unmapped-but-coded event may carry an unknown chip.
-    expect(timeline.match(/chip-unknown/g)?.length).toBe(1)
+    expect(timeline).toContain('Unmapped scan')
+    // Only the known status gets a word; an `unknown` row, coded or not, is a dot and the carrier's own sentence.
+    expect(timeline.match(/class="w /g)).toHaveLength(1)
+    expect(timeline).toContain('>In transit<')
+    expect(timeline).not.toMatch(/unrecogni[sz]ed|status unknown|unknown status/i)
+    // The carrier's code is for the `title`, not for the owner's eyes.
+    expect(timeline).toContain('title="carrier code ZZ9"')
+    expect(timeline).not.toContain('>ZZ9<')
   })
 
   test('a parcel whose postcode was rejected says so and offers a postcode form', async () => {

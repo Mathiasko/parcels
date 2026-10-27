@@ -1,57 +1,73 @@
 import type { CarrierId } from '../../core/types.js'
 import type { HealthRow } from '../../db/health.js'
 import type { IngestStatus } from '../../db/ingest-status.js'
-import { CARRIER_NAME, formatDateTime } from './format.js'
-import { html, type Html } from './html.js'
-import { layout } from './layout.js'
 import type { PollerStatus } from '../../core/pollwatch.js'
+import { CARRIER_NAME, formatDateTime } from './format.js'
+import { glyph, type GlyphName } from './glyphs.js'
+import { html, type Html } from './html.js'
+import { layout, type PageCtx } from './layout.js'
 
 /** `gated` means the adapter itself is broken (key rotated, endpoint closed): always an alarm while it persists. */
 export const needsAttention = (h: HealthRow | undefined): boolean =>
   h !== undefined && h.lastErrorKind === 'gated' && h.consecutiveFailures > 0
 
+/** A health state: its glyph, colour and weight carry it as well as the word, so no state is a coloured word alone. */
+function state(kind: 'ok' | 'nodata' | 'failing' | 'attention', word: string, streak?: number): Html {
+  const g: GlyphName = kind === 'ok' ? 'delivered' : kind === 'nodata' ? 'pre_transit' : 'problem'
+  const tone = kind === 'ok' ? 't-ok' : kind === 'nodata' ? 't-3' : 't-warn'
+  return html`<span class="st ${tone}${kind === 'ok' || kind === 'nodata' ? ' quiet' : ''}">${glyph(g)}${word}${streak ? html` · <span>${streak}</span> in a row` : ''}</span>`
+}
+
 function verdict(h: HealthRow | undefined): Html {
-  if (!h) return html`<span class="muted">no data</span>`
-  if (needsAttention(h)) return html`<span class="alarm-text">needs attention</span>`
-  if (h.consecutiveFailures > 0) return html`<span>failing</span>`
-  return html`<span>ok</span>`
+  if (!h) return state('nodata', 'no data')
+  if (needsAttention(h)) return state('attention', 'needs attention', h.consecutiveFailures)
+  if (h.consecutiveFailures > 0) return state('failing', 'failing', h.consecutiveFailures)
+  return state('ok', 'ok')
 }
 
-/** The mail ingest is shown only when a mailbox is configured (or it has ever reported). */
-function ingestSection(configured: boolean, s: IngestStatus | undefined): Html {
-  if (!configured && !s) return html``
-  const state = !s ? html`<span class="muted">no data</span>`
-    : s.consecutiveFailures > 0 ? html`<span class="alarm-text">failing</span>` : html`<span>ok</span>`
-  return html`<h2>Mail ingest</h2>
-<table id="ingest-health"><tr><th>State</th><th>Last ok</th><th>Last error</th><th>Consecutive failures</th></tr>
-<tr><td>${state}</td><td>${s?.lastOkAt ? formatDateTime(s.lastOkAt) : 'never'}</td>
-<td>${s?.lastErrorAt ? html`${formatDateTime(s.lastErrorAt)}${s.lastError ? html`<br><span class="muted small">${s.lastError}</span>` : ''}` : '—'}</td>
-<td>${s?.consecutiveFailures ?? 0}</td></tr></table>`
-}
+const bad = (h: HealthRow | undefined): boolean => h !== undefined && h.consecutiveFailures > 0
 
-/** When the poller last completed a run. Nothing else on this site says so, and a dead poller is otherwise silent. */
-function pollerSection(p: PollerStatus): Html {
-  const state = !p.lastPollAt ? html`<span class="muted">no data</span>`
-    : p.overdue ? html`<span class="alarm-text">not running?</span>` : html`<span>ok</span>`
-  return html`<h2>Poller</h2>
-<table id="poller-health"><tr><th>State</th><th>Last completed run</th></tr>
-<tr><td>${state}</td><td>${p.lastPollAt ? formatDateTime(p.lastPollAt) : 'never'}</td></tr></table>
-${p.overdue ? html`<p class="muted small">No poll has completed for over 2 hours of the 07:00-21:00 day. Parcels are not being updated: check that the launchd poller agent is loaded and that the Node path in its plist still exists.</p>` : ''}`
+/** `4 of 5 carriers reporting. SPS has never been polled.` It says "all" only when it counts all. */
+function lede(rows: Map<CarrierId, HealthRow>, ids: CarrierId[]): string {
+  const failing = ids.filter(id => bad(rows.get(id)))
+  const never = ids.filter(id => !rows.has(id)).map(id => CARRIER_NAME[id])
+  const ok = ids.length - failing.length - never.length
+  const head = failing.length > 0
+    ? `${failing.length} of ${ids.length} carriers failing.`
+    : ok === ids.length ? `All ${ids.length} carriers reporting.` : `${ok} of ${ids.length} carriers reporting.`
+  const tail = never.length > 0 ? ` ${never.join(' and ')} ${never.length === 1 ? 'has' : 'have'} never been polled.` : ''
+  return head + tail
 }
 
 export function healthPage(
-  rows: HealthRow[], ingest: { configured: boolean; status?: IngestStatus } = { configured: false },
-  poller: PollerStatus = { overdue: false },
+  rows: HealthRow[], ingest: { configured: boolean; status?: IngestStatus }, poller: PollerStatus, ctx: PageCtx,
 ): Html {
   const byCarrier = new Map(rows.map(r => [r.carrier, r]))
+  const ids = Object.keys(CARRIER_NAME) as CarrierId[]
+  const showIngest = ingest.configured || ingest.status !== undefined
+  const ing = ingest.status
+  // The last-error column appears only when some row has an error: otherwise it is a column of dashes.
+  const anyError = rows.some(r => r.lastErrorAt) || Boolean(ing?.lastErrorAt)
+  const cols = anyError ? 4 : 3
+  const err = (at: Date | undefined, detail?: string): Html => at
+    ? html`<td>${formatDateTime(at, ctx.now)}${detail ? html`<span class="meta why">${detail}</span>` : ''}</td>` : html`<td class="meta">—</td>`
+  const errCell = (at: Date | undefined, detail?: string, kind?: string): Html => anyError
+    ? err(at, [kind, detail].filter(Boolean).join(' · ') || undefined) : html``
+  const ingestState = !ing ? state('nodata', 'no data') : ing.consecutiveFailures > 0 ? state('failing', 'failing', ing.consecutiveFailures) : state('ok', 'ok')
+  const pollState = !poller.lastPollAt ? state('nodata', 'no data') : poller.overdue ? state('attention', 'not running?') : state('ok', 'ok')
+
   return layout('Health', '/health', html`
-<h1>Carrier health</h1>
-<table><tr><th>Carrier</th><th>State</th><th>Last ok</th><th>Last error</th><th>Consecutive failures</th></tr>${
-  (Object.keys(CARRIER_NAME) as CarrierId[]).map(id => {
+<h1>Health</h1>
+<p class="lede">${lede(byCarrier, ids)}</p>
+<table class="board"><thead><tr><th scope="col">State</th><th scope="col">Name</th><th scope="col">Last ok</th>${anyError ? html`<th scope="col">Last error</th>` : ''}</tr></thead>
+<tbody><tr class="grp"><th scope="rowgroup" colspan="${cols}">Carriers</th></tr>${ids.map(id => {
     const h = byCarrier.get(id)
-    return html`<tr data-carrier="${id}"><td>${CARRIER_NAME[id]}</td><td>${verdict(h)}</td>
-<td>${h?.lastOkAt ? formatDateTime(h.lastOkAt) : 'never'}</td>
-<td>${h?.lastErrorAt ? html`${formatDateTime(h.lastErrorAt)} · ${h.lastErrorKind}${h.lastErrorDetail ? html`<br><span class="muted small">${h.lastErrorDetail}</span>` : ''}` : '—'}</td>
-<td>${h?.consecutiveFailures ?? 0}</td></tr>`
-  })}</table>${pollerSection(poller)}${ingestSection(ingest.configured, ingest.status)}`)
+    return html`<tr data-carrier="${id}"${bad(h) ? html` class="bad"` : ''}><td>${verdict(h)}</td><td>${CARRIER_NAME[id]}</td>
+<td>${h?.lastOkAt ? formatDateTime(h.lastOkAt, ctx.now) : 'never'}</td>${errCell(h?.lastErrorAt, h?.lastErrorDetail, h?.lastErrorKind)}</tr>`
+  })}
+<tr class="grp"><th scope="rowgroup" colspan="${cols}">System</th></tr>
+<tr id="poller-health"${poller.overdue ? html` class="bad"` : ''}><td>${pollState}</td><td>Poller</td><td>${poller.lastPollAt ? formatDateTime(poller.lastPollAt, ctx.now) : 'never'}</td>${anyError ? html`<td class="meta">—</td>` : ''}</tr>${
+  showIngest ? html`<tr id="ingest-health"${ing && ing.consecutiveFailures > 0 ? html` class="bad"` : ''}><td>${ingestState}</td><td>Mail ingest</td>
+<td>${ing?.lastOkAt ? formatDateTime(ing.lastOkAt, ctx.now) : 'never'}</td>${errCell(ing?.lastErrorAt, ing?.lastError)}</tr>` : ''}</tbody></table>${
+  poller.overdue ? html`<p class="meta">No poll has completed for over 2 hours of the 07:00-21:00 day. Parcels are not being updated: check that the launchd poller agent is loaded and that the Node path in its plist still exists.</p>` : ''}`, ctx)
 }

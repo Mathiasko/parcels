@@ -28,6 +28,7 @@ import { historyPage } from './views/history.js'
 import { indexPage, type RefreshNote } from './views/index.js'
 import { parcelPage } from './views/parcel.js'
 import { DateTime } from 'luxon'
+import type { PageCtx } from './views/layout.js'
 
 export interface WebDeps {
   db: Database
@@ -75,6 +76,9 @@ export function refreshNote(query: Record<string, unknown>): RefreshNote | undef
 export function buildServer(deps: WebDeps): FastifyInstance {
   const { db, config } = deps
   const app = Fastify({ logger: false })
+  const now = () => (deps.now ?? (() => new Date()))()
+  /** What every page needs besides its own data: the clock, and carrier health (for the lede and the nav dot). */
+  const ctx = (): PageCtx => ({ now: now(), health: carrierHealth(db) })
 
   // Without authentication, a page the user happens to visit must not be able to drive this server:
   // a foreign Host header is a DNS-rebinding attempt, and a cross-site POST is a forged form. The Origin
@@ -108,19 +112,18 @@ export function buildServer(deps: WebDeps): FastifyInstance {
 
   app.get('/', async (req, reply) => {
     const entries = listActive(db).map(parcel => ({ parcel, last: latestEvent(db, parcel.id) }))
-    return send(reply, indexPage(entries, refreshNote(req.query as Record<string, unknown>)))
+    return send(reply, indexPage(entries, ctx(), refreshNote(req.query as Record<string, unknown>)))
   })
 
   app.get<{ Params: { id: string } }>('/parcel/:id', async (req, reply) => {
     const parcel = /^\d+$/.test(req.params.id) ? getParcel(db, Number(req.params.id)) : undefined
     if (!parcel) return reply.code(404).type('text/plain').send('no such parcel')
     return send(reply, parcelPage(
-      parcel, listEvents(db, parcel.id), rawResponsesFor(db, parcel.id, parcel.carrier),
+      parcel, listEvents(db, parcel.id), rawResponsesFor(db, parcel.id, parcel.carrier), ctx(),
       refreshNote(req.query as Record<string, unknown>),
     ))
   })
 
-  const now = () => (deps.now ?? (() => new Date()))()
   const notFound = (reply: FastifyReply) => reply.code(404).type('text/plain').send('not found')
   const form = (req: { body: unknown }): Record<string, string> => (req.body ?? {}) as Record<string, string>
   const text = (v: string | undefined) => (v ?? '').trim()
@@ -147,25 +150,28 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const parcels = listDelivered(db, {
       carrier: filters.carrier, q: filters.q, from: day(filters.from, false), to: day(filters.to, true),
     })
-    return send(reply, historyPage(parcels, deliveryStats(db), filters))
+    return send(reply, historyPage(parcels, deliveryStats(db), filters, ctx()))
   })
 
-  app.get('/health', async (_req, reply) => send(reply, healthPage(carrierHealth(db), { configured: config.imap !== undefined, status: getIngestStatus(db) }, pollerStatus(db, now()))))
+  app.get('/health', async (_req, reply) => {
+    const c = ctx()
+    return send(reply, healthPage(c.health, { configured: config.imap !== undefined, status: getIngestStatus(db) }, pollerStatus(db, c.now), c))
+  })
 
   const attention = (reply: FastifyReply, error?: AttentionError, status = 200) =>
     send(reply, attentionPage(
-      listUnparsedMessages(db), listActive(db).filter(p => isDormant(p, now())), now(), error,
+      listUnparsedMessages(db), listActive(db).filter(p => isDormant(p, now())), ctx(), error,
     ), status)
   app.get('/attention', async (_req, reply) => attention(reply))
 
-  app.get('/add', async (_req, reply) => send(reply, addPage()))
+  app.get('/add', async (_req, reply) => send(reply, addPage(ctx())))
 
   app.post('/add', async (req, reply) => {
     const f = form(req)
     const values = { number: text(f.number), carrier: text(f.carrier), label: text(f.label), postcode: text(f.postcode) }
     const result = addParcel(db, config, { ...values, source: 'manual' })
     if (result.ok) return reply.redirect(`/parcel/${result.id}`, 303)
-    return send(reply, addPage(result.message, values), result.status)
+    return send(reply, addPage(ctx(), result.message, values), result.status)
   })
 
   app.post<{ Params: { messageId: string } }>('/attention/:messageId/assign', async (req, reply) => {

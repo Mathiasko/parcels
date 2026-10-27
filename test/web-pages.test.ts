@@ -60,14 +60,16 @@ describe('web pages', () => {
     expect(body).not.toContain('Still travelling')
   })
 
-  test('GET /history lists a returned parcel, labelled returned rather than archived, and keeps it out of the delivery stats', async () => {
+  test('GET /history lists a returned parcel, marked Returned rather than archived, and keeps it out of the delivery stats', async () => {
     const db = memDb()
     const id = insertParcel(db, { carrier: 'posta', trackingNumber: 'RETURNED1', label: 'Sent back one', source: 'manual' })
     updateParcelState(db, id, { status: 'returned' })
     const body = (await get(db, '/history')).body
     expect(body).toContain('Sent back one')
-    expect(body).toMatch(/returned · /)
-    expect(body).not.toMatch(/archived · /)
+    const row = body.slice(body.indexOf('Sent back one')).split('</tr>')[0]!
+    expect(row).toContain('Returned')           // the Outcome column says so
+    expect(body).toMatch(/1 returned/)          // and the lede counts it as returned
+    expect(body).not.toMatch(/archived/i)       // never as archived
     expect(body).toContain('no deliveries yet')
   })
 
@@ -480,7 +482,12 @@ describe('archived parcels from old mail', () => {
     const at = ['OldShopB', 'Delivered one', 'OldShopA'].map(t => body.indexOf(t))
     expect(at.every(i => i >= 0)).toBe(true)
     expect(at).toEqual([...at].sort((a, b) => a - b))             // 90d, then 200d, then 400d
-    expect(body).toMatch(/archived · /)
+    // Archived rows carry no mark (it is the default); the lede counts them and the delivered one is marked.
+    expect(body).toMatch(/2 archived/)
+    expect(body).toMatch(/1 delivered/)
+    const row = (name: string) => body.slice(body.indexOf(name)).split('</tr>')[0]!
+    expect(row('OldShopA')).not.toMatch(/Delivered|Returned/)
+    expect(row('Delivered one')).toContain('Delivered')
   })
 
   test('they are not "In flight", and the median delivery time is untouched', async () => {
@@ -550,6 +557,8 @@ describe('GET /health: mail ingest', () => {
     const db = memDb()
     recordIngest(db, { ok: true }, NOW)
     const body = (await webWith(db, IMAP).inject({ method: 'GET', url: '/health' })).body
-    expect(body.slice(body.indexOf('id="ingest-health"')).split('</table>')[0]).toContain('<span>ok</span>')
+    const section = body.slice(body.indexOf('id="ingest-health"')).split('</table>')[0]!
+    expect(section).toMatch(/ok<\/span>/)
+    expect(section).not.toContain('failing')
   })
 })
