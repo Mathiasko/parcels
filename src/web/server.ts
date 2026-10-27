@@ -35,6 +35,7 @@ import { addPage } from './views/add.js'
 import { attentionPage, type AttentionError } from './views/attention.js'
 import { healthPage } from './views/health.js'
 import { pollerStatus } from '../core/pollwatch.js'
+import { appVersion } from '../core/version.js'
 import { historyPage } from './views/history.js'
 import { indexPage, type RefreshNote } from './views/index.js'
 import { parcelPage } from './views/parcel.js'
@@ -59,6 +60,11 @@ export interface WebDeps {
   tileDir?: string
   /** The IMAP client the connection test uses; injected so tests never touch the network. */
   imapClient?: (config: ImapConfig) => ImapProbeLike
+  /**
+   * What `/health` reports as the running version. Defaults to this checkout, resolved once (see
+   * core/version.ts); injected by tests, which must not depend on the commit they happen to run at.
+   */
+  version?: string
 }
 
 /**
@@ -115,6 +121,8 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   const configPath = deps.configPath ?? runtimeConfigPath()
   const tileDir = deps.tileDir ?? tileDirFor(config.dbPath)
   const app = Fastify({ logger: false })
+  // Resolved once here, never per request: it reads package.json and spawns git.
+  const version = deps.version ?? appVersion()
   const now = () => (deps.now ?? (() => new Date()))()
   /** What every page needs besides its own data: the clock, and carrier health (for the lede and the nav dot). */
   const ctx = (): PageCtx => ({ now: now(), health: carrierHealth(db), pollerOverdue: pollerStatus(db, now()).overdue })
@@ -232,7 +240,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
 
   app.get('/health', async (_req, reply) => {
     const c = ctx()
-    return send(reply, healthPage(c.health, { configured: config.imap !== undefined, status: getIngestStatus(db) }, pollerStatus(db, c.now), c))
+    return send(reply, healthPage(c.health, { configured: config.imap !== undefined, status: getIngestStatus(db) }, pollerStatus(db, c.now), c, version))
   })
 
   const attention = (reply: FastifyReply, error?: AttentionError, status = 200) =>

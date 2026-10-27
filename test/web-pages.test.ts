@@ -9,6 +9,7 @@ import type { Database } from '../src/db/index.js'
 import type { CarrierId } from '../src/core/types.js'
 import type { Notification } from '../src/notify/types.js'
 import { getAdapter } from '../src/carriers/registry.js'
+import { appVersion } from '../src/core/version.js'
 import { formatDateTime, formatDuration } from '../src/web/views/format.js'
 import { bodyHttp, config, ev, memDb, NOW, okResult, stubAdapter } from './poll-helpers.js'
 
@@ -652,6 +653,34 @@ describe('GET /health: mail ingest', () => {
     const section = body.slice(body.indexOf('id="ingest-health"')).split('</table>')[0]!
     expect(section).toMatch(/ok<\/span>/)
     expect(section).not.toContain('failing')
+  })
+})
+
+// --- the running version, so a bug report can say which code it is about ----------------------------
+
+describe('GET /health: version', () => {
+  const health = (version?: string) =>
+    server(memDb(), version === undefined ? {} : { version }).inject({ method: 'GET', url: '/health' })
+
+  test('shows the version it was given', async () => {
+    const r = await health('9.9.9 (deadbee)')
+    expect(r.statusCode).toBe(200)
+    expect(r.body.slice(r.body.indexOf('id="version"')).split('</p>')[0]).toContain('9.9.9 (deadbee)')
+  })
+
+  // The page that tells you what is broken must not break over its own footer.
+  test('an unknown version renders the page anyway', async () => {
+    const r = await health('unknown')
+    expect(r.statusCode).toBe(200)
+    expect(r.body).toContain('id="version"')
+    expect(r.body.slice(r.body.indexOf('id="version"')).split('</p>')[0]).toContain('unknown')
+    expect(r.body).toContain('Carriers')      // the rest of the page is still there
+  })
+
+  test('with nothing injected it is this checkout, resolved once at startup', async () => {
+    const r = await health()
+    expect(r.body).toContain(appVersion())
+    expect(appVersion()).not.toBe('')
   })
 })
 

@@ -10,6 +10,46 @@ Carriers: Slovenská pošta, Packeta, GLS, SPS, DPD SK. (123Kuriér is excluded:
 The full design and its rationale are in
 [`docs/superpowers/specs/2026-10-26-parcel-tracker-design.md`](docs/superpowers/specs/2026-10-26-parcel-tracker-design.md).
 
+## Install
+
+On a fresh Mac, from a real Terminal window:
+
+```sh
+git clone git@github.com:Mathiasko/parcels.git && cd parcels
+scripts/setup.sh
+```
+
+That checks the machine (macOS, Node 24 or newer with npm beside it), installs the dependencies,
+writes a `config.json` if there is none — it asks only for your postcode — and installs the two
+launchd agents, building `dist/` on the way. It is **idempotent and needs no sudo**: it never
+overwrites an existing `config.json`, so re-running it is safe. `scripts/setup.sh --config-only`
+writes just the config and stops.
+
+`better-sqlite3` ships prebuilt macOS binaries, so there is nothing to compile and no Xcode needed.
+
+**It does not ask for your Gmail App Password**, on purpose. Three things are left for you, and the
+script prints them when it finishes:
+
+1. **Gmail.** Open `/settings` on the dashboard, paste an App Password
+   (<https://myaccount.google.com/apppasswords>), Save, then press **Test mail connection** — it
+   proves the credentials in one line instead of failing silently three polls later.
+2. **The filter.** Import [`gmail-filter.xml`](gmail-filter.xml) into Gmail and tick *Also apply
+   filter to matching conversations*. See [Mail ingest](#mail-ingest-parcels-that-add-themselves),
+   step 2: import does **not** label mail that has already arrived unless you tick that box.
+3. **Optional.** `sudo scripts/install-hostname.sh` for <http://parcels.local> instead of a port
+   number, and the one-time macOS approval that upgrades notifications to `terminal-notifier`.
+
+Updating an installed copy:
+
+```sh
+scripts/update.sh --check     # is anything new? changes nothing
+scripts/update.sh             # fast-forward, npm ci, rebuild, reload the agents
+```
+
+It refuses to run on a dirty working tree (naming the files) and refuses a divergent branch rather
+than merging it; see [Updating](#updating-and-schema-changes). `/health` shows which version and
+commit is actually running.
+
 ## Read this first: use the absolute node path
 
 On this machine a bare `node` (or `npm`) invocation swallows the first call in each shell and
@@ -25,24 +65,36 @@ The launchd plists already name that path, because launchd supplies only
 `PATH=/usr/bin:/bin:/usr/sbin:/sbin`. Every `node ...` in this README means the absolute path
 above. Requires Node 24 or newer.
 
-## Install and build
+## Build and test by hand
+
+`scripts/setup.sh` does the first three of these for you; these are the individual steps, for
+development.
 
 ```sh
 npm install        # use /Users/you/.nvm/versions/node/v24.21.0/bin/npm, see above
 npm run build        # tsc, then copies src/db/schema.sql into dist/
-npm test             # 760+ tests, no network
+npm test             # 780+ tests, no network, no launchd, no real config.json
 npm run typecheck
 ```
 
+The shell scripts are tested too: `test/install-agents.test.sh` renders the plists into a temp
+directory, and `test/setup.test.sh` exercises `setup.sh` and `update.sh` against a temp config and a
+throwaway clone. Both run under `npm test` through a small `.test.ts` wrapper so they cannot rot.
+
 ## Configure
 
-Copy `config.example.json` to `config.json` and fill it in. It holds a secret, so lock it down;
-it is gitignored, as is all of `data/`.
+`scripts/setup.sh` writes a `config.json` for you if there is none, asking only for the postcode and
+leaving the mail account to `/settings`. By hand it is a copy of the example. Either way the file
+holds a secret, so lock it down; it is gitignored, as is all of `data/`.
 
 ```sh
 cp config.example.json config.json
 chmod 600 config.json
 ```
+
+(Delete the `imap` block from the copy until you have real credentials: an `imap` block full of
+placeholders makes the poller fail against Gmail every hour. No block at all is the clean "no mail
+account configured" state, and it is what `setup.sh` writes.)
 
 After that first file exists, **`/settings` edits it for you** — the postcode, the notifier, the map
 preview and the whole `imap` block, with a **Test mail connection** button that says in one line
@@ -111,20 +163,38 @@ Setup, in this order:
    <https://myaccount.google.com/apppasswords>. Paste it into the App Password field on `/settings`
    (or write it into `config.json` as `imap.pass`).
    (IMAP is always on in Gmail; there is no enable toggle any more.)
-2. **Create a Gmail filter** for your shipping mail whose action is **Apply the label** `parcels`.
-   Do not choose forwarding. Tick **Also apply filter to matching conversations**: labels apply
-   retroactively, which back-fills your history on the first run.
+2. **Import [`gmail-filter.xml`](gmail-filter.xml)**, the filter that fills the label. In Gmail:
+   **Settings, Filters and Blocked Addresses, Import filters**, choose the file, and **tick "Also
+   apply filter to matching conversations"** before you confirm it. Import by itself labels nothing
+   that has *already* arrived — labels do apply retroactively, but only if you tick that box, and an
+   empty label looks exactly like a broken connection. The filter's only action is **Apply the label**
+   `parcels`; it never forwards anything.
 
-   **Include your e-shops in the filter, not only the carriers.** A filter that matches only carrier
-   domains (`packeta.sk`, `dpd.sk`, `gls-group.eu`, ...) never labels the shop's own "your order has been
-   dispatched" mail, and that mail is often the *first* notice of a parcel, days before the carrier
-   writes, and sometimes the only one. Add the shops you order from as `from:` terms (for example
-   `from:(packeta.sk OR dpd.sk OR gls-group.eu OR mtbiker.sk)`), or match on dispatch wording such as
-   `subject:(odoslan OR dispatched OR "číslo balíka")`. The app can now use that mail: when a sender is
-   not a carrier it looks for a **carrier named in the mail together with a labelled tracking number of
-   that carrier's shape** (for example `Číslo balíka: 1234567890` next to "GLS"). Both are required;
-   a mail that only names a carrier (an order confirmation saying the delivery method is GLS) goes to
-   needs-attention, never to a parcel.
+   **The whole query is in ONE field, and it has to stay that way.** Gmail's filter *form* has
+   separate From / Subject / Has-the-words boxes and it **ANDs them together**, so a filter built as
+   `From: (the carrier domains)` plus `Subject: (odoslaná)` matches **nothing at all** — no single
+   message satisfies both — and it fails exactly like a filter that is simply not matching yet. The
+   shipped file is one OR-expression in `hasTheWord`, with no `from:` or `subject:` operator inside
+   it: bare terms match anywhere in the message, the sender address included. If you edit it in the
+   Gmail UI afterwards, keep every term in **Has the words**. `test/gmail-filter.test.ts` pins this.
+
+   **Add your own shops' domains**, because the filter covers e-shop dispatch wording but cannot
+   know where you shop. A filter matching only carrier domains (`packeta.sk`, `dpd.sk`,
+   `gls-group.eu`, ...) never labels the shop's own "your order has been dispatched" mail, and that
+   mail is often the *first* notice of a parcel, days before the carrier writes, and sometimes the
+   only one. Gmail ignores diacritics (`odoslana` matches `odoslaná`) but does **not** stem, so the
+   word forms are listed one by one (`odoslana`, `odoslane`, `expedovana`, `expedovane`, ...); add
+   forms, and `mtbiker.sk`-style domains, in the same `OR` chain.
+
+   The app can use that shop mail: when a sender is not a carrier it looks for a **carrier named in
+   the mail together with a labelled tracking number of that carrier's shape** (for example
+   `Číslo balíka: 1234567890` next to "GLS"). Both are required; a mail that only names a carrier (an
+   order confirmation saying the delivery method is GLS) goes to needs-attention, never to a parcel.
+
+   The filter deliberately has **no "never send it to Spam" action**. "Your parcel is waiting" is one
+   of the most-copied phishing templates in this region, and exempting a query this broad from the
+   spam filter would be a bad trade. Mail this labels that is not a parcel costs one click on
+   `/attention`.
 3. **Make the label visible to IMAP. This is the step that catches everyone.** Gmail hides labels
    from IMAP by default. Go to **Settings, Labels** and tick **Show in IMAP** for `parcels`.
    If you skip this the app connects fine, authenticates fine, and reports an empty folder — which
@@ -251,7 +321,35 @@ and the exit code, and exits 0 when the notifier ran (a zero exit only means the
 that a banner actually appeared). Once step 1 is done it will switch to
 `terminal-notifier` by itself.
 
-## Schema changes and updates
+## Updating, and schema changes
+
+```sh
+scripts/update.sh --check     # reports whether an update is available; changes nothing else
+scripts/update.sh             # git pull --ff-only, npm ci, rebuild, re-bootstrap both agents
+```
+
+It prints the version and commit before and after, and says plainly when there was nothing to
+update (in which case it builds nothing and does not touch launchd). It is **safe by default**, which
+means it refuses rather than guesses:
+
+| It stops when | Because |
+|---|---|
+| the working tree is dirty | An update must not be the thing that eats a local edit. It names the files. |
+| the branch has diverged from its upstream | It only ever fast-forwards. A merge commit made by an update script is one nobody reviewed. |
+| the branch tracks nothing, or the directory is not a checkout | There is nowhere to pull from. An unpacked tarball is replaced by hand, keeping `config.json` and `data/`. |
+
+`config.json`, `data/` and `dist/` are gitignored, so none of them can make the tree dirty and none
+of them is touched by a pull. **There is no migration step to run**: the schema migrates itself when
+the database is next opened, which the poller and the web server do on start.
+
+`--check` is the only part that reaches the network, and all it does is `git fetch` — remote-tracking
+refs move, the working tree and the branch do not.
+
+The version and commit that are actually running are shown at the bottom of `/health`, so a bug
+report can say which code it is about. It reads `package.json` and `git rev-parse` once at startup,
+and says `unknown` rather than failing if the checkout is not a repo.
+
+### Schema changes
 
 The database is versioned with `PRAGMA user_version`, and `src/db/migrate.ts` holds an ordered,
 append-only list of migrations.
@@ -278,10 +376,14 @@ scripts/install-agents.sh
 
 This renders `launchd/*.plist.template` into `~/Library/LaunchAgents`, runs `npm run build`, and
 registers both agents with `launchctl bootstrap gui/$(id -u)`. It is safe to re-run. `dist/` is
-build output (it is gitignored), and the agents run it, so the installer refreshes it every time:
-re-run the script after pulling changes to update what the agents run. If the build fails the
-script stops before touching launchd. `--no-load` writes the plists only, without building or
-touching launchd.
+build output (it is gitignored), and the agents run it, so the installer refreshes it every time.
+`scripts/setup.sh` and `scripts/update.sh` both end by running this; running it directly is for when
+you have changed the code yourself. If the build fails the script stops before touching launchd.
+`--no-load` writes the plists only, without building or touching launchd.
+
+Which `node` goes into the plists is discovered, not hard-coded — `scripts/lib/node.sh`, shared with
+`setup.sh` and `update.sh` so the Node that installs the dependencies is the Node the agents run.
+`PARCELS_NODE=/path/to/node` overrides it.
 
 | Agent | What it does |
 |---|---|
@@ -336,7 +438,7 @@ running server predates that change** — `npm run build`, then restart the web 
 | `/parcel/:id` | Full event timeline, pickup location and deadline, editable label and postcode, and delete (behind a disclosure, at the bottom). |
 | `/history` | Archived and delivered parcels; filter by carrier, text, date. |
 | `/attention` | Unparsed mail awaiting a carrier and number, or a dismissal; dormant parcels. |
-| `/health` | Per-carrier last-ok / last-error, and ingest health. |
+| `/health` | Per-carrier last-ok / last-error, ingest health, and the running version and commit. |
 | `/add` | Add a parcel by hand. |
 | `/settings` | The editable half of `config.json`, and the mail connection test. |
 
@@ -454,3 +556,7 @@ Everything lives under `data/` (gitignored):
   alarm, unlike `not_found`, which is normal for a brand-new number and never an error.
 - **No notifications:** run `node dist/cli.js notify-test` and read which mechanism it used.
 - **Empty or strange output from `node`:** you used a bare `node`; use the absolute path.
+- **"Which version is this?"** The bottom of `/health`. If it says `unknown`, `package.json` could
+  not be read; if it shows no commit, the directory is not a git checkout.
+- **`update.sh` refuses to run:** read the first line. A dirty tree lists the files; a divergent
+  branch is yours to resolve (`git log --oneline --left-right main...@{u}`). Neither is a bug.

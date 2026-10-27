@@ -755,7 +755,7 @@ describe('ingest health', () => {
     expect(report.ingest).toMatchObject({ read: 1, created: 0, failed: 1 })
     expect(status(db)).toMatchObject({ n: 1, ok: null })
     expect(status(db).e).toMatch(/1 of 1 new message\(s\) failed/)
-    const page = healthPage([], { configured: true, status: getIngestStatus(db) }, { overdue: false }, { now: NOW, health: [] }).toString()
+    const page = healthPage([], { configured: true, status: getIngestStatus(db) }, { overdue: false }, { now: NOW, health: [] }, 'test').toString()
     expect(page).toContain('failing')
     expect(page).toContain('1 of 1 new message(s) failed')
   })

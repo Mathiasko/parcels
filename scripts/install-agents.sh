@@ -12,26 +12,10 @@
 set -euo pipefail
 
 LABELS=(local.parcels.poller local.parcels.web)
-MIN_NODE_MAJOR=24
 
-# launchd gives a job only PATH=/usr/bin:/bin:/usr/sbin:/sbin, so the plists have to name node by its
-# absolute path. Which path that is differs per machine - nvm, Homebrew, the official installer - so
-# it is discovered here rather than baked in. PARCELS_NODE overrides everything.
-find_node() {
-  if [ -n "${PARCELS_NODE:-}" ]; then printf '%s\n' "$PARCELS_NODE"; return; fi
-  local n
-  n="$(command -v node 2>/dev/null || true)"
-  # A bare `node` may be an nvm shell function rather than a file, and shell functions do not exist
-  # for launchd; only an executable file is any use here.
-  if [ -n "$n" ] && [ -x "$n" ]; then printf '%s\n' "$n"; return; fi
-  for c in /opt/homebrew/bin/node /usr/local/bin/node /usr/bin/node; do
-    [ -x "$c" ] && { printf '%s\n' "$c"; return; }
-  done
-  # Newest nvm install last, so `tail -1` is the highest version rather than the alphabetical one.
-  ls -d "$HOME"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1
-}
-
-NODE="$(find_node)"
+# Which node to bake into the plists: scripts/lib/node.sh, shared with setup.sh and update.sh so the
+# node that builds dist/ can never differ from the node the agents run.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/node.sh"
 
 load=1
 case "${1:-}" in
@@ -44,26 +28,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="${PARCELS_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
 DOMAIN="gui/$(id -u)"
 
+# Sets NODE and NPM, or exits having said what to install. It insists on npm beside node too, which
+# this script needs: without the build step below the agents would be registered against a dist/
+# that was never refreshed.
+require_node scripts/install-agents.sh
+
 # The path goes into XML verbatim, so refuse characters that would corrupt it.
 case "$ROOT$NODE" in
   *[\&\<\>\"\']*) echo "install-agents: a path contains an XML-special character: $ROOT $NODE" >&2; exit 1 ;;
 esac
-if [ -z "$NODE" ] || [ ! -x "$NODE" ]; then
-  echo "install-agents: could not find a node binary." >&2
-  echo "  Install Node ${MIN_NODE_MAJOR} or newer, or point PARCELS_NODE at it:" >&2
-  echo "    PARCELS_NODE=/path/to/node scripts/install-agents.sh" >&2
-  exit 1
-fi
-NODE_MAJOR="$("$NODE" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
-if [ "$NODE_MAJOR" -lt "$MIN_NODE_MAJOR" ] 2>/dev/null; then
-  echo "install-agents: $NODE is Node $NODE_MAJOR; this app needs $MIN_NODE_MAJOR or newer." >&2
-  echo "  Upgrade it, or point PARCELS_NODE at a newer one." >&2
-  exit 1
-fi
-# The build step below runs npm, which lives beside node; without it the agents would be registered
-# against a dist/ that was never refreshed.
-[ -x "$(dirname "$NODE")/npm" ] || { echo "install-agents: no npm beside $NODE" >&2; exit 1; }
-echo "using node $("$NODE" -v) at $NODE"
 
 mkdir -p "$DEST" "$ROOT/data"   # launchd will not create the log directory, and the job fails to start without it
 
@@ -85,10 +58,10 @@ done
 [ "$load" = 1 ] || exit 0
 
 # Refresh dist/ before anything is bootstrapped. npm sits next to node, and launchd-style minimal
-# PATHs would not find either, so both come from the pinned directory. A failed build aborts here
-# (set -e) with the old agents still registered, rather than loading code that did not build.
+# PATHs would not find either, so both come from the pinned directory (`run_npm`). A failed build
+# aborts here (set -e) with the old agents still registered, rather than loading code that did not build.
 echo "building dist/ ..."
-( cd "$ROOT" && PATH="$(dirname "$NODE"):$PATH" "$(dirname "$NODE")/npm" run build )
+run_npm "$ROOT" run build
 
 for label in "${LABELS[@]}"; do
   plist="$DEST/$label.plist"
