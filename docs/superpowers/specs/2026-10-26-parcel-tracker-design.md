@@ -524,7 +524,93 @@ It returns `entries.basic_dpd_token`, whose observed value base64-decodes to
   vocabulary. **Re-run step 3 with and without `dataForVerification` against the
   first real SK parcel and diff.**
 
-### 6.6 robots.txt summary
+### 6.6 DHL — RECONNOITRED 2026-10-27, key not yet issued
+
+Two products are wanted, Express and Parcel. One adapter covers both: DHL's
+"Shipment Tracking — Unified" API is explicitly cross-service and routes the number
+itself when `service` is omitted.
+
+**Scraping is excluded, on the record.** `https://www.dhl.com/utapi` answers an
+automated request with an HTTP page reading: *"Automated extraction of information
+by bots, website scraping etc. is prohibited. If you require direct system
+integration, kindly visit https://developer.dhl.com/ for API access options."*
+That is a stated prohibition plus an implemented block, and it is the reason this
+carrier needs a key when the other five do not. Do not add a scraping fallback.
+
+| | |
+|---|---|
+| Endpoint | `GET https://api-eu.dhl.com/track/shipments?trackingNumber=…` |
+| Auth | `DHL-API-Key: <key>` header |
+| Batching | **None.** One tracking number per call, so `batchSize` is 1 and each parcel costs one call per poll. |
+| Rate limit | 250 calls/day, ~1 call per 5s on initial access; `429` over. Stated inconsistently across DHL's own language pages — read the real figure off the app's details. |
+| Budget | 16 poll slots/day → ~15 DHL lookups per run before the daily cap. Ample for personal use; must be throttled and counted. |
+| `service` | Optional. Values seen: `express`, `ecommerce`, `ecommerce-europe`, `parcel-de`, `parcel-nl`, `parcel-pl`, `parcel-uk`, `svb`, `sameday`. **No `parcel-sk` or `parcel-cz` exists.** |
+
+**Response shape — CONFIRMED** against the documented `demo-key`, which returns a
+canned payload regardless of the number (good for field names, useless for
+not-found):
+
+```
+shipments[].id, .service
+  .status.{timestamp, statusCode, status, description, location.address.*}
+  .events[].{timestamp, statusCode, status, description, location.address.*}
+  .details.{product.productName, weight, references[]}
+  .origin|.destination .address.{countryCode, postalCode, addressLocality}
+```
+
+`statusCode` is a small canonical set — `pre-transit`, `transit`, `delivered`,
+`unknown`, and `failure` per the docs — which maps onto `CanonicalStatus` more
+cleanly than any of the other five carriers.
+
+**401 — CONFIRMED:** `{"status":401,"title":"Unauthorized","detail":"…"}`. A revoked
+or mistyped key must surface as a carrier alarm, never as `not_found`: the
+difference between "your key is dead" and "no such parcel" is the whole value of
+the Health page.
+
+#### Decisions
+
+**Routing: prefixed forms only.** DHL Express numbers are ten plain digits, and
+GLS already matches `^\d{10,12}$`. Accepting bare ten-digit numbers would make
+every such number ambiguous and break auto-detection for GLS parcels that work
+today. `matches()` therefore accepts only `JJD…`, `JVGL…`, `3S…` and `000…`.
+A bare Express number needs the carrier chosen explicitly — the escape hatch the
+CLI and `/add` already provide — and mail ingest disambiguates by sender domain
+regardless, which is how most parcels arrive.
+
+**Timestamps.** `2026-10-27T10:37:00`, naive, no offset — and unlike the other five
+carriers, DHL events happen worldwide, so fixing the zone to `Europe/Bratislava`
+would be wrong rather than merely imprecise. Each event carries
+`location.address.countryCode`; derive the zone from it where possible and record
+what was assumed in `occurredAtTz`, as every other adapter does.
+
+#### Owed, and only a real parcel can settle them
+
+1. The not-found shape. `demo-key` ignores the number, so this is unknown.
+2. Whether DHL Parcel Slovakia/Czech is in this API at all. There is no
+   `parcel-sk`; it may fall under `ecommerce-europe`, or may be absent.
+3. **How a pickup looks.** The canonical vocabulary has no pickup state: the demo
+   payload expresses a locker delivery as `statusCode: delivered` with
+   `description: "DELIVERED - PARCEL LOCKER"`. Pickup points, the locker code and
+   the twice-daily reminders are this app's best features, and for DHL there is
+   currently nothing structured to hang them on. Inferring from description text
+   is how the Senec bug happened; do not guess it from the docs.
+
+### 6.7 Email-only carriers
+
+A carrier can be useful without being pollable. The ingest already turns mail into
+parcels, and DHL's dispatch and delivery mails carry status in prose.
+
+This needs one real change: ingest currently **refuses to create a parcel for a
+carrier with no adapter registered** (`found <carrier> number … but no adapter
+registered`). An email-only carrier must therefore be a first-class state rather
+than an absence — never polled, never counted as a carrier failure, never left to
+go dormant and look broken, and labelled in the UI as *updates arrive by email*.
+
+This is the no-key path for DHL, and the honest fallback whenever a key is
+missing, revoked, or past its daily cap. It is also what any future shop or
+courier with no adapter would use.
+
+### 6.8 robots.txt summary
 
 | Host | Directive | Handling |
 |---|---|---|
@@ -533,6 +619,7 @@ It returns `entries.basic_dpd_token`, whose observed value base64-decodes to
 | `gls-group.eu/.com` | only `/survey/` | unrestricted |
 | `rest.mysps.sk` | `Disallow: /` | on-demand + aggressive caching, no tight loops |
 | `www.dpdgroup.com` | `Disallow: /` | as above; user-accepted decision |
+| `www.dhl.com` | n/a — an explicit in-page prohibition and an active block | **excluded**; the keyed API is the only route (see 6.6) |
 
 For the two `Disallow: /` hosts: user-initiated lookups of one's own parcels at
 tens-per-year volume is not crawling, but the directive is a standing reason to
