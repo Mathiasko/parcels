@@ -2,9 +2,11 @@
 # Installs the two launchd agents for this project: renders launchd/*.plist.template into
 # ~/Library/LaunchAgents (absolute project dir substituted, chmod 644), then bootout + bootstrap
 # each one into the gui/<uid> domain. Re-running is safe: it replaces what is registered.
+# Before loading it runs `npm run build`: dist/ is gitignored build output, and the agents run it,
+# so without this a loaded agent could silently keep running stale code.
 #
 #   scripts/install-agents.sh             install and (re)load both agents
-#   scripts/install-agents.sh --no-load   write the plists only, do not touch launchd
+#   scripts/install-agents.sh --no-load   write the plists only: no build, do not touch launchd
 #
 # PARCELS_AGENTS_DIR overrides the destination directory (used by the test).
 set -euo pipefail
@@ -45,6 +47,12 @@ for label in "${LABELS[@]}"; do
 done
 
 [ "$load" = 1 ] || exit 0
+
+# Refresh dist/ before anything is bootstrapped. npm sits next to node, and launchd-style minimal
+# PATHs would not find either, so both come from the pinned directory. A failed build aborts here
+# (set -e) with the old agents still registered, rather than loading code that did not build.
+echo "building dist/ ..."
+( cd "$ROOT" && PATH="$(dirname "$NODE"):$PATH" "$(dirname "$NODE")/npm" run build )
 
 for label in "${LABELS[@]}"; do
   plist="$DEST/$label.plist"

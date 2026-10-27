@@ -37,5 +37,7 @@ check "web has no StartInterval"                     bash -c "! plutil -extract 
 check "install script never uses launchctl load"     bash -c "! grep -E '^[^#]*launchctl[[:space:]]+(load|unload)' '$ROOT/scripts/install-agents.sh'"
 check "install script uses bootstrap on gui/<uid>"   grep -q 'launchctl bootstrap "\$DOMAIN"' "$ROOT/scripts/install-agents.sh"
 check "domain is gui/, not user/"                    grep -q 'DOMAIN="gui/\$(id -u)"' "$ROOT/scripts/install-agents.sh"
+check "install script builds dist/ before it bootstraps" bash -c "b=\$(grep -n 'run build' '$ROOT/scripts/install-agents.sh' | grep -v '^[0-9]*:#' | head -1 | cut -d: -f1); l=\$(grep -n 'launchctl bootstrap' '$ROOT/scripts/install-agents.sh' | head -1 | cut -d: -f1); test -n \"\$b\" -a -n \"\$l\" -a \"\$b\" -lt \"\$l\""
+check "install script does not build under --no-load" bash -c "! PARCELS_AGENTS_DIR='$TMP' '$ROOT/scripts/install-agents.sh' --no-load | grep -q building"
 
 exit $fail

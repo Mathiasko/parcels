@@ -248,12 +248,13 @@ export interface DeliveredFilter {
 }
 
 /**
- * Delivered parcels, plus archived ones that were never delivered (parcels created already archived
+ * Finished parcels: delivered, returned to sender (a real outcome nothing else archives, so without
+ * this it would be on no page), plus archived ones that were never delivered (parcels created already archived
  * from old mail: they were never polled, so their status is still 'unknown' and must stay so). Newest
  * first by delivery, or by first-seen for those. Date bounds apply to the same instant.
  */
 export function listDelivered(db: Database, f: DeliveredFilter = {}): Parcel[] {
-  const where = ["(status = 'delivered' OR archived_at IS NOT NULL)"]
+  const where = ["(status IN ('delivered', 'returned') OR archived_at IS NOT NULL)"]
   const args: (string | number)[] = []
   if (f.carrier) { where.push('carrier = ?'); args.push(f.carrier) }
   if (f.q) {

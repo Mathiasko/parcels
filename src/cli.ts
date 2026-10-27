@@ -12,7 +12,7 @@ import { createNotifier, type SpawnFn } from './notify/send.js'
 import type { Notifier } from './notify/types.js'
 import { listEvents } from './db/events.js'
 import { reprocessMessages } from './ingest/ingest.js'
-import { findParcel, getParcel, insertParcel, listActive } from './db/parcels.js'
+import { findParcel, getParcel, insertParcel, listActive, listDelivered, type Parcel } from './db/parcels.js'
 
 export interface CliContext {
   db: Database
@@ -84,10 +84,15 @@ function add(argv: string[], ctx: CliContext): void {
 }
 
 function list(ctx: CliContext): void {
+  const line = (p: Parcel) => `#${p.id}  ${p.label ?? '-'}  ${p.carrier}  ${p.status}  ${p.trackingNumber}`
   const parcels = listActive(ctx.db)
-  if (parcels.length === 0) return ctx.out('no active parcels')
-  for (const p of parcels) {
-    ctx.out(`#${p.id}  ${p.label ?? '-'}  ${p.carrier}  ${p.status}  ${p.trackingNumber}`)
+  // Returned parcels are outside "active" but need the owner's attention (the parcel is coming back).
+  const returned = listDelivered(ctx.db).filter(p => p.status === 'returned')
+  if (parcels.length === 0 && returned.length === 0) return ctx.out('no active parcels')
+  for (const p of parcels) ctx.out(line(p))
+  if (returned.length > 0) {
+    ctx.out('returned to sender:')
+    for (const p of returned) ctx.out(line(p))
   }
 }
 

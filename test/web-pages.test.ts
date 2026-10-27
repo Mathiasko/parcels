@@ -60,6 +60,17 @@ describe('web pages', () => {
     expect(body).not.toContain('Still travelling')
   })
 
+  test('GET /history lists a returned parcel, labelled returned rather than archived, and keeps it out of the delivery stats', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'posta', trackingNumber: 'RETURNED1', label: 'Sent back one', source: 'manual' })
+    updateParcelState(db, id, { status: 'returned' })
+    const body = (await get(db, '/history')).body
+    expect(body).toContain('Sent back one')
+    expect(body).toMatch(/returned · /)
+    expect(body).not.toMatch(/archived · /)
+    expect(body).toContain('no deliveries yet')
+  })
+
   test('GET /history?carrier=posta filters by carrier', async () => {
     const db = memDb()
     delivered(db, { carrier: 'posta', number: 'P1', label: 'From the post' })
@@ -109,7 +120,7 @@ describe('web pages', () => {
   test('GET /history renders cleanly on an empty database', async () => {
     const res = await get(memDb(), '/history')
     expect(res.statusCode).toBe(200)
-    expect(res.body).toContain('No delivered or archived parcels')
+    expect(res.body).toContain('No delivered, returned or archived parcels')
   })
 
   test('formatDuration: whole hours under 48h, one-decimal days beyond', () => {
@@ -502,7 +513,7 @@ describe('archived parcels from old mail', () => {
   })
 
   test('the empty state names both kinds', async () => {
-    expect((await get(memDb(), '/history')).body).toContain('No delivered or archived parcels')
+    expect((await get(memDb(), '/history')).body).toContain('No delivered, returned or archived parcels')
   })
 })
 

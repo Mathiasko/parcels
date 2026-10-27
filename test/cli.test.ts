@@ -90,6 +90,19 @@ test('list prints one line per active parcel with label, carrier and status', as
   expect(lines[1]).toMatch(/unknown/)
 })
 
+test('list also shows a returned parcel, which is outside "active" but not finished business', async () => {
+  const db = memDb()
+  insertParcel(db, { carrier: 'dpd', trackingNumber: '01234567890123', label: 'Shoes', source: 'manual' })
+  const back = insertParcel(db, { carrier: 'posta', trackingNumber: 'RA123456785SK', label: 'Sent back', source: 'manual' })
+  updateParcelState(db, back, { status: 'returned' })
+
+  const lines = (await cli(db, 'list')).out.split('\n')
+  expect(lines[0]).toMatch(/Shoes/)
+  expect(lines[1]).toMatch(/returned to sender/)
+  expect(lines[2]).toMatch(/Sent back.*returned/)
+  expect(lines).toHaveLength(3)
+})
+
 test('show prints the event timeline oldest-first', async () => {
   const db = memDb()
   const id = insertParcel(db, { carrier: 'posta', trackingNumber: 'RA123456785SK', label: 'Headphones', source: 'manual' })

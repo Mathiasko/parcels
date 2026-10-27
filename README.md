@@ -134,13 +134,14 @@ that a banner actually appeared). Once step 1 is done it will switch to
 ## Run it on a schedule (launchd)
 
 ```sh
-npm run build
 scripts/install-agents.sh
 ```
 
-This renders `launchd/*.plist.template` into `~/Library/LaunchAgents` and registers both agents
-with `launchctl bootstrap gui/$(id -u)`. It is safe to re-run. It refuses to register an agent
-whose `dist/` entry point does not exist yet, so build first. `--no-load` writes the plists without
+This renders `launchd/*.plist.template` into `~/Library/LaunchAgents`, runs `npm run build`, and
+registers both agents with `launchctl bootstrap gui/$(id -u)`. It is safe to re-run. `dist/` is
+build output (it is gitignored), and the agents run it, so the installer refreshes it every time:
+re-run the script after pulling changes to update what the agents run. If the build fails the
+script stops before touching launchd. `--no-load` writes the plists only, without building or
 touching launchd.
 
 | Agent | What it does |
