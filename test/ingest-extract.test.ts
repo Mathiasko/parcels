@@ -190,16 +190,27 @@ describe('extract: no sender hint', () => {
     expect(e.merchant).toBe('Example Shop')   // the e-shop, from the sender display name
   })
 
-  test('the real MTBIKER order confirmation names GLS but prints no tracking number: confidence none', async () => {
-    // It says "ODBERNE MIESTO GLS / ALZABOX" (the chosen delivery method) and carries a 12-digit phone number
-    // and a 10-digit id inside a URL token. Neither is a tracking number; a name alone must not make one up.
+  // THE REAL PAIR. MTBIKER sent two mails for one order, from the same sender, both naming GLS:
+  //   - the dispatch mail ("... odoslaná") prints "Číslo zásielky je <number>"  -> must extract
+  //   - the order confirmation (this one)  has NO tracking number              -> must NOT extract
+  // The negative case is deliberate and as important as the positive one: it carries a 12-digit phone number
+  // and a 10-digit id inside a URL token, which a looser "GLS named + any number" rule would turn into a
+  // bogus parcel. Do not "fix" it to extract.
+  test('real e-shop mail 1/2, the DISPATCH mail: names GLS and prints "Číslo zásielky je <number>" -> shape', async () => {
+    const e = await extract(fx('mtbiker-dispatch-names-gls'))
+    expect(e).toEqual({ carrier: 'gls', number: '1234567890', merchant: 'MTBIKER shop', confidence: 'shape' })
+  })
+
+  test('real e-shop mail 2/2, the ORDER CONFIRMATION for the same order: names GLS, prints no tracking number -> none', async () => {
     const e = await extract(fx('mtbiker-order-confirmation-names-gls'))
     expect(e).toEqual({ confidence: 'none' })
   })
+
   describe('e-shop dispatch mail: a named carrier AND a labelled number of its shape, both required', () => {
     const shop = 'MTBIKER shop <objednavky@mtbiker.sk>'
 
-    test('English dispatch mail naming GLS with a labelled 12-digit number -> shape, merchant from the sender', async () => {
+    // Synthetic cases below; the REAL e-shop mail is tested above ("real e-shop mail 1/2").
+    test('(synthetic) English dispatch mail naming GLS with a labelled 12-digit number -> shape, merchant from the sender', async () => {
       const e = await extract(fx('synthetic-eshop-dispatch-gls'))
       expect(e).toMatchObject({ carrier: 'gls', number: '000000000001', confidence: 'shape', merchant: 'Example Shop' })
     })
@@ -390,6 +401,14 @@ describe('ingestMessages', () => {
     const { db, deps } = setup([mk(1, bare, 3), mk(2, named, 1)])
     await ingestMessages(db, deps)
     expect(findParcel(db, 'packeta', 'Z0000000005')!.merchant).toBe('Example Shop')
+  })
+
+  test('of the real MTBIKER pair, the dispatch mail makes a gls parcel and the confirmation goes to needs-attention', async () => {
+    const { db, deps } = setup([mail(1, 'mtbiker-order-confirmation-names-gls', 2), mail(2, 'mtbiker-dispatch-names-gls', 1)])
+    const r = await ingestMessages(db, deps)
+    expect(r).toMatchObject({ read: 2, created: 1, needsAttention: 1 })
+    expect(findParcel(db, 'gls', '1234567890')).toMatchObject({ source: 'email', merchant: 'MTBIKER shop' })
+    expect(listUnparsedMessages(db)).toHaveLength(1)
   })
 
   test('an e-shop dispatch mail naming GLS creates a gls parcel, labelled with the shop, the first notice of it', async () => {
