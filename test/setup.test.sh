@@ -70,7 +70,8 @@ check "it records the postcode that was given"             grep -q '"defaultPost
 # No imap block: that is the "no mail account configured" state, which /settings fills in with a
 # password it can immediately test. A setup script can only store a credential and hope.
 check "it writes no imap block, and no placeholder secret" bash -c "! grep -qE 'imap|app-password' '$FRESH'"
-check "setup.sh never reads a password"                    bash -c "! grep -n 'read -r' '$SETUP' | grep -qiv postcode"
+check "setup.sh never reads a credential"                  bash -c "! grep -nE 'read( -r)?' '$SETUP' | grep -qiE 'pass|secret|token|credential'"
+check "setup.sh prompts for nothing but a postcode and y/n" bash -c "! grep -nE '^[^#]*read -r' '$SETUP' | grep -qvE 'postcode|answer'"
 check "setup.sh points at /settings for the mail set-up"   grep -q '/settings' "$SETUP"
 
 BAD="$TMP/bad.json"
@@ -86,20 +87,30 @@ check "setup.sh rejects an unknown flag"                    bash -c "! '$SETUP' 
 # nothing in this repository is modified. The scripts under test are copied in because they may not
 # be committed yet; they are identical files once they are, so the tree stays clean either way.
 clone() { # clone <dir>
-  git clone --quiet --no-hardlinks "$ROOT" "$1" 2>/dev/null || return 1
+  local bare="$TMP/$(basename "$1")-origin.git"
+  git clone --quiet --bare --no-hardlinks "$ROOT" "$bare" 2>/dev/null || return 1
+  git clone --quiet --no-hardlinks "$bare" "$1" 2>/dev/null || return 1
   mkdir -p "$1/scripts/lib"
-  cp "$SETUP" "$UPDATE" "$1/scripts/" && cp "$LIB" "$1/scripts/lib/"
+  cp "$SETUP" "$UPDATE" "$1/scripts/" && cp "$LIB" "$1/scripts/lib/" || return 1
+  # The scripts under test may not be committed yet. Commit them here and push to this throwaway
+  # origin, so the clone is both clean and current. Without this, editing any one of these three
+  # scripts fails the up-to-date cases for a reason that has nothing to do with update.sh.
+  if ! git -C "$1" diff --quiet; then
+    git -C "$1" -c user.email=t@example.com -c user.name=t commit -qam "scripts under test" || return 1
+    git -C "$1" push -q origin HEAD:main || return 1
+  fi
 }
 
 CLEAN="$TMP/clean"
 if clone "$CLEAN"; then
+  CLEAN_HEAD="$(git -C "$CLEAN" rev-parse HEAD)"   # what the clone started at, not what ROOT is at
   out="$("$CLEAN/scripts/update.sh" --check 2>&1)"; check_status=$?
   check "update.sh --check succeeds on an up-to-date clone" test "$check_status" = 0
   check "update.sh --check says it is up to date"           bash -c "grep -qi 'up to date' <<< \"\$1\"" _ "$out"
   check "update.sh --check reports the version and commit"  bash -c "grep -qE 'at version [0-9]+\.[0-9]+\.[0-9]+ \([0-9a-f]{7,}\)' <<< \"\$1\"" _ "$out"
   check "update.sh --check builds nothing"                  bash -c "! grep -qiE 'npm ci|building dist|bootstrapped' <<< \"\$1\"" _ "$out"
   check "update.sh --check leaves the clone clean"          test -z "$(git -C "$CLEAN" status --porcelain --untracked-files=no)"
-  check "update.sh --check leaves HEAD where it was"        test "$(git -C "$CLEAN" rev-parse HEAD)" = "$(git -C "$ROOT" rev-parse HEAD)"
+  check "update.sh --check leaves HEAD where it was"        test "$(git -C "$CLEAN" rev-parse HEAD)" = "$CLEAN_HEAD"
 
   # A dirty tree: the refusal must name the file, and must come before anything is fetched or built.
   echo '# a local edit nobody asked to lose' >> "$CLEAN/README.md"
@@ -109,7 +120,7 @@ if clone "$CLEAN"; then
   check "the refusal says nothing was updated"             bash -c "grep -qi 'nothing was updated' <<< \"\$1\"" _ "$out"
   check "a dirty tree is refused before any npm or build"  bash -c "! grep -qiE 'npm ci|building dist|bootstrapped' <<< \"\$1\"" _ "$out"
   check "the local edit is still there afterwards"         grep -q 'nobody asked to lose' "$CLEAN/README.md"
-  check "a dirty tree does not move HEAD"                  test "$(git -C "$CLEAN" rev-parse HEAD)" = "$(git -C "$ROOT" rev-parse HEAD)"
+  check "a dirty tree does not move HEAD"                  test "$(git -C "$CLEAN" rev-parse HEAD)" = "$CLEAN_HEAD"
 
   # A detached HEAD has no upstream: it must be named as such, not reported as a branch called HEAD.
   git -C "$CLEAN" checkout -q --detach HEAD

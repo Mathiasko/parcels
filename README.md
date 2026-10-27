@@ -12,6 +12,15 @@ The full design and its rationale are in
 
 ## Install
 
+Prerequisites: macOS, and Node 24 or newer. Homebrew and git are not strictly required, but with
+both present this is the whole install. `setup.sh` checks Node itself and, when Homebrew is
+available, offers to run `brew install node` for you; it will not install Homebrew unasked, because
+that is a system-wide change (a new `/opt/homebrew`, an edited shell profile, sudo) that an
+installer has no business making on its own. `better-sqlite3` ships prebuilt macOS binaries, so
+there is nothing to compile and no Xcode toolchain to install.
+
+Answer the Node prompt without a terminal by setting `PARCELS_INSTALL_NODE=1`.
+
 On a fresh Mac, from a real Terminal window:
 
 ```sh

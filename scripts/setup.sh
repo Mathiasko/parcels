@@ -16,6 +16,7 @@
 # PARCELS_CONFIG    which config file to create (default <repo>/config.json). Used by the test.
 # PARCELS_POSTCODE  answers the postcode prompt, for a non-interactive run.
 # PARCELS_NODE      which node to use; see scripts/lib/node.sh.
+# PARCELS_INSTALL_NODE  1 or 0 to answer the "install Node with Homebrew?" prompt without a tty.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -45,9 +46,45 @@ step "Checking the machine"
 }
 echo "macOS $(sw_vers -productVersion 2>/dev/null || echo '?') on $(uname -m)"
 
-# Sets NODE and NPM, or exits having said exactly what to install. better-sqlite3 ships prebuilt
-# darwin binaries, so there is nothing to compile and no Xcode requirement.
-require_node scripts/setup.sh
+# --- 1b. node ---------------------------------------------------------------------------------------
+# Node is the only thing this app needs that macOS does not ship. better-sqlite3 carries prebuilt
+# darwin binaries, so there is nothing to compile and no Xcode requirement beyond what git already
+# needed. If Homebrew is here we can offer to fix a missing or too-old Node in place; if it is not,
+# say what to install and stop, because installing Homebrew itself is a system-wide change
+# (a new /opt/homebrew, an edited shell profile, sudo) that an installer should never make unasked.
+#
+# PARCELS_INSTALL_NODE=1 answers the prompt yes, for a non-interactive run; =0 answers no.
+offer_node() {
+  find_node >/dev/null 2>&1 && require_node scripts/setup.sh 2>/dev/null && return 0
+
+  if ! command -v brew >/dev/null 2>&1; then
+    require_node scripts/setup.sh   # prints exactly what is missing, and exits
+    return
+  fi
+
+  echo "Node ${MIN_NODE_MAJOR}+ is missing or too old, and Homebrew is available."
+  local answer="${PARCELS_INSTALL_NODE:-}"
+  if [ -z "$answer" ]; then
+    if [ -t 0 ]; then
+      printf 'Install Node with "brew install node"? [y/N] '
+      read -r answer || answer=n
+    else
+      answer=n
+    fi
+  fi
+  case "$answer" in
+    1|y|Y|yes|YES) ;;
+    *) echo "setup: not installing. Run 'brew install node' yourself, then re-run this script." >&2; exit 1 ;;
+  esac
+
+  step "Installing Node (brew install node)"
+  brew install node || { echo "setup: brew install node failed." >&2; exit 1; }
+  # A fresh Homebrew Node may not be on PATH yet in this shell; look where brew just put it.
+  hash -r 2>/dev/null || true
+  [ -x "$(brew --prefix)/bin/node" ] && PARCELS_NODE="${PARCELS_NODE:-$(brew --prefix)/bin/node}"
+  require_node scripts/setup.sh
+}
+offer_node
 
 # --- 2. dependencies --------------------------------------------------------------------------------
 if [ "$config_only" = 0 ]; then
