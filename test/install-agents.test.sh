@@ -25,8 +25,9 @@ check "poller labelled correctly"                    test "$(key "$P" Label)" = 
 check "poller runs caffeinate -i"                    test "$(key "$P" ProgramArguments.0)" = /usr/bin/caffeinate -a "$(key "$P" ProgramArguments.1)" = -i
 check "poller uses the absolute node path"           test "$(key "$P" ProgramArguments.2)" = "$NODE"
 check "poller runs the absolute dist/poll.js"        test "$(key "$P" ProgramArguments.3)" = "$ROOT/dist/poll.js"
-check "poller has exactly 15 calendar slots"         test "$(key "$P" StartCalendarInterval)" = 15
-check "slots are hours 7..21 at minute 0, in order"  test "$(for i in $(seq 0 14); do echo "$(key "$P" StartCalendarInterval.$i.Hour):$(key "$P" StartCalendarInterval.$i.Minute)"; done | tr '\n' ' ')" = "7:0 8:0 9:0 10:0 11:0 12:0 13:0 14:0 15:0 16:0 17:0 18:0 19:0 20:0 21:0 "
+check "poller has exactly 16 calendar slots"         test "$(key "$P" StartCalendarInterval)" = 16
+check "slots are 7..21 on the hour plus 15:30"       test "$(for i in $(seq 0 15); do echo "$(key "$P" StartCalendarInterval.$i.Hour):$(key "$P" StartCalendarInterval.$i.Minute)"; done | tr '\n' ' ')" = "7:0 8:0 9:0 10:0 11:0 12:0 13:0 14:0 15:0 15:30 16:0 17:0 18:0 19:0 20:0 21:0 "
+check "both reminder times have a run to fire from" bash -c "for t in 8:0 15:30; do for i in \$(seq 0 15); do test \"\$(plutil -extract StartCalendarInterval.\$i.Hour raw -o - '$P'):\$(plutil -extract StartCalendarInterval.\$i.Minute raw -o - '$P')\" = \"\$t\" && continue 2; done; exit 1; done"
 check "poller has no StartInterval"                  bash -c "! plutil -extract StartInterval raw -o - '$P'"
 check "poller logs live under data/"                 test "$(key "$P" StandardOutPath)" = "$ROOT/data/poll.log" -a "$(key "$P" StandardErrorPath)" = "$ROOT/data/poll.err.log"
 check "poller sets WorkingDirectory to the project"  test "$(key "$P" WorkingDirectory)" = "$ROOT"
