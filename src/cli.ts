@@ -5,7 +5,8 @@ import { loadRuntimeConfig, type Config } from './core/config.js'
 import { captureBodies, createHttpClient } from './core/http.js'
 import { recordPollRun, runPoll, summarize } from './core/poll.js'
 import { startRun } from './db/poll-runs.js'
-import type { CarrierAdapter, CarrierId, HttpClient } from './core/types.js'
+import type { Carrier, CarrierAdapter, CarrierId, HttpClient } from './core/types.js'
+import { isPollable } from './core/types.js'
 import { buildPollDeps, initRuntime } from './core/runtime.js'
 import { allAdapters, getAdapter, normalizeNumber, resolveCarrier } from './carriers/registry.js'
 import { openDb, type Database } from './db/index.js'
@@ -22,14 +23,14 @@ export interface CliContext {
   err: (line: string) => void
   /** Injectable for tests; `poll` and `probe` default to the real client / registered adapters. */
   http?: HttpClient
-  adapters?: CarrierAdapter[]
+  adapters?: Carrier[]
   /** Injectable for tests; `poll` defaults to the configured notifier. */
   notifier?: Notifier
   /** Injectable for tests; `notify-test` defaults to really launching the notifier. */
   spawn?: SpawnFn
 }
 
-const CARRIER_IDS: readonly CarrierId[] = ['posta', 'packeta', 'gls', 'sps', 'dpd']
+const CARRIER_IDS: readonly CarrierId[] = ['posta', 'packeta', 'gls', 'sps', 'dpd', 'dhl']
 
 const USAGE = `usage: cli <command>
   add <number> [--carrier <id>] [--label <text>] [--zip <postcode>]
@@ -170,12 +171,18 @@ async function probe(argv: string[], ctx: CliContext): Promise<void> {
   })
   if (positionals.length !== 2) throw new CliError('usage: probe <carrier> <number> [--zip <postcode>]')
   const carrier = requireCarrier(positionals[0]!)
-  let adapter: CarrierAdapter
+  let registered: Carrier
   try {
-    adapter = getAdapter(carrier)
+    registered = getAdapter(carrier)
   } catch {
     throw new CliError(`no adapter for ${carrier} is available yet`)
   }
+  // An email-only carrier is never asked anything (§6.7), so there is no request to show and no
+  // response to print. Said plainly rather than faked with an empty result.
+  if (!isPollable(registered)) {
+    throw new CliError(`${carrier} is an email-only carrier: it is never polled, so there is nothing to probe. Its updates come from its own mail, which \`cli poll\` ingests.`)
+  }
+  const adapter: CarrierAdapter = registered
 
   const capture = captureBodies(ctx.http ?? createHttpClient())
   try {

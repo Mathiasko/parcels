@@ -1,4 +1,5 @@
 import type { CarrierId } from '../../core/types.js'
+import { isEmailOnlyCarrier } from '../../core/types.js'
 import type { HealthRow } from '../../db/health.js'
 import type { IngestStatus } from '../../db/ingest-status.js'
 import type { PollerStatus } from '../../core/pollwatch.js'
@@ -12,11 +13,16 @@ import { layout, scroller, type PageCtx } from './layout.js'
 export const needsAttention = (h: HealthRow | undefined): boolean =>
   h !== undefined && h.lastErrorKind === 'gated' && h.consecutiveFailures > 0
 
-/** A health state: its glyph, colour and weight carry it as well as the word, so no state is a coloured word alone. */
-function state(kind: 'ok' | 'nodata' | 'failing' | 'attention', word: string, streak?: number): Html {
-  const g: GlyphName = kind === 'ok' ? 'delivered' : kind === 'nodata' ? 'pre_transit' : 'problem'
-  const tone = kind === 'ok' ? 't-ok' : kind === 'nodata' ? 't-3' : 't-warn'
-  return html`<span class="st ${tone}${kind === 'ok' || kind === 'nodata' ? ' quiet' : ''}">${glyph(g)}${word}${streak ? html` · <span>${streak}</span> in a row` : ''}</span>`
+/**
+ * A health state: its glyph, colour and weight carry it as well as the word, so no state is a coloured
+ * word alone. `email` is not a health state at all - it is the answer to a question this board cannot
+ * ask - so it gets the quiet register and no hue, like `nodata`, and never the warn wash.
+ */
+function state(kind: 'ok' | 'nodata' | 'failing' | 'attention' | 'email', word: string, streak?: number): Html {
+  const quiet = kind === 'ok' || kind === 'nodata' || kind === 'email'
+  const g: GlyphName = kind === 'ok' ? 'delivered' : quiet ? 'pre_transit' : 'problem'
+  const tone = kind === 'ok' ? 't-ok' : quiet ? 't-3' : 't-warn'
+  return html`<span class="st ${tone}${quiet ? ' quiet' : ''}">${glyph(g)}${word}${streak ? html` · <span>${streak}</span> in a row` : ''}</span>`
 }
 
 function verdict(h: HealthRow | undefined): Html {
@@ -28,16 +34,27 @@ function verdict(h: HealthRow | undefined): Html {
 
 const bad = (h: HealthRow | undefined): boolean => h !== undefined && h.consecutiveFailures > 0
 
-/** `4 of 5 carriers reporting. SPS has never been polled.` It says "all" only when it counts all. */
+/**
+ * `4 of 5 carriers reporting. SPS has never been polled.` It says "all" only when it counts all.
+ *
+ * Counted over the carriers that are polled. An email-only one has no last-ok and never will, so
+ * including it would make "all reporting" unreachable and "has never been polled" read as a fault;
+ * it gets its own clause saying what it actually is.
+ */
 function lede(rows: Map<CarrierId, HealthRow>, ids: CarrierId[]): string {
-  const failing = ids.filter(id => bad(rows.get(id)))
-  const never = ids.filter(id => !rows.has(id)).map(id => CARRIER_NAME[id])
-  const ok = ids.length - failing.length - never.length
+  const polled = ids.filter(id => !isEmailOnlyCarrier(id))
+  const byEmail = ids.filter(isEmailOnlyCarrier).map(id => CARRIER_NAME[id])
+  const failing = polled.filter(id => bad(rows.get(id)))
+  const never = polled.filter(id => !rows.has(id)).map(id => CARRIER_NAME[id])
+  const ok = polled.length - failing.length - never.length
   const head = failing.length > 0
-    ? `${failing.length} of ${ids.length} carriers failing.`
-    : ok === ids.length ? `All ${ids.length} carriers reporting.` : `${ok} of ${ids.length} carriers reporting.`
+    ? `${failing.length} of ${polled.length} carriers failing.`
+    : ok === polled.length ? `All ${polled.length} carriers reporting.` : `${ok} of ${polled.length} carriers reporting.`
   const tail = never.length > 0 ? ` ${never.join(' and ')} ${never.length === 1 ? 'has' : 'have'} never been polled.` : ''
-  return head + tail
+  const email = byEmail.length > 0
+    ? ` ${byEmail.join(' and ')} ${byEmail.length === 1 ? 'is' : 'are'} not polled: ${byEmail.length === 1 ? 'its' : 'their'} updates arrive by email.`
+    : ''
+  return head + tail + email
 }
 
 /** Which part of the app acted. Named for what the user did, not for the process that did it. */
@@ -99,6 +116,12 @@ export function healthPage(
 <p class="lede">${lede(byCarrier, ids)}</p>
 ${scroller('Carrier and system health', html`<table class="board"><thead><tr><th scope="col">State</th><th scope="col">Name</th><th scope="col">Last ok</th>${anyError ? html`<th scope="col">Last error</th>` : ''}</tr></thead>
 <tbody><tr class="grp"><th scope="rowgroup" colspan="${cols}">Carriers</th></tr>${ids.map(id => {
+    // An email-only carrier is listed, because leaving it off would be its own small lie (the user
+    // has parcels with it), but it is listed as what it is: never asked, so never ok and never broken.
+    if (isEmailOnlyCarrier(id)) {
+      return html`<tr data-carrier="${id}"><td>${state('email', 'by email')}</td><td>${CARRIER_NAME[id]}</td>
+<td>not polled<span class="meta why">updates arrive by email</span></td>${anyError ? html`<td class="meta">—</td>` : ''}</tr>`
+    }
     const h = byCarrier.get(id)
     return html`<tr data-carrier="${id}"${bad(h) ? html` class="bad"` : ''}><td>${verdict(h)}</td><td>${CARRIER_NAME[id]}</td>
 <td>${h?.lastOkAt ? formatDateTime(h.lastOkAt, ctx.now) : 'never'}</td>${errCell(h?.lastErrorAt, h?.lastErrorDetail, h?.lastErrorKind)}</tr>`

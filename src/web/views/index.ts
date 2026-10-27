@@ -2,6 +2,7 @@ import { isDormant } from '../../core/backoff.js'
 import { postcodeRejected, type Parcel } from '../../db/parcels.js'
 import type { StoredEvent } from '../../db/events.js'
 import type { CanonicalStatus } from '../../core/types.js'
+import { isEmailOnlyCarrier } from '../../core/types.js'
 import {
   calendarDaysBetween, CARRIER_NAME, formatAgo, formatDateTime, formatDay, isBadge, plural, statusIndicator,
   toneClass,
@@ -100,7 +101,7 @@ export function refreshBanner(n: RefreshNote | undefined, now: Date, doing?: str
     ? `${mail}Polled ${plural(n.polled, 'parcel')}.`
     : n.active === 0
       ? `${mail}Nothing is in flight yet.`
-      : `${mail}Nothing was polled: each parcel here is paused (its carrier is failing, or its postcode was rejected) or was tried under a minute ago.`
+      : `${mail}Nothing was polled: each parcel here is paused (its carrier is failing, or its postcode was rejected), updated by email only, or was tried under a minute ago.`
   if (n.failures === 0) return notice('neutral', html`<p>${note}</p>`, true)
   return notice('warn', html`<p><strong>${plural(n.failures, 'carrier failure')}.</strong> See <a href="/health">Health</a>.</p><p>${note}</p>`, true)
 }
@@ -194,10 +195,13 @@ function rowLine(e: Entry, overflowPlace?: string): { glyphCol: Html; line: Html
     return { glyphCol: html``, line: html`<div class="ev">${statusIndicator(p.status)}${body}</div>` }
   }
   if (p.status === 'unknown') {
+    // "No updates yet" says something is expected and will arrive; for a carrier that is never polled
+    // what is true is HOW it would arrive, which is also the answer to "why is this not updating?".
+    const nothing = isEmailOnlyCarrier(p.carrier) ? 'Updates arrive by email' : 'No updates yet'
     return sentence
       // For a prose-only carrier the sentence IS the status: promoted one colour step, with no word beside it.
       ? { glyphCol: html`<span class="gl t-3">${glyph('unknown')}</span>`, line: html`<div class="ev prose">${sentence}</div>` }
-      : { glyphCol: html`<span class="gl t-3">${glyph('unknown')}</span>`, line: html`<div class="ev quiet">No updates yet</div>` }
+      : { glyphCol: html`<span class="gl t-3">${glyph('unknown')}</span>`, line: html`<div class="ev quiet">${nothing}</div>` }
   }
   return {
     glyphCol: html`<span class="gl ${toneClass(p.status)}">${glyph(p.status)}</span>`,

@@ -3,9 +3,13 @@ import {
   normalizeNumber, detectCarrier, register, getAdapter, allAdapters, resolveCarrier,
 } from '../src/carriers/registry.js'
 import type { CarrierAdapter, CarrierId } from '../src/core/types.js'
+import { isPollable } from '../src/core/types.js'
 
-// Importing the registry registered the five real adapters; take them before the stand-ins below replace them.
+// Importing the registry registered the real carriers; take them before the stand-ins below replace them.
 const real = allAdapters()
+/** The five that are polled; dhl is email-only and has no adapter (see test/carriers/dhl.test.ts). */
+const POLLED: CarrierId[] = ['dpd', 'gls', 'packeta', 'posta', 'sps']
+const ALL: CarrierId[] = [...POLLED, 'dhl' as CarrierId].sort()
 
 // Lightweight stand-ins with deliberately overlapping shapes, to exercise the ordering independent of the real regexes.
 const stub = (id: CarrierId, shape: RegExp): CarrierAdapter => ({
@@ -22,6 +26,7 @@ const shapes: Record<CarrierId, RegExp> = {
   sps: /^703\d{11}[0-4]\d$/,
   gls: /^\d{10,12}$/,
   dpd: /^\d{14}[A-Z0-9]?$/,
+  dhl: /^JJD\d{10,22}$/,
 }
 
 describe('with stand-in adapters', () => {
@@ -74,20 +79,22 @@ describe('with stand-in adapters', () => {
   test('getAdapter returns a registered adapter and throws for an unregistered one', () => {
     expect(getAdapter('posta').id).toBe('posta')
     expect(() => getAdapter('nope' as CarrierId)).toThrow(/nope/)
-    expect(allAdapters().map(a => a.id).sort()).toEqual(['dpd', 'gls', 'packeta', 'posta', 'sps'])
+    expect(allAdapters().map(a => a.id).sort()).toEqual(ALL)
   })
 })
 
 describe('with the real adapters', () => {
   beforeEach(() => { for (const a of real) register(a) })
 
-  test('all five adapters are registered', () => {
-    expect(allAdapters().map(a => a.id).sort()).toEqual(['dpd', 'gls', 'packeta', 'posta', 'sps'])
-    expect(real.map(a => a.id).sort()).toEqual(['dpd', 'gls', 'packeta', 'posta', 'sps'])
-    for (const id of ['dpd', 'gls', 'packeta', 'posta', 'sps'] as CarrierId[]) expect(getAdapter(id).id).toBe(id)
+  test('all six carriers are registered: five polled adapters and one email-only', () => {
+    expect(allAdapters().map(a => a.id).sort()).toEqual(ALL)
+    expect(real.map(a => a.id).sort()).toEqual(ALL)
+    for (const id of ALL) expect(getAdapter(id).id).toBe(id)
+    expect(allAdapters().filter(isPollable).map(a => a.id).sort()).toEqual(POLLED)
   })
 
   test('each real adapter claims its own number shape', () => {
+    expect(detectCarrier('JJD0099990758473189')).toEqual(['dhl'])
     expect(detectCarrier('RA123456785SK')).toEqual(['posta'])
     expect(detectCarrier('Z1234567890')).toEqual(['packeta'])
     expect(detectCarrier('7031234567890123')).toEqual(['sps'])
@@ -114,8 +121,8 @@ describe('with the real adapters', () => {
   test('detectCarrier prefers the distinctive carriers over the ambiguous ones', () => {
     // No two real shapes overlap today, so widen the ambiguous pair to claim everything and check that
     // posta, packeta and sps still come first, and that dpd precedes gls.
-    register({ ...getAdapter('gls'), matches: () => true })
-    register({ ...getAdapter('dpd'), matches: () => true })
+    register({ ...(getAdapter('gls') as CarrierAdapter), matches: () => true })
+    register({ ...(getAdapter('dpd') as CarrierAdapter), matches: () => true })
     expect(detectCarrier('RA123456785SK')).toEqual(['posta', 'dpd', 'gls'])
     expect(detectCarrier('Z1234567890')).toEqual(['packeta', 'dpd', 'gls'])
     expect(detectCarrier('7031234567890123')).toEqual(['sps', 'dpd', 'gls'])

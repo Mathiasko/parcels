@@ -5,7 +5,9 @@ Gmail label, polls the Slovak and Czech carriers for status, and tells you with 
 notification when something is out for delivery or waiting at a pickup point. A local web
 page is the read surface. Nothing runs off this machine and nothing is forwarded anywhere.
 
-Carriers: Slovenská pošta, Packeta, GLS, SPS, DPD SK. (123Kuriér is excluded: the company is defunct.)
+Carriers: Slovenská pošta, Packeta, GLS, SPS, DPD SK, and DHL — which is
+[tracked from its mail alone](#dhl-and-other-email-only-carriers) rather than polled.
+(123Kuriér is excluded: the company is defunct.)
 
 The full design and its rationale are in
 [`docs/superpowers/specs/2026-10-26-parcel-tracker-design.md`](docs/superpowers/specs/2026-10-26-parcel-tracker-design.md).
@@ -255,6 +257,31 @@ Notes on behaviour:
 - An App Password is not scope-limited by Google: it can read and send as the whole account. The
   label scope is a convention this app honours, not a boundary Google enforces. The credential is
   local, `chmod 600`, never leaves the machine, and can be revoked instantly at the same page.
+
+## DHL, and other email-only carriers
+
+DHL is tracked from its own mail and is **never polled**. Its tracking API needs a key, and the
+developer app for it is in `revoked` status, so there is no key to use; scraping is excluded because
+`dhl.com` answers automated requests with a stated prohibition and an active block. What the app can
+do is read DHL's dispatch and pickup mail, which it already receives.
+
+What that means for you:
+
+- A DHL parcel appears when a DHL mail (or a shop's dispatch mail that names DHL) arrives, and its
+  timeline is the **mail's own words**, with no status word beside them — status never comes from
+  prose. Each later mail about that parcel adds a line.
+- It has **no "Refresh this parcel" button**, because there is nobody to ask. The dashboard's
+  **Refresh now** does help: it reads the mailbox, which is exactly how a DHL parcel updates.
+- It never goes dormant and never appears as stale or broken. On `/health` it is listed as
+  `by email · not polled`, and it is left out of the "N of M carriers reporting" count — a carrier
+  nobody asks can be neither ok nor failing.
+- Auto-detection accepts only the **prefixed** number forms: `JJD…`, `JVGL…`, `3S…` and the long
+  `000…` form (16 digits or more). A DHL Express number is ten plain digits, which is also GLS's
+  shape, so accepting it would make every ten-digit number ambiguous and break GLS detection; add
+  such a parcel with the carrier chosen explicitly (`--carrier dhl`, or the picker on `/add`).
+
+This is also the honest fallback for any carrier whose key is missing, revoked or out of quota, and
+for any shop nobody writes an adapter for.
 
 ## Pickup point maps
 
@@ -563,7 +590,7 @@ node dist/cli.js probe <carrier> <number> [--zip <postcode>]
 node dist/cli.js notify-test
 ```
 
-Carrier ids: `posta`, `packeta`, `gls`, `sps`, `dpd`.
+Carrier ids: `posta`, `packeta`, `gls`, `sps`, `dpd`, `dhl`.
 
 - `add` normalises the number and auto-detects the carrier when exactly one matches; otherwise it
   asks for `--carrier`.
@@ -572,7 +599,8 @@ Carrier ids: `posta`, `packeta`, `gls`, `sps`, `dpd`.
   is down; that is recorded as health, not as a crash.
 - `probe` is the only command that hits a live carrier on purpose, and it prints the **raw
   response bodies**. It is the tool for confirming a carrier's real response shape against a
-  first real parcel.
+  first real parcel. It refuses `dhl`: an email-only carrier is never asked anything, so there is
+  no request to show.
 - `reprocess` re-runs extraction over stored `.eml` files after a parser change.
 
 ### Confirmations still owed (spec section 15)
@@ -591,6 +619,7 @@ node dist/cli.js probe <carrier> <number>
 | Packeta | Owed: `item` field names and `packetStatusId` values; whether `branchAddress` is absent for courier delivery. |
 | GLS | `rstt028` **confirmed live** (2026-10-27, an `INTRANSIT` parcel): a *bare* object, not wrapped in `tuStatus[]` like `rstt029`; the adapter reads both. Real numbers are 10 digits. Owed: whether `rstt029` includes `history` or only `progressBar`; which `addresses[]` entry is the parcel shop (needs a captured `INPICKUP` record). |
 | DPD | Owed: the postcode-verified shape; diff of step 3 with and without `dataForVerification`. |
+| DHL | Not polled at all (email only), so nothing is owed here. If a key is ever issued, three things need a real parcel: the not-found shape, whether DHL Parcel SK/CZ is in the API at all, and how a pickup looks — the canonical vocabulary has no pickup state. |
 
 ## Your data
 

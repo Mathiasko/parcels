@@ -1,8 +1,9 @@
 import type { Database } from '../db/index.js'
 import type { Config } from './config.js'
 import type {
-  CarrierAdapter, CarrierId, FetchResult, HttpClient, NewEvent, ParcelEvent,
+  Carrier, CarrierAdapter, CarrierId, FetchResult, HttpClient, NewEvent, ParcelEvent,
 } from './types.js'
+import { isPollable } from './types.js'
 import type { Notifier } from '../notify/types.js'
 import { buildNotifications } from '../notify/rules.js'
 import { ingestMessages, type IngestDeps, type IngestReport } from '../ingest/ingest.js'
@@ -22,7 +23,7 @@ import {
 export interface PollDeps {
   db: Database
   http: HttpClient
-  adapters: CarrierAdapter[]
+  adapters: Carrier[]
   config: Config
   now: Date
   /** When present, the run's notifications are built and sent; when absent nothing is built at all. */
@@ -118,6 +119,11 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
       report.failures.push({ carrier, reason: 'no adapter registered' })
       continue
     }
+    // An email-only carrier is never fetched (spec §6.7): there is no `fetch` to call. Skipped
+    // silently and BEFORE `report.polled` grows - it is not a failure, not an attempt, and not a
+    // parcel that was polled, on any path, including a forced refresh of that one parcel. This is
+    // the single runtime guard; the rest is the type (`EmailOnlyCarrier` has no `fetch`).
+    if (!isPollable(adapter)) continue
     // A broken adapter (gated) is probed, not polled: nothing at all while its backoff window is
     // open, then exactly one canary parcel once it has elapsed. A canary that succeeds clears the
     // streak, so the next run is a normal one; a failure widens the window.

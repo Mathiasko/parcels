@@ -1,0 +1,12 @@
+Delivered-To: recipient@example.com
+Date: Sat, 24 Oct 2026 09:15:00 +0200
+From: Example Shop <orders@shop.example>
+To: Jane Doe <recipient@example.com>
+Subject: Your order ORDER-0007 has been dispatched with DHL
+Message-ID: <fixture-eshop-dhl-0001@shop.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Your parcel was handed to DHL.
+Parcel number: 0001234567890123

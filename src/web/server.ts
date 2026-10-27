@@ -7,7 +7,7 @@ import type { CarrierId } from '../core/types.js'
 import type { Database } from '../db/index.js'
 import { latestEvent, listEvents } from '../db/events.js'
 import { deleteParcel, getParcel, listActive, type Parcel } from '../db/parcels.js'
-import type { CarrierAdapter, HttpClient } from '../core/types.js'
+import type { Carrier, HttpClient } from '../core/types.js'
 import { createHttpClient } from '../core/http.js'
 import { cachedGrid } from '../core/map-preview.js'
 import { parseTile } from '../core/slippy.js'
@@ -55,7 +55,7 @@ export interface WebDeps {
   configPath?: string
   /** The remaining dependencies exist so tests can run a refresh without the network or a real banner. */
   http?: HttpClient
-  adapters?: CarrierAdapter[]
+  adapters?: Carrier[]
   notifier?: Notifier
   now?: () => Date
   /** The map-tile cache; defaults to `data/tiles` beside the database, as the poller writes it. */

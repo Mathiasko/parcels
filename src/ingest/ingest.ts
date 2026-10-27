@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs'
 import type { Database } from '../db/index.js'
-import type { CarrierAdapter } from '../core/types.js'
+import type { Carrier, ParcelEvent } from '../core/types.js'
+import { isEmailOnlyCarrier } from '../core/types.js'
 import { findParcel, insertParcel, setArchived } from '../db/parcels.js'
+import { appendEvents } from '../db/events.js'
 import { storeMessage } from '../db/messages.js'
 import { extract, type Extraction } from './extract.js'
 import { fetchMessages, type FetchDeps, type ImapConfig, type RawMessage } from './imap.js'
@@ -12,7 +14,7 @@ const DAY = 86_400_000
 
 export interface ReprocessDeps {
   now: Date
-  adapters: CarrierAdapter[]
+  adapters: Carrier[]
   defaultPostalCode: string
 }
 
@@ -137,6 +139,28 @@ function place<T extends Item>(
   }
 }
 
+/**
+ * The event an email-only carrier's mail leaves behind (§6.7), or nothing when the mail had no words
+ * worth keeping. Mail is all such a parcel ever gets, so the carrier's own sentence - its subject,
+ * verbatim - becomes the event the UI shows, exactly as a prose-only carrier's events read.
+ *
+ * `status` stays `unknown` and the parcel's status is never touched: §5 rule 4 and §8 both forbid
+ * reading a status out of localised human text, and that holds whether the text came from an API or
+ * from a mailbox. A mail's timestamp is a real instant rather than a carrier's naive local string, so
+ * there is no zone to guess; it is recorded in the zone it is stored in.
+ */
+function mailEvent(it: Item): ParcelEvent | undefined {
+  const description = it.extraction.eventText
+  if (!description) return undefined
+  return {
+    occurredAt: it.receivedAt,
+    occurredAtRaw: it.receivedAt.toISOString(),
+    occurredAtTz: 'UTC',
+    status: 'unknown',
+    description,
+  }
+}
+
 function placeOne(db: Database, it: Item, deps: ReprocessDeps, report: IngestReport, newest: Map<string, number>): void {
   const { carrier, number, merchant } = it.extraction
   const note = (text: string) => db.prepare('UPDATE messages SET parse_note = ? WHERE id = ?').run(text, it.id)
@@ -149,15 +173,22 @@ function placeOne(db: Database, it: Item, deps: ReprocessDeps, report: IngestRep
     report.needsAttention++
     return
   }
+  // A registered carrier is the test, pollable or not: an email-only carrier (§6.7) has no adapter to
+  // register and still has parcels, so this must not refuse them. An id nobody registered at all is a
+  // different thing - the mail is kept and waits on /attention.
   if (!deps.adapters.some(a => a.id === carrier)) {
     note(`found ${carrier} number ${number} but no adapter registered for ${carrier}`)
     report.needsAttention++
     return
   }
+  const event = isEmailOnlyCarrier(carrier) ? mailEvent(it) : undefined
   const existing = findParcel(db, carrier, number)
   if (existing) {
     // A later mail may name the sender when the first one did not.
     if (merchant && !existing.merchant) db.prepare('UPDATE parcels SET merchant = ? WHERE id = ?').run(merchant, existing.id)
+    // This is how an email-only parcel moves: each later mail adds its own words. `appendEvents`
+    // dedupes, so re-reading the same mail (a reprocess, a resent copy) adds nothing.
+    if (event) appendEvents(db, existing.id, [event])
     link(existing.id, null)
     report.linked++
     return
@@ -171,6 +202,7 @@ function placeOne(db: Database, it: Item, deps: ReprocessDeps, report: IngestRep
     // Its status stays 'unknown': status never comes from mail.
     ...(old && { firstSeenAt: it.receivedAt }),
   })
+  if (event) appendEvents(db, id, [event])
   if (old) {
     setArchived(db, id, deps.now)
     report.archivedOld++

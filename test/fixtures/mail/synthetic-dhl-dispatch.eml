@@ -1,0 +1,14 @@
+Delivered-To: recipient@example.com
+Date: Sun, 25 Oct 2026 08:12:00 +0100
+From: DHL Express <noreply@dhl.com>
+To: Jane Doe <recipient@example.com>
+Subject: Your DHL shipment JJD0099990758473189 is on its way
+Message-ID: <fixture-dhl-0001@dhl.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Your shipment with waybill number JJD0099990758473189 has been collected from the
+sender and is on its way to you.
+
+Questions about the delivery? Call 421900123456.

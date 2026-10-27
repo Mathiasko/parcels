@@ -1,5 +1,6 @@
 import { simpleParser } from 'mailparser'
 import type { CarrierId } from '../core/types.js'
+import { isEmailOnlyCarrier } from '../core/types.js'
 import { normalizeNumber } from '../carriers/registry.js'
 import { decodeEntities } from '../core/entities.js'
 
@@ -8,6 +9,13 @@ export interface Extraction {
   /** Normalised (upper case, no spaces) tracking number. */
   number?: string
   merchant?: string
+  /**
+   * The mail's own words, verbatim (its subject), for an email-only carrier's one event. Extracted
+   * ONLY for those carriers: mail is all they ever have, and limiting it to them keeps the rule that
+   * status never comes from prose (§8) where it belongs — for a polled carrier the carrier's own
+   * timeline is the truth, and a subject line would only compete with it.
+   */
+  eventText?: string
   /**
    * `sender`: the carrier came from the sender's domain. `shape`: no known sender, but the carrier
    * and number agree: either the number has a distinctive carrier-specific shape, or (an e-shop's
@@ -28,6 +36,14 @@ const SENDER_DOMAINS: ReadonlyArray<readonly [string, CarrierId]> = [
   ['sps-sro.sk', 'sps'], ['mysps.sk', 'sps'],
   ['posta.sk', 'posta'],
   ['gls-group.eu', 'gls'], ['gls-group.com', 'gls'],
+  // DHL writes from the local market's domain, and its Parcel and Express units have brand domains of
+  // their own. Listed one by one rather than as a `dhl*.` pattern on purpose: the rule is "this exact
+  // registrable domain, or a subdomain of it", and a pattern would also accept `dhl.<anything>`, which
+  // is a domain someone else can own. A domain not listed here costs a message in needs-attention,
+  // where one click assigns it; a domain listed too loosely would hand a stranger a parcel.
+  ['dhl.com', 'dhl'], ['dhl.de', 'dhl'], ['dhl.sk', 'dhl'], ['dhl.cz', 'dhl'],
+  ['dhlparcel.com', 'dhl'], ['dhlparcel.sk', 'dhl'], ['dhlparcel.cz', 'dhl'], ['dhlparcel.nl', 'dhl'],
+  ['dhlexpress.com', 'dhl'],
 ]
 
 export function carrierForAddress(address: string): CarrierId | undefined {
@@ -48,23 +64,40 @@ const NUMBER: Record<CarrierId, RegExp> = {
   sps: /(?<![A-Z0-9])(?:SK[A-HJ-NP-Z0-9]{5}\d{2}[A-HJ-NP-Z0-9]{9}|703\d{11}[0-4]\d)(?![A-Z0-9])/g,
   dpd: /(?<![A-Z0-9])\d{14}(?![A-Z0-9])/g,
   gls: /(?<!\d)\d{10,12}(?!\d)/g,
+  // The prefixed forms, plus the 16-digits-or-more leading-zero form; see src/carriers/dhl.ts for why
+  // the bare ten-digit Express form is deliberately absent.
+  dhl: /(?<![A-Z0-9])(?:JJD\d{10,22}|JVGL\d{10,22}|3S[A-Z0-9]{8,18}|000\d{13,25})(?![A-Z0-9])/g,
 }
 
-/** Shapes distinctive enough to trust without a sender hint. Bare digits (dpd, gls) are not. */
-const SHAPE_ONLY: readonly CarrierId[] = ['posta', 'packeta', 'sps']
+/**
+ * Shapes distinctive enough to trust without a sender hint, and the pattern that may be trusted for
+ * each. Bare digits (dpd, gls) are not, and neither is DHL's `000…` form, which is why dhl appears
+ * here with only its lettered prefixes: `JJD…`, `JVGL…` and `3S…` cannot be anything else, while a
+ * long run of digits in a stranger's mail could be an order number or a reference.
+ */
+const DISTINCTIVE: Partial<Record<CarrierId, RegExp>> = {
+  posta: NUMBER.posta,
+  packeta: NUMBER.packeta,
+  sps: NUMBER.sps,
+  dhl: /(?<![A-Z0-9])(?:JJD\d{10,22}|JVGL\d{10,22}|3S[A-Z0-9]{8,18})(?![A-Z0-9])/g,
+}
 
 /**
  * How a mail from a non-carrier (an e-shop) names a carrier whose numbers are bare digits. Only used
  * together with a labelled number of that carrier's shape: a name alone proves nothing (an order
  * confirmation says "GLS" for the chosen delivery method), which is why both signals are required.
- * Packeta, SPS and Slovenska posta need no name here: their number shapes are distinctive by themselves.
+ * Packeta, SPS and Slovenska posta need no name here: their number shapes are distinctive by themselves,
+ * and so are DHL's lettered prefixes - only its `000…` form needs the name beside it.
  */
 const CARRIER_NAME = {
   gls: /(?<![\p{L}\d])GLS(?![\p{L}\d])/iu,
   dpd: /(?<![\p{L}\d])DPD(?![\p{L}\d])/iu,
+  dhl: /(?<![\p{L}\d])DHL(?![\p{L}\d])/iu,
 } as const
 
 const MERCHANT_MAX = 80
+/** A subject line kept as an event description: long enough for a real one, short enough to render. */
+const EVENT_TEXT_MAX = 200
 const MAX_TEXT = 400_000
 const MAX_HTML = 1_000_000
 
@@ -99,6 +132,7 @@ function glsNumber(haystack: string): string | undefined {
 const STANDALONE = {
   gls: /(?<![\p{L}\d])\d{10,12}(?![\p{L}\d])/gu,
   dpd: /(?<![\p{L}\d])\d{14}(?![\p{L}\d])/gu,
+  dhl: /(?<![\p{L}\d])000\d{13,25}(?![\p{L}\d])/gu,
 } as const
 
 /** Words that mark a number as something other than a tracking number (the shop's own, an invoice, a phone). */
@@ -111,7 +145,7 @@ const NOT_TRACKING = /objedn|order|fakt[uú]r|invoice|variabil|referenc|tel\b|te
  * be cut out of a longer alphanumeric token (a URL id, a message id), and must not look like a phone.
  * Two different such numbers are ambiguous, which is refused rather than guessed.
  */
-function labelledNumber(carrier: 'gls' | 'dpd', haystack: string): string | undefined {
+function labelledNumber(carrier: keyof typeof STANDALONE, haystack: string): string | undefined {
   const found = new Set<string>()
   for (const m of haystack.matchAll(STANDALONE[carrier])) {
     const before = haystack.slice(Math.max(0, m.index - 50), m.index)
@@ -124,7 +158,7 @@ function labelledNumber(carrier: 'gls' | 'dpd', haystack: string): string | unde
 
 /** Carriers the text names that also have a labelled number of their bare-digit shape beside it. */
 function namedBareNumbers(haystack: string): { c: CarrierId; n: string }[] {
-  return (['gls', 'dpd'] as const)
+  return (['gls', 'dpd', 'dhl'] as const)
     .filter(c => CARRIER_NAME[c].test(haystack))
     .flatMap(c => { const n = labelledNumber(c, haystack); return n ? [{ c, n }] : [] })
 }
@@ -161,8 +195,8 @@ function stripBlocks(html: string): string {
   return out + html.slice(from)
 }
 
-const clean = (s: string | undefined): string | undefined => {
-  const t = s?.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MERCHANT_MAX).trim()
+const clean = (s: string | undefined, max = MERCHANT_MAX): string | undefined => {
+  const t = s?.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim()
   return t ? t : undefined
 }
 
@@ -208,11 +242,15 @@ export async function extract(raw: Buffer): Promise<Extraction> {
     if (carrier) {
       const number = firstNumber(carrier, haystack)
       if (!number) return { carrier, confidence: 'none' }
-      return { carrier, number, merchant: carrierMerchant(carrier, haystack), confidence: 'sender' }
+      return {
+        carrier, number, merchant: carrierMerchant(carrier, haystack), confidence: 'sender',
+        ...(isEmailOnlyCarrier(carrier) && { eventText: clean(subject, EVENT_TEXT_MAX) }),
+      }
     }
 
     // No hint from the sender: trust only a distinctive shape, and only if it is unambiguous.
-    let found = SHAPE_ONLY.flatMap(c => [...new Set((haystack.match(NUMBER[c]) ?? []).map(normalizeNumber))].map(n => ({ c, n })))
+    let found = Object.entries(DISTINCTIVE).flatMap(([c, re]) =>
+      [...new Set((haystack.match(re) ?? []).map(normalizeNumber))].map(n => ({ c: c as CarrierId, n })))
     // An e-shop's dispatch mail has no distinctive shape to go on, but it names the carrier and prints
     // a labelled number of that carrier's bare-digit shape. Both signals, or nothing.
     if (found.length === 0) found = namedBareNumbers(haystack)
@@ -221,6 +259,7 @@ export async function extract(raw: Buffer): Promise<Extraction> {
     return {
       carrier: found[0]!.c, number: found[0]!.n, confidence: 'shape',
       merchant: clean(origin.name) ?? clean(origin.from?.split('@')[1]),
+      ...(isEmailOnlyCarrier(found[0]!.c) && { eventText: clean(subject, EVENT_TEXT_MAX) }),
     }
   } catch {
     return { confidence: 'none' }

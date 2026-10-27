@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon'
+import { isEmailOnlyCarrier } from './types.js'
 import type { Parcel } from '../db/parcels.js'
 
 const HOUR = 3_600_000
@@ -37,8 +38,13 @@ function isUrgent(p: Parcel, now: Date): boolean {
 /**
  * A parcel that has never produced a single event in 30 days: no longer polled, and worth surfacing to
  * the user. Derived here, not stored, so the poller and the UI cannot disagree about it.
+ *
+ * An email-only carrier's parcel is never dormant: dormancy means "we have stopped asking", and
+ * nobody ever asked. Saying it on /attention ("no tracking event for over 30 days, so they are no
+ * longer polled") would be two false claims about a parcel that is behaving exactly as designed.
  */
 export function isDormant(p: Parcel, now: Date): boolean {
+  if (isEmailOnlyCarrier(p.carrier)) return false
   return !isTerminal(p) && !isUrgent(p, now)
     && p.lastChangedAt === undefined && now.getTime() - p.firstSeenAt.getTime() > 30 * DAY
 }
@@ -56,6 +62,10 @@ export function isDormant(p: Parcel, now: Date): boolean {
  * stays in the signature as part of the contract; the every-slot tiers need no gap check.
  */
 export function isDue(p: Parcel, now: Date, _slot: number): boolean {
+  // Nothing is ever due for a carrier that is never polled, whatever the tiers would say. The poller
+  // has its own guard (it holds under `forceAll` too, which skips this function); this keeps the
+  // answer to "is this parcel due?" honest for every other caller.
+  if (isEmailOnlyCarrier(p.carrier)) return false
   if (isTerminal(p)) return false
   if (isUrgent(p, now)) return true
   if (isDormant(p, now)) return false

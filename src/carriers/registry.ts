@@ -1,26 +1,36 @@
-import type { CarrierAdapter, CarrierId } from '../core/types.js'
+import type { Carrier, CarrierId } from '../core/types.js'
+import { dhlCarrier } from './dhl.js'
 import { dpdAdapter } from './dpd.js'
 import { glsAdapter } from './gls.js'
 import { packetaAdapter } from './packeta.js'
 import { postaAdapter } from './posta.js'
 import { spsAdapter } from './sps.js'
 
-const adapters = new Map<CarrierId, CarrierAdapter>()
+const adapters = new Map<CarrierId, Carrier>()
 
-/** Most specific shape first. gls (10-12 bare digits) and dpd (14 digits) are ambiguous, so last. */
-const DETECT_ORDER: readonly CarrierId[] = ['posta', 'packeta', 'sps', 'dpd', 'gls']
+/**
+ * Most specific shape first. gls (10-12 bare digits) and dpd (14 digits) are ambiguous, so last.
+ * dhl sits with the distinctive carriers: its shapes are all prefixed, and the one bare-digit form it
+ * accepts is 16 digits or more, which no other carrier claims.
+ */
+const DETECT_ORDER: readonly CarrierId[] = ['posta', 'packeta', 'sps', 'dhl', 'dpd', 'gls']
 
-export function register(a: CarrierAdapter): void {
+export function register(a: Carrier): void {
   adapters.set(a.id, a)
 }
 
-export function getAdapter(id: CarrierId): CarrierAdapter {
+/**
+ * A registered carrier, which may be an email-only one (`isPollable` narrows it). Throws for an id
+ * nobody registered: that is a missing adapter, which is a different thing from a carrier that is
+ * deliberately never polled.
+ */
+export function getAdapter(id: CarrierId): Carrier {
   const a = adapters.get(id)
   if (!a) throw new Error(`no adapter registered for carrier "${id}"`)
   return a
 }
 
-export function allAdapters(): CarrierAdapter[] {
+export function allAdapters(): Carrier[] {
   return [...adapters.values()]
 }
 
@@ -54,4 +64,4 @@ export function resolveCarrier(number: string, explicit?: CarrierId): CarrierRes
 
 // Adapters do not register themselves; this is the one place that does. Order here is irrelevant:
 // detectCarrier applies DETECT_ORDER.
-for (const adapter of [postaAdapter, packetaAdapter, glsAdapter, spsAdapter, dpdAdapter]) register(adapter)
+for (const adapter of [postaAdapter, packetaAdapter, glsAdapter, spsAdapter, dpdAdapter, dhlCarrier]) register(adapter)

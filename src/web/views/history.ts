@@ -1,4 +1,5 @@
 import type { CarrierId } from '../../core/types.js'
+import { isEmailOnlyCarrier } from '../../core/types.js'
 import type { Parcel } from '../../db/parcels.js'
 import type { CarrierDeliveryStats } from '../queries.js'
 import { CARRIER_NAME, formatDayMonth, formatDuration, statusIndicator, yearOf } from './format.js'
@@ -10,6 +11,11 @@ export interface HistoryFilters { carrier?: string; q?: string; from?: string; t
 
 function statsRow(carrier: CarrierId, s: CarrierDeliveryStats | undefined): Html {
   const name = CARRIER_NAME[carrier]
+  // A carrier nobody polls has no delivery to time: nothing marks its parcels delivered, so "no
+  // deliveries yet" would promise a number that cannot ever appear.
+  if (isEmailOnlyCarrier(carrier) && !s) {
+    return html`<tr data-carrier="${carrier}"><td>${name}</td><td class="d">—</td><td class="meta">not timed: updates arrive by email</td></tr>`
+  }
   if (!s) return html`<tr data-carrier="${carrier}"><td>${name}</td><td class="d">—</td><td class="meta">no deliveries yet</td></tr>`
   if (s.medianMs === undefined) {
     return html`<tr data-carrier="${carrier}"><td>${name}</td><td class="d">—</td>

@@ -39,7 +39,7 @@
     <id>tag:mail.google.com,2008:filter:parcels-1</id>
     <updated>2026-10-27T00:00:00Z</updated>
     <content></content>
-    <apps:property name='hasTheWord' value='from:(packeta.sk OR packeta.com OR posta.sk OR slposta.sk OR gls-group.eu OR gls-slovakia.sk OR sps-sro.sk OR dpd.sk OR dhl.com OR dhl.sk OR alza.sk OR mtbiker.sk) OR subject:(odoslana OR odoslane OR odoslany OR odeslana OR odeslano OR expedovana OR expedovane OR "cislo zasielky" OR "cislo balika" OR "podacie cislo" OR "stav zasielky" OR "vasa zasielka" OR "pripravena na vyzdvihnutie" OR "k vyzdvihnutiu" OR "vyzdvihnite si" OR "odberne miesto" OR shipped OR dispatched OR "out for delivery" OR "tracking number" OR "track your order" OR "ready for pickup" OR "shipping confirmation")'/>
+    <apps:property name='hasTheWord' value='from:(packeta.sk OR packeta.com OR posta.sk OR slposta.sk OR gls-group.eu OR gls-slovakia.sk OR sps-sro.sk OR dpd.sk OR dhl.com OR dhl.sk OR dhl.de OR dhl.cz OR dhlparcel.com OR dhlparcel.sk OR dhlexpress.com OR alza.sk OR mtbiker.sk) OR subject:(odoslana OR odoslane OR odoslany OR odeslana OR odeslano OR expedovana OR expedovane OR "cislo zasielky" OR "cislo balika" OR "podacie cislo" OR "stav zasielky" OR "vasa zasielka" OR "pripravena na vyzdvihnutie" OR "k vyzdvihnutiu" OR "vyzdvihnite si" OR "odberne miesto" OR shipped OR dispatched OR "out for delivery" OR "tracking number" OR "track your order" OR "ready for pickup" OR "shipping confirmation")'/>
     <apps:property name='label' value='parcels'/>
     <apps:property name='sizeOperator' value='s_sl'/>
     <apps:property name='sizeUnit' value='s_smb'/>

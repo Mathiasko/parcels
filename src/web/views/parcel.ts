@@ -1,4 +1,5 @@
 import { postcodeRejected, type Parcel } from '../../db/parcels.js'
+import { isEmailOnlyCarrier } from '../../core/types.js'
 import type { StoredEvent } from '../../db/events.js'
 import type { RawResponse } from '../queries.js'
 import {
@@ -14,9 +15,14 @@ import type { TileGrid } from '../../core/slippy.js'
 
 const RAW_SHOWN_CHARS = 20_000
 
-/** Delivered, returned and archived parcels are never polled, so offering to refresh them would be a lie. */
+/**
+ * Delivered, returned and archived parcels are never polled, so offering to refresh them would be a
+ * lie - and so is offering it for an email-only carrier (§6.7), which is never polled at all. The
+ * button would start a run that asks nobody anything and come back saying it had refreshed.
+ */
 const isTracked = (p: Parcel): boolean =>
   p.archivedAt === undefined && p.status !== 'delivered' && p.status !== 'returned'
+  && !isEmailOnlyCarrier(p.carrier)
 
 /**
  * The timeline, newest first. The query returns oldest first (ties by id), so reversing it gives
@@ -144,7 +150,9 @@ function statusLine(p: Parcel, events: StoredEvent[]): Html {
   if (p.status === 'ready_for_pickup' && pickupSummary(p)) return html``
   if (isKnown(p.status)) return statusIndicator(p.status)
   if (p.archivedAt !== undefined) return quietIndicator('Archived')
-  if (events.length === 0) return quietIndicator('No updates yet')
+  if (events.length === 0) {
+    return quietIndicator(isEmailOnlyCarrier(p.carrier) ? 'Updates arrive by email' : 'No updates yet')
+  }
   return html``
 }
 
@@ -152,6 +160,8 @@ function timelineSection(p: Parcel, events: StoredEvent[], ctx: PageCtx): Html {
   if (events.length > 0) return html`<h2 class="sec">Timeline · ${plural(events.length, 'event')}</h2>${timeline(events, ctx)}`
   const why = p.archivedAt !== undefined
     ? (p.source === 'email' ? 'Found in old mail; never tracked.' : 'Archived; no tracking events were recorded.')
+    // Not "nothing from the carrier yet": nobody is asking the carrier, so what is missing is mail.
+    : isEmailOnlyCarrier(p.carrier) ? `No email about this parcel has arrived yet. ${CARRIER_NAME[p.carrier]} is never polled.`
     : 'Nothing from the carrier yet.'
   return html`<h2 class="sec">Timeline</h2><p class="empty">${why}</p>`
 }
@@ -171,7 +181,10 @@ export function parcelPage(
 <div class="head"><h1 class="big">${parcelName(p)}</h1>
   ${isTracked(p) ? html`<form class="inline" method="post" action="/refresh"><input type="hidden" name="parcel" value="${p.id}"><button>Refresh this parcel</button></form>` : ''}</div>
 <div class="status">${statusLine(p, events)}</div>
-<p class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span>${p.merchant && p.merchant !== parcelName(p) ? html` · ${p.merchant}` : ''}${p.statusRaw ? html` · carrier says: ${p.statusRaw}` : ''}</p>
+<p class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span>${p.merchant && p.merchant !== parcelName(p) ? html` · ${p.merchant}` : ''}${p.statusRaw ? html` · carrier says: ${p.statusRaw}` : ''}</p>${
+  // Said on every email-only parcel, with or without events: it is why there is no refresh button and
+  // why the timeline is whatever the mail said, which is not guessable from the page otherwise.
+  isEmailOnlyCarrier(p.carrier) ? html`<p class="meta">Never polled: updates arrive by email, in ${CARRIER_NAME[p.carrier]}'s own words.</p>` : ''}
 ${refreshBanner(note, ctx.now, 'Asking the carrier about this parcel.')}${postcodeNotice(p)}${pickupPanel(p, last, ctx, map, code)}
 ${timelineSection(p, events, ctx)}
 ${rawSection(raws, ctx)}
