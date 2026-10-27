@@ -41,12 +41,22 @@ describe('pollerStatus (Health page)', () => {
     const db = memDb(); recordPoll(db, at('2026-10-25T21:00:00'))
     expect(pollerStatus(db, MORNING).overdue).toBe(false)
   })
-  test('flagged once more than 2h of the day has passed with no completed run, but only inside the window', () => {
+  test('flagged once more than 2h of the day has passed with no completed run, and still flagged after 21:00', () => {
     const db = memDb(); recordPoll(db, at('2026-10-26T12:00:00'))
     expect(pollerStatus(db, new Date(at('2026-10-26T13:59:00'))).overdue).toBe(false)
     expect(pollerStatus(db, new Date(at('2026-10-26T14:01:00'))).overdue).toBe(true)
-    expect(pollerStatus(db, new Date(at('2026-10-26T22:00:00'))).overdue).toBe(false)   // outside the window
+    expect(pollerStatus(db, new Date(at('2026-10-26T22:00:00'))).overdue).toBe(true)    // night does not hide an outage
     expect(HEALTH_STALE_MS).toBe(2 * HOUR)
+  })
+  test('a poller last seen at 08:00 is overdue when /health is viewed at 22:00, but not a 21:00 poll at 07:30', () => {
+    const db = memDb(); recordPoll(db, at('2026-10-26T08:00:00'))
+    expect(pollerStatus(db, new Date(at('2026-10-26T22:00:00'))).overdue).toBe(true)   // 13 window-hours
+    const night = memDb(); recordPoll(night, at('2026-10-25T21:00:00'))
+    expect(pollerStatus(night, MORNING).overdue).toBe(false)                           // 0.5 window-hours
+  })
+  test('a night-time run after a long outage still announces it', () => {
+    const db = memDb(); recordPoll(db, at('2026-10-26T08:00:00'))
+    expect(stalePollAlarm(db, new Date(at('2026-10-26T22:00:00')))).toBeDefined()
   })
   test('GET /health shows the last run and flags a stale poller', async () => {
     const db = memDb(); recordPoll(db, at('2026-10-26T09:00:00'))

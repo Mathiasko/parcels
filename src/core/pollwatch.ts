@@ -39,9 +39,14 @@ export function lastPollMs(db: Database): number | undefined {
   return row?.polled_at_ms
 }
 
-/** True when `now` is inside the window and more than `thresholdMs` of window time has passed since `lastMs`. */
+/**
+ * True when more than `thresholdMs` of window time has passed since `lastMs`. Deliberately not gated on
+ * `now` being inside the window: window time already contributes nothing overnight, so a normal night
+ * stays green by itself, while a dead poller is still flagged at 22:00 (when someone is likely to look)
+ * and a night-time run after a long outage still announces it before `recordPoll` overwrites the evidence.
+ */
 export const pollerOverdue = (lastMs: number, now: Date, thresholdMs: number): boolean =>
-  inPollWindow(now) && windowMsBetween(lastMs, now.getTime()) > thresholdMs
+  windowMsBetween(lastMs, now.getTime()) > thresholdMs
 
 export interface PollerStatus { lastPollAt?: Date; overdue: boolean }
 
