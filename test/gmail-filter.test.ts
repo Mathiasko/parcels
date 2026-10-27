@@ -93,7 +93,13 @@ describe('gmail-filter.xml', () => {
       expect(q.split(/[ "()]+/)).toContain(word)   // terms now sit inside subject:( ... )
     }
     expect(q).toContain('"tracking number"')
-    expect(q).toContain('"cislo zasielky"')
+    // Slovak does not stem in Gmail search, so each noun form has to be listed. These are what
+    // rescued 12 real parcels that the previous, phrase-only subject list missed: "Zasielka caka na
+    // vyzdvihnutie", "Spracovanie zasielky", "Vas balik dorazi" - all genuine shipment mail from
+    // shops not on the domain list.
+    for (const form of ['zasielka', 'zasielku', 'zasielky', 'zasielke', 'balik', 'baliku', 'balika']) {
+      expect(q.split(/[ "()]+/)).toContain(form)
+    }
   })
 
   // Gmail ignores diacritics, so the file can stay plain ASCII - which also keeps it safe to paste
