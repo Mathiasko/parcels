@@ -19,7 +19,8 @@
   <key>WorkingDirectory</key>
   <string>__ABS_DIR__</string>
 
-  <!-- Hourly on the hour, 07:00-21:00 (15 slots). -->
+  <!-- Hourly on the hour, 07:00-21:00, plus 15:30: the twice-daily "still waiting for you"
+       reminder fires at 08:00 and 15:30, and a slot needs a run to fire from. -->
   <key>StartCalendarInterval</key>
   <array>
     <dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
@@ -31,6 +32,7 @@
     <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
     <dict><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
     <dict><key>Hour</key><integer>15</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>15</integer><key>Minute</key><integer>30</integer></dict>
     <dict><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
     <dict><key>Hour</key><integer>17</integer><key>Minute</key><integer>0</integer></dict>
     <dict><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>

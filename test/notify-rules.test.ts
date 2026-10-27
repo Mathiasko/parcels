@@ -81,13 +81,19 @@ test('a retainedTill within 48h notifies once and never again for the same parce
   expect(db.prepare('SELECT COUNT(*) AS n FROM deadline_reminders WHERE parcel_id = ?').get(id)).toEqual({ n: 1 })
 })
 
-test('a deadline further than 48h away, or already past, does not notify', () => {
+test('a deadline further than 48h away, or already past, produces no deadline reminder', () => {
   const db = memDb()
   parcelIn(db, 'ready_for_pickup', { retainedTill: new Date(NOW.getTime() + 49 * HOUR) }, 'posta', 'RA000000001SK')
   parcelIn(db, 'ready_for_pickup', { retainedTill: new Date(NOW.getTime() - HOUR) }, 'posta', 'RA000000002SK')
-  expect(build(db)).toEqual([])
-  // ...and the far one fires once it comes inside the window.
-  expect(build(db, [], new Date(NOW.getTime() + 2 * HOUR))).toHaveLength(1)
+  // Both are waiting, so both get the twice-daily nudge; what must not appear is a deadline warning.
+  expect(build(db).map(n => n.title)).toEqual([
+    'Still waiting for you — RA000000001SK',
+    'Still waiting for you — RA000000002SK',
+  ])
+  // ...and the far one fires as a deadline reminder once it comes inside the window.
+  const later = build(db, [], new Date(NOW.getTime() + 2 * HOUR))
+  expect(later).toHaveLength(1)
+  expect(later[0]!.title).toMatch(/^Pickup deadline approaching/)
 })
 
 test('a deadline reminder that coincides with a transition is a single banner and counts as sent', () => {
@@ -378,4 +384,61 @@ test('a gated alarm is not withheld even when every carrier failed in the run', 
   recordHealth(db, 'gls', 'gated', 'g', NOW)
   recordHealth(db, 'dpd', 'transport', 'offline', NOW)
   expect(build(db).map(n => n.groupKey)).toEqual(['carrier-gls'])
+})
+
+
+// --- the twice-daily reminder ---------------------------------------------------------------------
+
+test('a parcel left waiting is mentioned again at each slot, and only once per slot', () => {
+  const db = memDb()
+  const id = parcelIn(db, 'ready_for_pickup', { pickup: ZBOX })
+  const at = (iso: string) => build(db, [], new Date(iso))
+
+  // 06:00 local: before the morning slot, so nothing yet.
+  expect(at('2026-10-27T05:00:00Z')).toEqual([])
+  // 09:00 local: the 08:00 slot has passed.
+  const morning = at('2026-10-27T08:00:00Z')
+  expect(morning).toHaveLength(1)
+  expect(morning[0]!.title).toMatch(/^Still waiting for you — /)
+  expect(morning[0]!.message).toContain('Z-BOX')
+  // Later the same morning: the slot is spent.
+  expect(at('2026-10-27T09:30:00Z')).toEqual([])
+  // 15:45 local: the afternoon slot has passed.
+  expect(at('2026-10-27T14:45:00Z')).toHaveLength(1)
+  expect(at('2026-10-27T17:00:00Z')).toEqual([])
+  // The next day starts over: two a day, every day it is still there.
+  expect(at('2026-10-28T08:00:00Z')).toHaveLength(1)
+  expect(db.prepare('SELECT COUNT(*) AS n FROM pickup_nudges WHERE parcel_id = ?').get(id)).toEqual({ n: 3 })
+})
+
+test('a machine asleep all day wakes to one reminder, not the whole day at once', () => {
+  const db = memDb()
+  parcelIn(db, 'ready_for_pickup', { pickup: ZBOX })
+  // First run of the day is at 20:00 local, with both slots long past.
+  expect(build(db, [], new Date('2026-10-27T19:00:00Z'))).toHaveLength(1)
+  // ...and the morning slot it skipped cannot fire retroactively.
+  expect(build(db, [], new Date('2026-10-27T19:30:00Z'))).toEqual([])
+})
+
+test('a transition already said it, so the slot it falls in does not repeat it an hour later', () => {
+  const db = memDb()
+  const id = parcelIn(db, 'in_transit')
+  updateParcelState(db, id, { status: 'ready_for_pickup', pickup: ZBOX })
+  const out = build(db, [], new Date('2026-10-27T09:00:00Z'))   // 10:00 local, after the morning slot
+  expect(out).toHaveLength(1)
+  expect(out[0]!.title).toMatch(/^Ready for pickup — /)
+  expect(build(db, [], new Date('2026-10-27T11:00:00Z'))).toEqual([])
+  // The afternoon slot still arrives on schedule.
+  expect(build(db, [], new Date('2026-10-27T14:45:00Z'))).toHaveLength(1)
+})
+
+test('a parcel that is no longer waiting stops being nudged', () => {
+  const db = memDb()
+  const id = parcelIn(db, 'ready_for_pickup', { pickup: ZBOX })
+  expect(build(db, [], new Date('2026-10-27T08:00:00Z'))).toHaveLength(1)
+  updateParcelState(db, id, { status: 'delivered' })
+  const out = build(db, [], new Date('2026-10-27T14:45:00Z'))
+  expect(out).toHaveLength(1)
+  expect(out[0]!.title).toMatch(/^Delivered — /)                 // the transition, not a nudge
+  expect(build(db, [], new Date('2026-10-28T08:00:00Z'))).toEqual([])
 })

@@ -283,6 +283,22 @@ running server predates that change** — `npm run build`, then restart the web 
 | `/health` | Per-carrier last-ok / last-error, and ingest health. |
 | `/add` | Add a parcel by hand. |
 
+### Reminders while a parcel is waiting
+
+A parcel left at a pickup point is mentioned again **twice a day, at 08:00 and 15:30** local, until
+it is collected or its status changes. The banner says where it is waiting, and the deadline if the
+carrier gave one.
+
+- The poller's launchd schedule carries a **15:30 slot** on top of the hourly runs for exactly this
+  reason; without it the afternoon reminder would arrive at 16:00, since every other run is on the
+  hour. Re-run `scripts/install-agents.sh` after changing the slots.
+- Only the **newest passed slot** can fire. A Mac asleep all day wakes to one reminder, not to the
+  whole day's slots at once, and a slot that was missed cannot fire retroactively.
+- A transition banner counts: a parcel that became ready at 10:00 already told you, so the 08:00 slot
+  it fell inside is marked spent rather than repeating an hour later. The 15:30 one still arrives.
+- Sent slots are keyed by local date, so the rows expire by themselves and yesterday can never
+  suppress today.
+
 ### The Z-BOX opening code
 
 A parcel waiting in a Packeta Z-BOX shows the code that opens the box. **The code is never in the

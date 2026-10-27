@@ -5,6 +5,7 @@ import { getParcel, markAnnounced, type Parcel } from '../db/parcels.js'
 import { carrierHealth, markCarrierNotified, type HealthRow } from '../db/health.js'
 import { getIngestStatus, markIngestNotified } from '../db/ingest-status.js'
 import { stalePollAlarm } from '../core/pollwatch.js'
+import { passedSlots } from './nudge.js'
 import type { Notification } from './types.js'
 
 /** More notifications than this in one run (typically a catch-up after a long sleep) become one summary. */
@@ -64,6 +65,10 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
   const base = `http://127.0.0.1:${port}`
   const sent = db.prepare('INSERT INTO deadline_reminders (parcel_id, notified_at) VALUES (?, ?)')
   const reminded = db.prepare('SELECT 1 FROM deadline_reminders WHERE parcel_id = ?')
+  const nudged = db.prepare('SELECT 1 FROM pickup_nudges WHERE parcel_id = ? AND slot_key = ?')
+  const nudge = db.prepare('INSERT OR IGNORE INTO pickup_nudges (parcel_id, slot_key, sent_at) VALUES (?, ?, ?)')
+  const slots = passedSlots(now)
+  const dueSlot = slots.at(-1)
 
   const { parcelUpdates, alarms } = db.transaction(() => {
     const parcelUpdates: Notification[] = []
@@ -88,7 +93,11 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
       const deadlineDue = p.status === 'ready_for_pickup' && p.retainedTill !== undefined
         && p.retainedTill > now && p.retainedTill.getTime() - now.getTime() <= DEADLINE_WINDOW_MS
         && reminded.get(id) === undefined
-      if (!transitioned && !failedAttempt && !newPickup && !deadlineDue) continue
+      // A parcel left waiting is mentioned again twice a day. Only the newest passed slot can fire, so a
+      // machine that was asleep all morning produces one reminder on waking, not a burst of the day's slots.
+      const nudgeDue = p.status === 'ready_for_pickup' && dueSlot !== undefined
+        && nudged.get(id, dueSlot) === undefined
+      if (!transitioned && !failedAttempt && !newPickup && !deadlineDue && !nudgeDue) continue
 
       const showPickup = p.status === 'ready_for_pickup' || newPickup
       const parts = [
@@ -99,7 +108,9 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
         parts.push(mine.at(-1)?.description || p.statusRaw || p.trackingNumber)
       }
 
-      const headline = !transitioned && !failedAttempt && !newPickup ? 'Pickup deadline approaching' : STATUS_TITLE[p.status]
+      const headline = transitioned || failedAttempt || newPickup
+        ? STATUS_TITLE[p.status]
+        : deadlineDue ? 'Pickup deadline approaching' : 'Still waiting for you'
       parcelUpdates.push({
         groupKey: `parcel-${id}`,
         title: `${headline} — ${parcelName(p)}`,
@@ -108,6 +119,10 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
       })
       markAnnounced(db, id, p.status, p.pickup !== undefined)
       if (deadlineDue) sent.run(id, now.toISOString())
+      // Every slot already passed today is marked, not just the one that fired: an earlier slot that was
+      // missed (asleep, or the parcel only became ready this afternoon) must not fire retroactively, and
+      // a transition notification sent at 10:00 already told the reader what the 08:00 slot would have.
+      if (p.status === 'ready_for_pickup') for (const key of slots) nudge.run(id, key, now.toISOString())
     }
 
     const health = carrierHealth(db)

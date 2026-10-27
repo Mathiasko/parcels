@@ -147,3 +147,14 @@ CREATE TABLE IF NOT EXISTS pickup_codes (
   checked_messages INTEGER NOT NULL,
   checked_at       TEXT NOT NULL
 );
+
+-- Which twice-daily "it is still waiting for you" reminders have been sent, one row per parcel per
+-- slot. The poller is a fresh process every run, so "already reminded this morning" cannot live in
+-- memory; and the slot key carries the local date, so the rows are naturally self-expiring rather
+-- than needing a sweep. A table of its own, so an existing database gains it with no migration.
+CREATE TABLE IF NOT EXISTS pickup_nudges (
+  parcel_id INTEGER NOT NULL REFERENCES parcels(id),
+  slot_key  TEXT NOT NULL,                       -- '2026-10-27T08:00' in Europe/Bratislava
+  sent_at   TEXT NOT NULL,
+  PRIMARY KEY (parcel_id, slot_key)
+);
