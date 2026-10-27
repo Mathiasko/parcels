@@ -127,8 +127,8 @@ export interface BulkDismissal {
    * Only this sender, matched exactly as stored. Absent clears everything listed.
    *
    * Exact address, not domain: the queue's biggest senders are single addresses (one newsletter each),
-   * while a domain can hold unrelated people - `laco.matus@gmail.com` and `maruska.magalova@gmail.com`
-   * are both "gmail.com", and lumping them together would make one button dismiss someone else's mail.
+   * while a domain can hold unrelated people - two different correspondents are both "gmail.com",
+   * and lumping them together would make one button dismiss someone else's mail.
    */
   from?: string
 }
