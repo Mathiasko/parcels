@@ -4,6 +4,7 @@ import type { CanonicalStatus, CarrierId, NewEvent } from '../core/types.js'
 import { getParcel, markAnnounced, type Parcel } from '../db/parcels.js'
 import { carrierHealth, markCarrierNotified, type HealthRow } from '../db/health.js'
 import { getIngestStatus, markIngestNotified } from '../db/ingest-status.js'
+import { stalePollAlarm } from '../core/pollwatch.js'
 import type { Notification } from './types.js'
 
 /** More notifications than this in one run (typically a catch-up after a long sleep) become one summary. */
@@ -116,6 +117,8 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
     })
     const ingest = ingestAlarm(db, health, now)
     if (ingest) alarms.push({ groupKey: 'ingest', ...ingest, url: `${base}/health` })
+    const away = stalePollAlarm(db, now)
+    if (away) alarms.push({ groupKey: 'poller', ...away, url: `${base}/health` })
     return { parcelUpdates, alarms }
   })()
 
@@ -148,7 +151,7 @@ function ingestAlarm(db: Database, rows: HealthRow[], now: Date): { title: strin
   markIngestNotified(db, now)
   return {
     title: 'Mail ingest is failing',
-    message: `The parcels mailbox could not be read for ${s.consecutiveFailures} runs in a row; new parcels will not appear. See Health.`,
+    message: `Mail ingest has failed for ${s.consecutiveFailures} runs in a row; new parcels may not appear. See Health.`,
   }
 }
 

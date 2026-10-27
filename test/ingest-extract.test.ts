@@ -10,6 +10,8 @@ import { runPoll, summarize } from '../src/core/poll.js'
 import { allAdapters } from '../src/carriers/registry.js'
 import { findParcel, listActive } from '../src/db/parcels.js'
 import { listUnparsedMessages } from '../src/web/queries.js'
+import { healthPage } from '../src/web/views/health.js'
+import { getIngestStatus } from '../src/db/ingest-status.js'
 import type { CarrierId } from '../src/core/types.js'
 import { fakeImap, type FakeMessage } from './imap-fake.js'
 import { NOW, bodyHttp, config, memDb, okResult, stubAdapter } from './poll-helpers.js'
@@ -576,6 +578,20 @@ describe('ingest health', () => {
     await run(db, up(), new Date(NOW.getTime() + 7_200_000))
     expect(status(db)).toMatchObject({ n: 0, nt: null })
     expect(status(db).ok).not.toBeNull()
+  })
+
+  test('a run in which messages fail to store is a FAILED ingest run, not ok, and the Health page says so', async () => {
+    const db = memDb()
+    const mailDir = mkdtempSync(join(tmpdir(), 'parcels-health-'))
+    mkdirSync(join(mailDir, '1.eml', 'x'), { recursive: true })   // the rename of message 1's .eml fails
+    const client = fakeImap([mail(1, 'packeta-accepted', 2)]).client
+    const report = await runPoll({ db, http: bodyHttp(), adapters: [], config, now: NOW, ingest: { imap, client, mailDir } })
+    expect(report.ingest).toMatchObject({ read: 1, created: 0, failed: 1 })
+    expect(status(db)).toMatchObject({ n: 1, ok: null })
+    expect(status(db).e).toMatch(/1 of 1 new message\(s\) failed/)
+    const page = healthPage([], { configured: true, status: getIngestStatus(db) }).toString()
+    expect(page).toContain('failing')
+    expect(page).toContain('1 of 1 new message(s) failed')
   })
 
   test('no ingest configured -> no ingest_status row at all', async () => {

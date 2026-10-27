@@ -96,6 +96,15 @@ CREATE TABLE IF NOT EXISTS last_poll (
   polled_at_ms INTEGER NOT NULL
 );
 
+-- Which previous poll time has already been announced as "the poller was away" (always one row, id = 1),
+-- so the banner fires once per outage. A table of its own: an existing database gains it from the
+-- idempotent schema exec, whereas a new column on last_poll would fail the schema check (no migrations).
+CREATE TABLE IF NOT EXISTS stale_poll_notice (
+  id          INTEGER PRIMARY KEY CHECK (id = 1),
+  for_poll_ms INTEGER NOT NULL,
+  notified_at TEXT NOT NULL
+);
+
 -- The mail ingest's own health (always one row, id = 1), mirroring last_poll. carrier_health cannot hold
 -- it: that table is keyed by carrier, and the notification rules and Health page read it as carriers.
 CREATE TABLE IF NOT EXISTS ingest_status (

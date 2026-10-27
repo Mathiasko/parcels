@@ -23,6 +23,7 @@ import type { Html } from './views/html.js'
 import { addPage } from './views/add.js'
 import { attentionPage, type AttentionError } from './views/attention.js'
 import { healthPage } from './views/health.js'
+import { pollerStatus } from '../core/pollwatch.js'
 import { historyPage } from './views/history.js'
 import { indexPage, type RefreshNote } from './views/index.js'
 import { parcelPage } from './views/parcel.js'
@@ -149,7 +150,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     return send(reply, historyPage(parcels, deliveryStats(db), filters))
   })
 
-  app.get('/health', async (_req, reply) => send(reply, healthPage(carrierHealth(db), { configured: config.imap !== undefined, status: getIngestStatus(db) })))
+  app.get('/health', async (_req, reply) => send(reply, healthPage(carrierHealth(db), { configured: config.imap !== undefined, status: getIngestStatus(db) }, pollerStatus(db, now()))))
 
   const attention = (reply: FastifyReply, error?: AttentionError, status = 200) =>
     send(reply, attentionPage(

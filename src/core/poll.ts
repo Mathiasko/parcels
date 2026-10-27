@@ -149,11 +149,25 @@ async function runIngest(
   }
   // Not recorded in carrier_health (keyed by carrier); the ingest has a row of its own. Never fatal.
   try {
-    recordIngest(db, report.error === undefined ? { ok: true } : { ok: false, error: report.error }, deps.now)
+    recordIngest(db, ingestOutcome(report), deps.now)
   } catch (err) {
     console.error(`ingest: could not record status: ${describe(err)}`)
   }
   return report
+}
+
+/**
+ * A run in which any message threw while being stored or placed is a FAILED run, not an ok one: if the
+ * mail directory becomes unwritable or the disk fills, every message fails, all of them are fetched
+ * again every hour, no parcel is ever created, and an `ok` here would have the Health page say all is
+ * well. The text lands in `last_error` on the Health page (and never in a banner).
+ */
+function ingestOutcome(report: IngestReport): { ok: true } | { ok: false; error: string } {
+  if (report.error !== undefined) return { ok: false, error: report.error }
+  if (report.failed > 0) {
+    return { ok: false, error: `${report.failed} of ${report.read} new message(s) failed to store or place; they will be fetched again next run` }
+  }
+  return { ok: true }
 }
 
 /**
