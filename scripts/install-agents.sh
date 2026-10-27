@@ -76,10 +76,21 @@ for label in "${LABELS[@]}"; do
     continue
   fi
   launchctl bootout "$DOMAIN/$label" 2>/dev/null || true
-  # bootout returns before the service is fully gone; bootstrap can briefly fail with EIO meanwhile.
-  for attempt in 1 2 3 4 5; do
-    if launchctl bootstrap "$DOMAIN" "$plist"; then echo "bootstrapped $DOMAIN/$label"; break; fi
-    [ "$attempt" = 5 ] && { echo "install-agents: bootstrap failed for $label" >&2; exit 1; }
+  # bootout returns before the service is fully gone, and bootstrap fails with EIO while it lingers.
+  # Wait for it to actually disappear rather than racing it, then retry with a growing pause: a
+  # re-install that leaves one of the two agents unloaded is worse than one that takes a few seconds,
+  # because the dashboard simply is not there afterwards and nothing says why.
+  for attempt in 1 2 3 4 5 6 7 8; do
+    launchctl print "$DOMAIN/$label" >/dev/null 2>&1 || break
     sleep 1
+  done
+  for attempt in 1 2 3 4 5 6 7 8; do
+    if launchctl bootstrap "$DOMAIN" "$plist" 2>/dev/null; then echo "bootstrapped $DOMAIN/$label"; break; fi
+    if [ "$attempt" = 8 ]; then
+      echo "install-agents: could not bootstrap $label after 8 attempts." >&2
+      launchctl bootstrap "$DOMAIN" "$plist" >&2 || true   # once more, unfiltered, so the reason is visible
+      exit 1
+    fi
+    sleep "$attempt"
   done
 done

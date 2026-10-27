@@ -91,6 +91,32 @@ check "setup.sh with no terminal and no postcode stops"     bash -c "! PARCELS_C
 check "and writes nothing then either"                      test ! -e "$NOTTY"
 check "setup.sh rejects an unknown flag"                    bash -c "! '$SETUP' --wat </dev/null"
 
+# --- node discovery: one bad candidate must not strand the machine -----------------------------------
+# A toolchain (Codex, an Electron app) can put a private node first on PATH with no npm beside it.
+# Taking that one and giving up stranded a real user whose Mac had a perfectly good Node elsewhere.
+NODEDIR="$TMP/nodes"
+mkdir -p "$NODEDIR/nonpm" "$NODEDIR/old" "$NODEDIR/good"
+printf '#!/bin/sh\necho 26\n' > "$NODEDIR/nonpm/node"      # usable version, but no npm sibling
+printf '#!/bin/sh\necho 18\n' > "$NODEDIR/old/node"        # too old
+printf '#!/bin/sh\necho 26\n' > "$NODEDIR/good/node"
+printf '#!/bin/sh\nexit 0\n'  > "$NODEDIR/good/npm"
+printf '#!/bin/sh\nexit 0\n'  > "$NODEDIR/old/npm"
+chmod +x "$NODEDIR"/*/node "$NODEDIR/good/npm" "$NODEDIR/old/npm"
+
+probe() { # probe <candidates...>  -> runs require_node against exactly these
+  local list="" c
+  for c in "$@"; do list="$list$c\n"; done
+  bash -c ". '$LIB'; node_candidates() { printf '$list'; }; require_node probe" 2>&1
+}
+
+check "a node with no npm beside it is rejected"          bash -c "[ \"\$(. '$LIB'; node_rejection '$NODEDIR/nonpm/node')\" = 'no npm beside it' ]"
+check "a too-old node is rejected by version"             bash -c ". '$LIB'; node_rejection '$NODEDIR/old/node' | grep -q 'need 24 or newer'"
+check "a complete node is not rejected"                   bash -c "[ -z \"\$(. '$LIB'; node_rejection '$NODEDIR/good/node')\" ]"
+check "discovery skips a bad candidate for a good one"    bash -c "probe() { bash -c \". '$LIB'; node_candidates() { printf '$NODEDIR/nonpm/node\\n$NODEDIR/good/node\\n'; }; require_node probe\"; }; probe | grep -q '$NODEDIR/good/node'"
+check "with nothing usable it says so"                    bash -c "bash -c \". '$LIB'; node_candidates() { printf '$NODEDIR/nonpm/node\\n'; }; require_node probe\" 2>&1 | grep -q 'no usable Node'"
+check "and names every candidate it turned down"          bash -c "bash -c \". '$LIB'; node_candidates() { printf '$NODEDIR/nonpm/node\\n$NODEDIR/old/node\\n'; }; require_node probe\" 2>&1 | grep -q 'no npm beside it'"
+check "and does not claim nothing was found"              bash -c "! bash -c \". '$LIB'; node_candidates() { printf '$NODEDIR/nonpm/node\\n'; }; require_node probe\" 2>&1 | grep -q 'no node binary found at all'"
+
 # --- update.sh, against a throwaway clone ------------------------------------------------------------
 # The clone's origin is this directory, so fetching is a local, read-only operation: no network, and
 # nothing in this repository is modified. The scripts under test are copied in because they may not
