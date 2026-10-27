@@ -1,4 +1,4 @@
-import type { ImapLike } from '../src/ingest/imap.js'
+import type { ImapProbeLike } from '../src/ingest/imap-probe.js'
 
 export interface FakeMessage {
   uid: number
@@ -16,8 +16,15 @@ export interface FakeMessage {
 /** Everything the production code is allowed to ask of a mailbox. Anything else is a write. */
 const READ_ONLY_CALLS = new Set(['on', 'connect', 'getMailboxLock', 'fetch', 'fetchOne', 'logout', 'close'])
 
+/**
+ * State the code reads as a property rather than calling: the selected mailbox, as the server
+ * reported it on SELECT/EXAMINE. Reading it cannot change anything, so it belongs on the allowed
+ * side of the line - but it is listed separately so the set above keeps meaning "calls".
+ */
+const READ_ONLY_PROPS = new Set(['mailbox'])
+
 export interface FakeImap {
-  client: ImapLike
+  client: ImapProbeLike
   /** Every method the code touched, in order, including forbidden ones. */
   calls: string[]
   locks: Array<{ path: string; readOnly: boolean; released: boolean }>
@@ -35,7 +42,16 @@ export interface FakeImap {
  */
 export function fakeImap(
   messages: FakeMessage[],
-  opts: { connectError?: Error; fetchError?: Error } = {},
+  opts: {
+    connectError?: Error
+    fetchError?: Error
+    /** Thrown by `getMailboxLock`: a mailbox that cannot be selected (missing, or no permission). */
+    lockError?: Error
+    /** EXISTS as the server would report it; defaults to the number of messages given. */
+    exists?: number
+    /** A server that selects the mailbox but reports nothing about it. */
+    noMailboxObject?: boolean
+  } = {},
 ): FakeImap {
   const calls: string[] = []
   const forbidden: string[] = []
@@ -44,14 +60,17 @@ export function fakeImap(
   let out = false
 
   const impl = {
+    mailbox: false as { path: string; exists: number } | false,
     on: () => impl,
     async connect() {
       if (opts.connectError) throw opts.connectError
     },
     async getMailboxLock(path: string, options?: { readOnly?: boolean }) {
+      if (opts.lockError) throw opts.lockError
       const lock = { path, readOnly: options?.readOnly === true, released: false }
       locks.push(lock)
-      return { release: () => { lock.released = true } }
+      if (!opts.noMailboxObject) impl.mailbox = { path, exists: opts.exists ?? messages.length }
+      return { release: () => { lock.released = true; impl.mailbox = false } }
     },
     fetch(_range: string, _query: object, _options?: object) {
       return (async function* () {
@@ -85,11 +104,11 @@ export function fakeImap(
       const name = String(prop)
       if (name === 'then') return undefined   // never look like a thenable
       calls.push(name)
-      if (READ_ONLY_CALLS.has(name)) return (target as Record<string, unknown>)[name]
+      if (READ_ONLY_CALLS.has(name) || READ_ONLY_PROPS.has(name)) return (target as Record<string, unknown>)[name]
       forbidden.push(name)
       return () => { throw new Error(`forbidden IMAP call: ${name}`) }
     },
-  }) as unknown as ImapLike
+  }) as unknown as ImapProbeLike
 
   return { client, calls, locks, forbidden, downloaded, loggedOut: () => out }
 }

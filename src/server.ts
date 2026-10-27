@@ -1,4 +1,4 @@
-import { loadRuntimeConfig } from './core/config.js'
+import { loadRuntimeConfig, runtimeConfigPath } from './core/config.js'
 import { initRuntime } from './core/runtime.js'
 import { openDb } from './db/index.js'
 import { buildServer, BIND_HOST, startServer } from './web/server.js'
@@ -12,7 +12,8 @@ async function main(): Promise<void> {
   const config = loadRuntimeConfig(process.argv[2])
   initRuntime(config)
   const db = openDb(config.dbPath)
-  const app = buildServer({ db, config })
+  // The path as well as the values: /settings reads this file back and writes it (see WebDeps).
+  const app = buildServer({ db, config, configPath: runtimeConfigPath(process.argv[2]) })
   const shutdown = () => { void app.close().finally(() => { db.close(); process.exit(0) }) }
   process.on('SIGTERM', shutdown)
   process.on('SIGINT', shutdown)

@@ -30,7 +30,7 @@ above. Requires Node 24 or newer.
 ```sh
 npm install        # use /Users/you/.nvm/versions/node/v24.21.0/bin/npm, see above
 npm run build        # tsc, then copies src/db/schema.sql into dist/
-npm test             # 500+ tests, no network
+npm test             # 760+ tests, no network
 npm run typecheck
 ```
 
@@ -43,6 +43,17 @@ it is gitignored, as is all of `data/`.
 cp config.example.json config.json
 chmod 600 config.json
 ```
+
+After that first file exists, **`/settings` edits it for you** — the postcode, the notifier, the map
+preview and the whole `imap` block, with a **Test mail connection** button that says in one line
+whether mail ingest actually works. Saving validates the result with the same rules `loadConfig`
+applies and writes the file atomically at `0600`, keeping any key it does not recognise, so the page
+cannot leave behind a `config.json` that stops the app from starting. `port` and `dbPath` are shown
+there read-only: the server is already listening and the database is already open, so those two still
+need an edit by hand and a restart.
+
+The web server reflects a save at once. The poller is a separate process that re-reads `config.json`
+at the start of every run, so a change reaches mail ingest and the carriers at the next hourly poll.
 
 | Field | Meaning |
 |---|---|
@@ -73,10 +84,32 @@ Nothing is forwarded and there is no second mailbox. Ingest is **strictly read-o
 label with `EXAMINE`, fetches with `BODY.PEEK`, and never writes an IMAP flag, so your mail is not
 marked as read. Messages already seen are skipped by Message-ID.
 
+**Set it up on `/settings`, and prove it with the Test mail connection button.** Every way this can
+go wrong is otherwise silent: an App Password that was revoked surfaces three polls later on
+`/health`, a label that is not ticked "Show in IMAP" is indistinguishable from "no new mail", and a
+filter that labels nothing looks exactly like an empty label. The button turns all of that into one
+sentence. It connects with the settings as **saved** (not as typed), opens the mailbox with
+`EXAMINE`, counts what is in it, and answers with one of:
+
+| Answer | Means |
+|---|---|
+| `Connected — you@gmail.com, the label parcels has 79 messages` | Everything works. Ingest has all it needs. |
+| `Connected, nothing to read — the label exists, and it is empty` | Not a fault. The filter (step 2) is not matching anything yet. |
+| `Authentication failed` | The App Password is wrong or revoked. Make a new one; the page links to it. |
+| `The mailbox parcels is not there` | Step 3 was skipped: the label is not shown in IMAP (or the name is misspelled). |
+| `Could not reach imap.gmail.com on port 993` | Network, DNS or TLS. Nothing was authenticated, so the password is not in question. |
+| `No mail account is configured` | There is no `imap` block. Not an error: parcels are added by hand. |
+
+The App Password is **write-only** on that page: it is never rendered back into the HTML, never put
+in a URL, and is stripped out of any error text before it is shown. The field shows `(set)` or
+`(not set)`, and submitting it empty keeps the stored one, so the other fields can be edited without
+retyping it.
+
 Setup, in this order:
 
 1. **Turn on 2-step verification**, then create an App Password at
-   <https://myaccount.google.com/apppasswords>. Put it in `config.json` as `imap.pass`.
+   <https://myaccount.google.com/apppasswords>. Paste it into the App Password field on `/settings`
+   (or write it into `config.json` as `imap.pass`).
    (IMAP is always on in Gmail; there is no enable toggle any more.)
 2. **Create a Gmail filter** for your shipping mail whose action is **Apply the label** `parcels`.
    Do not choose forwarding. Tick **Also apply filter to matching conversations**: labels apply
@@ -94,8 +127,12 @@ Setup, in this order:
    needs-attention, never to a parcel.
 3. **Make the label visible to IMAP. This is the step that catches everyone.** Gmail hides labels
    from IMAP by default. Go to **Settings, Labels** and tick **Show in IMAP** for `parcels`.
-   If you skip this the app connects fine, authenticates fine, and reports an empty folder.
-4. **Write the `imap` block** in `config.json` and `chmod 600 config.json`.
+   If you skip this the app connects fine, authenticates fine, and reports an empty folder — which
+   is exactly what `Test mail connection` tells you apart from a real one.
+4. **Save the mail connection** on `/settings` (host `imap.gmail.com`, port 993, your address, the
+   label name), then **press Test mail connection** and read the answer. The file is written `0600`
+   for you. Writing the `imap` block into `config.json` by hand and `chmod 600 config.json` does the
+   same thing, with nothing to confirm that it worked.
 
 Notes on behaviour:
 
@@ -301,6 +338,7 @@ running server predates that change** — `npm run build`, then restart the web 
 | `/attention` | Unparsed mail awaiting a carrier and number, or a dismissal; dormant parcels. |
 | `/health` | Per-carrier last-ok / last-error, and ingest health. |
 | `/add` | Add a parcel by hand. |
+| `/settings` | The editable half of `config.json`, and the mail connection test. |
 
 ### Reminders while a parcel is waiting
 
@@ -405,7 +443,13 @@ Everything lives under `data/` (gitignored):
 
 ## Troubleshooting
 
+- **Anything to do with mail:** press **Test mail connection** on `/settings` first. It names the
+  failure (password, label not shown in IMAP, host unreachable, label empty) instead of leaving you
+  to guess from an empty in-flight list.
 - **IMAP connects but finds nothing:** the label is not ticked "Show in IMAP"; see step 3 above.
+- **`/settings` says the config file cannot be loaded:** `config.json` was hand-edited into something
+  `loadConfig` rejects, and the poller is failing on it too. The page names the field; correcting it
+  there and saving writes a file that loads.
 - **Carrier shows `gated` on /health:** the carrier is blocking us. That is always treated as an
   alarm, unlike `not_found`, which is normal for a brand-new number and never an error.
 - **No notifications:** run `node dist/cli.js notify-test` and read which mechanism it used.

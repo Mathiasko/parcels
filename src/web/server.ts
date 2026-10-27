@@ -1,5 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
-import type { Config } from '../core/config.js'
+import {
+  readConfigDocument, runtimeConfigPath, validateConfig, writeConfigDocument, type Config, type ConfigDocument,
+} from '../core/config.js'
 import type { CarrierId } from '../core/types.js'
 import type { Database } from '../db/index.js'
 import { latestEvent, listEvents } from '../db/events.js'
@@ -20,6 +22,10 @@ import { getIngestStatus } from '../db/ingest-status.js'
 import { getPickupCode, pickupCodesFor } from '../db/pickup-codes.js'
 import { dismissMessage } from '../db/messages.js'
 import { addParcel, cleanPostcode, MAX_LABEL } from './actions.js'
+import { applySettings, settingsValues, submittedSettings, type SettingsValues } from './settings.js'
+import { probeImap, type ImapProbeLike, type ImapProbeResult } from '../ingest/imap-probe.js'
+import type { ImapConfig } from '../ingest/imap.js'
+import { settingsPage, type SettingsState } from './views/settings.js'
 import { CARRIER_NAME } from './views/format.js'
 import {
   deliveryStats, getUnparsedMessage, listUnparsedMessages, rawResponsesFor,
@@ -38,6 +44,12 @@ import type { PageCtx } from './views/layout.js'
 export interface WebDeps {
   db: Database
   config: Config
+  /**
+   * The config file `config` was loaded from: the settings page reads it back and writes it. Defaults
+   * to the file the runtime entry points load, which is the right answer for a real server - but a
+   * test that posts to `/settings` must pass a temp path, or it would write the user's own config.
+   */
+  configPath?: string
   /** The remaining dependencies exist so tests can run a refresh without the network or a real banner. */
   http?: HttpClient
   adapters?: CarrierAdapter[]
@@ -45,6 +57,8 @@ export interface WebDeps {
   now?: () => Date
   /** The map-tile cache; defaults to `data/tiles` beside the database, as the poller writes it. */
   tileDir?: string
+  /** The IMAP client the connection test uses; injected so tests never touch the network. */
+  imapClient?: (config: ImapConfig) => ImapProbeLike
 }
 
 /**
@@ -88,7 +102,17 @@ export function refreshNote(query: Record<string, unknown>): RefreshNote | undef
 }
 
 export function buildServer(deps: WebDeps): FastifyInstance {
-  const { db, config } = deps
+  const { db } = deps
+  /**
+   * What this process is running on. `deps.config` is what it STARTED on, and the settings page can
+   * change the file underneath it, so this is a holder rather than a constant: a successful save
+   * replaces it, and every route that reads config (the default postcode on /add, the map preview,
+   * whether /health says mail is configured) follows the new file without a restart. `port` and
+   * `dbPath` are never replaced - the socket is open and the database is open - which is exactly why
+   * the page shows those two read-only.
+   */
+  let config = deps.config
+  const configPath = deps.configPath ?? runtimeConfigPath()
   const tileDir = deps.tileDir ?? tileDirFor(config.dbPath)
   const app = Fastify({ logger: false })
   const now = () => (deps.now ?? (() => new Date()))()
@@ -225,6 +249,62 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const result = addParcel(db, config, { ...values, source: 'manual' })
     if (result.ok) return reply.redirect(`/parcel/${result.id}`, 303)
     return send(reply, addPage(ctx(), result.message, values), result.status)
+  })
+
+  /**
+   * The config file as it is on disk, with the reason it would not load if it would not. Read per
+   * request, deliberately: `deps.config` is what this process started with, and after a save (here,
+   * in another tab, or by hand) that is no longer what the file says. The file is a few hundred bytes
+   * and settings requests are rare, so reading it is cheaper than any scheme for keeping a copy true.
+   */
+  const current = (): { doc: ConfigDocument; valid?: Config; error?: string } => {
+    const doc = readConfigDocument(configPath)
+    try {
+      return { doc, valid: validateConfig(doc, configPath) }
+    } catch (err) {
+      return { doc, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  const settings = (
+    reply: FastifyReply, file: { doc: ConfigDocument; error?: string },
+    state: SettingsState = {}, values?: SettingsValues, status = 200,
+  ) => send(reply, settingsPage(
+    values ?? settingsValues(file.doc),
+    { port: config.port, dbPath: config.dbPath, configPath },
+    ctx(), { ...state, configError: file.error },
+  ), status)
+
+  app.get('/settings', async (req, reply) =>
+    settings(reply, current(), { saved: one((req.query as Record<string, unknown>).saved) === '1' }))
+
+  app.post('/settings', async (req, reply) => {
+    const f = form(req)
+    const file = current()
+    const result = applySettings(file.doc, f)
+    if (!result.ok) return settings(reply, file, { error: result.message }, submittedSettings(f, file.doc), 400)
+    // Validated against loadConfig's own rules and written atomically at 0600 (writeConfigDocument):
+    // a file this app could not load would stop the poller AND this server at their next start.
+    const saved = writeConfigDocument(configPath, result.doc)
+    // `port` and `dbPath` are bound to the open socket and the open database, so they stay as they are.
+    config = { ...saved, port: config.port, dbPath: config.dbPath }
+    return reply.redirect('/settings?saved=1', 303)
+  })
+
+  /**
+   * The connection test. POST, not GET, because it opens a TLS connection to the mail server, and a
+   * page must not do that because it was prefetched or reloaded.
+   *
+   * It tests the settings as SAVED, not as typed, so the answer is about the configuration the poller
+   * will use. `probeImap` opens the mailbox read-only, never rejects, and keeps the App Password out
+   * of its result, so a failure is an answer on the page and not a 500 with a credential in the log.
+   */
+  app.post('/settings/test', async (_req, reply) => {
+    const file = current()
+    if (!file.valid) return settings(reply, file)   // the page explains why the file will not load
+    const imap = file.valid.imap
+    const test: ImapProbeResult = await probeImap({ config: imap, client: imap && deps.imapClient?.(imap) })
+    return settings(reply, file, { test })
   })
 
   app.post<{ Params: { messageId: string } }>('/attention/:messageId/assign', async (req, reply) => {

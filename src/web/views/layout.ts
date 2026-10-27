@@ -15,7 +15,10 @@ export interface PageCtx {
 /** A carrier that has failed its last run(s). The nav shows a dot for this and for nothing else (see design-language §5.1). */
 export const carrierTrouble = (health: HealthRow[]): boolean => health.some(h => h.consecutiveFailures > 0)
 
-const NAV = [['/', 'In flight'], ['/history', 'History'], ['/attention', 'Attention'], ['/health', 'Health']] as const
+const NAV = [
+  ['/', 'In flight'], ['/history', 'History'], ['/attention', 'Attention'], ['/health', 'Health'],
+  ['/settings', 'Settings'],
+] as const
 
 export function layout(title: string, current: string, body: Html, ctx: PageCtx): Html {
   const trouble = carrierTrouble(ctx.health)
