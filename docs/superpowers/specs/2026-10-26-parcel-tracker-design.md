@@ -306,7 +306,7 @@ POST https://tracking.packeta.com/api/getPacketById/{Zxxxxxxxxxx}/{locale}
   contract and scope to that sender's own packets. No recipient-side credential
   exists.
 
-### 6.3 GLS — VERIFIED (including a live 200)
+### 6.3 GLS — VERIFIED (including a live 200 for a real parcel, 2026-10-27)
 
 ```
 GET https://gls-group.com/app/service/open/rest/SK/sk/rstt029?match={numbers}&caller=witt002&millis={ms}
@@ -325,7 +325,8 @@ GET https://gls-group.com/app/service/open/rest/SK/sk/rstt028/{number}?postalCod
   `PROCESSING`, `INTRANSIT`, `MULTIPACK`, `INWAREHOUSE`, `INDELIVERY`,
   `DELIVEREDPS`, `INPICKUP`, `DELIVERED`, `NOTDELIVERED`, `NOTPICKEDUP`,
   `RETURNED`, `CANCELLED`, `UNAVAILABLE`. **Never** key off `evtDscr` text.
-- `history[]` is **newest-first**.
+- `history[]` was **newest-first** in the one real capture (2026-10-27). The adapter does not rely on it:
+  events are ordered by their own timestamp (ties keep the newest-first reading).
 - **Dummy-parcel trap:** GLS sometimes answers **200 with a fabricated parcel
   carrying every event code** for invalid numbers. Reject responses whose event
   count exceeds a sane threshold (~50) rather than trusting them.
@@ -337,14 +338,36 @@ GET https://gls-group.com/app/service/open/rest/SK/sk/rstt028/{number}?postalCod
 - Error codes: `E000` expired/unknown, `E206` unknown, `E609` postcode mismatch
   (→ fall back to `rstt029`), `E800`/`E801` not in index. A 403 or an HTML body
   means **gated**, not *not found*.
-- `rstt028` record fields, from GLS's own minified client: `tuStatus[]` of
-  `{tuNo, tuOwnerCode, referenceNo, signature{name,value}, infoText,
-  arrivalTime{name,value}, addresses[]{type,name,blockNo1,postalCode,city,
-  countryCode,country,latitude,longitude}, parcelShop{parcelShopID,…},
-  references[]{type,name,value}, dateTimes[]{type,value},
-  infos[]{type,name,value}, history[]{date,time,address,evtDscr,evtNo},
-  progressBar{statusInfo,statusText,colourIndex,evtNos[],statusBar[]}}`.
-  INFERRED from client code, not from a captured 200.
+- **Response shapes, CONFIRMED against a real in-transit parcel (2026-10-27, `cli probe`).**
+  `rstt029` wraps its item(s) in `tuStatus[]`; **`rstt028` does not: it returns a bare object**
+  `{referenceNo, postalCode, status, date, infos[], references[], progressBar, history[], tuNo, owners[],
+  natSysOwnerCode, deliveryOwnerCode, emailNotificationCard}` with no `tuStatus` wrapper. The adapter
+  normalises both to one internal item in `ask()`. (The earlier belief that `rstt028` was wrapped came from
+  GLS's own minified client and was INFERRED; it was wrong.) Confirmed field detail:
+  - `tuNo` and `referenceNo` are the parcel number. **A real GLS number is 10 digits** (`1234567890`);
+    the shape check is `^\d{10,12}$`.
+  - `progressBar.statusInfo` (`INTRANSIT` in the capture) is the status source;
+    `progressBar.statusBar[]` is `{status, imageStatus, statusText, imageText}`.
+  - `history[]` entries are `{date:"2026-10-27", time:"02:18:05", evtDscr, evtNo:"0.0", address:{city}}`:
+    **`date` and `time` are separate fields**, joined by the adapter and read as `Europe/Bratislava`.
+    **`address.city` can hold a country name** (`"Slovakia"`), not a city.
+  - `references[]` is `{type, name, value}` with `type` `UNITNO` (the parcel number) and **`CUSTREF` (the
+    e-shop's own order number)**. `infos[]` is `{type:"WEIGHT", name, value:"0.2 kg"}`.
+    `natSysOwnerCode`/`deliveryOwnerCode` are e.g. `"SK01"`.
+  - **Text fields contain HTML numeric entities** (`&#268;`, `&#237;`, ...); the adapter decodes them
+    (`src/core/entities.ts`) for event descriptions, locations and pickup fields.
+  - Known opportunity, deliberately NOT built: `CUSTREF` is a ready-made merchant/order label for a parcel
+    found by number alone. `FetchResult` has no field for it (it survives only in the stored `raw`), and
+    adding one touches the live poll/DB path.
+  - Fields still only INFERRED from the client code, unconfirmed by a capture: `tuOwnerCode`,
+    `signature{}`, `infoText`, `arrivalTime{}`, `addresses[]{type,name,blockNo1,postalCode,city,countryCode,
+    country,latitude,longitude}`, `parcelShop{parcelShopID,...}`, `dateTimes[]`.
+- **GLS's detail index is unreliable for freshly created parcels (observed live, 2026-10-27).** The same
+  number returned a full `INTRANSIT` record, and **45 minutes later `E800` ("no results")**. This is why
+  GLS's own dispatch mail says the status is updated "within 24-48 hours". The `not_found` mapping for
+  `E000`/`E206`/`E800`/`E801` is therefore correct, and it is quiet by design: it must **not** be
+  "fixed" into an alarm or a `transport` failure. A parcel that flips to `not_found` right after a good
+  answer is GLS's index lagging, not the app breaking, and it recovers on a later poll.
 - **No postal code available → degrade, do not refuse.** `rstt029` needs no
   postcode, so a GLS parcel without one still yields an authoritative status; only
   `history[]` is unavailable. Returning `needs_postcode` would be worse than
@@ -354,10 +377,12 @@ GET https://gls-group.com/app/service/open/rest/SK/sk/rstt028/{number}?postalCod
   `needs_postcode`**; the `FetchResult` variant and its orchestrator machinery are
   retained for a carrier that genuinely cannot answer without one.
 - Pickup location: `parcelShop` plus `addresses[]` with `latitude`/`longitude`.
-- Number format: 11 digits, optionally a 12th check digit; also 12-digit and
-  8-char alphanumeric Track ID forms. Check digit: weights `3,1,3,1…` from the
-  right, `10 - ((sum + 1) mod 10)`, `10 → 0`. A bare 11-digit number is **not
-  distinctive** — do not infer GLS from it alone.
+- Number format: **10, 11 or 12 digits** (the first real parcel, 2026-10-27, is 10); also 8-char
+  alphanumeric Track ID forms. An 11-digit number optionally carries a 12th check digit (weights `3,1,3,1…`
+  from the right, `10 - ((sum + 1) mod 10)`, `10 → 0`). A bare 10-12 digit number is **not distinctive**
+  (a phone number is the same shape) — do not infer GLS from it alone. No other carrier's shape overlaps
+  (Packeta needs a `Z`, DPD is 14 digits, Pošta and SPS are alphanumeric), so a 10-digit number detects as
+  GLS and nothing else.
 - Reusable test numbers: `312175332275` (live 200 confirmed), `UF662377471` (GLS
   Italy, full delivered history).
 - Documented fallback if closed again: `https://api.gls-group.eu/public/v1/tracking/references/{ids}`,
@@ -709,6 +734,15 @@ path. Both shapes must be handled and tested.
   carrier, since `not_found` is a cheap negative; that is **not implemented**.) A number is accepted
   without a sender hint only if its shape is distinctive and unambiguous; bare 11-14 digit numbers and
   mail naming several different numbers go to the needs-attention list, where one click assigns them.
+- **E-shop dispatch mail is accepted on two signals together.** An e-shop's "your order has been dispatched"
+  mail is often the first notice of a parcel, days before the carrier writes. When the sender is not a
+  carrier and no distinctive shape is present, a mail that **names GLS or DPD AND prints a labelled
+  tracking number of that carrier's bare-digit shape** (e.g. `Číslo zásielky je 1234567890`) is extracted
+  with confidence `shape`. The number must be a whole token, introduced by a tracking label, not behind an
+  order/invoice/phone word, and not phone-shaped; two different such numbers are ambiguous. A carrier name
+  alone (an order confirmation saying the delivery method is GLS) or a number alone stays `none` and goes
+  to needs-attention. Verified on a real pair from one shop for one order: the dispatch mail extracts, the
+  order confirmation does not. This only helps if the Gmail filter labels the shop's mail (README step 2).
   Mail from a carrier domain that yields no number (e.g. Packeta's app-verification mail) lands there
   too and never creates a parcel.
 - **The ingest has its own health.** The `ingest_status` row (last ok, last error, consecutive failures)
@@ -933,7 +967,7 @@ Confirmations owed against the first real parcel of each carrier, via
 |---|---|
 | Slovenská pošta | `events[]` field names; `localDate` has no offset; `postOffice` appears under `p=1` |
 | Packeta | `item` field names and `packetStatusId` values; whether `branchAddress` is absent for courier delivery |
-| GLS | whether `rstt029` includes `history` or only `progressBar`; which `addresses[]` entry is the parcel shop (the adapter picks the first with coordinates, since `type` values are undocumented) — needs a captured `INPICKUP` record |
+| GLS | ~~`rstt028` shape~~ — **CONFIRMED 2026-10-27** against a real in-transit parcel, see §6.3 (bare object, 10-digit numbers, separate `date`/`time`, `CUSTREF`, HTML entities). Still owed: whether `rstt029` includes `history` or only `progressBar`; which `addresses[]` entry is the parcel shop (the adapter picks the first with coordinates, since `type` values are undocumented) — needs a captured `INPICKUP` record |
 | SPS | ~~`data.states[]` field names~~ — **CONFIRMED 2026-10-27** against real parcel `SK0TEST6000000000X`: `states[]` carries `time` (`yyyy-MM-dd HH:mm:ss`, naive `Europe/Bratislava`) and `statusDescr` (free-text Slovak, e.g. "Definícia dát", "Prvá registrácia", "Uložený v balíkomate", "Doručenie"). **No location field.** Per-event status is correctly `unknown` except the terminal one, since SPS emits no per-event codes. |
 | DPD | the postcode-verified shape; diff of step 3 with and without `dataForVerification` |
 
