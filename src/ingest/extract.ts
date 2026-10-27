@@ -38,14 +38,14 @@ export function carrierForAddress(address: string): CarrierId | undefined {
  * Per-carrier number shapes for ingest. Deliberately NOT `adapter.matches()`, which is the manual-entry
  * validator (and check-digit strict for posta). These only have to find a candidate in prose; the carrier
  * API's `not_found` is the real validator. The lookarounds keep a match from being cut out of a longer
- * token, so a 14-digit DPD number is never read as a 12-digit GLS one.
+ * token, so a 14-digit DPD number is never read as a 12-digit GLS one (or a 13-digit run as a 12-digit one).
  */
 const NUMBER: Record<CarrierId, RegExp> = {
   packeta: /(?<![A-Z0-9])Z(?:[ \u00a0\u202f]?\d){10}(?!\d)/g,   // printed as "Z 000 0000 000"
   posta: /(?<![A-Z0-9])[A-Z]{2}\d{9}SK(?![A-Z0-9])/g,
   sps: /(?<![A-Z0-9])(?:SK[A-HJ-NP-Z0-9]{5}\d{2}[A-HJ-NP-Z0-9]{9}|703\d{11}[0-4]\d)(?![A-Z0-9])/g,
   dpd: /(?<![A-Z0-9])\d{14}(?![A-Z0-9])/g,
-  gls: /(?<!\d)\d{11,12}(?!\d)/g,
+  gls: /(?<!\d)\d{10,12}(?!\d)/g,
 }
 
 /** Shapes distinctive enough to trust without a sender hint. Bare digits (dpd, gls) are not. */
@@ -63,11 +63,12 @@ const firstNumber = (carrier: CarrierId, haystack: string): string | undefined =
 
 const GLS_LABEL = /(?:parcel|package|tracking|track|number|zásielk\w*|zasielk\w*|balík\w*|balik\w*|číslo|cislo|paket\w*)[^\n\d]{0,30}$/i
 const PHONE_LABEL = /(?:tel\w*|phone|mobil\w*|call|fax|zavolajte|volajte|\+)[^\n\d]{0,15}$/i
-const PHONE_PREFIX = /^(?:42[01]|00421|00420)/
+// 10 digits is also the length of a Slovak national-format mobile number (0900123456).
+const PHONE_PREFIX = /^(?:42[01]|00421|00420|09\d{8}$)/
 
 /**
- * A GLS number is 11-12 bare digits, exactly the shape of a printed phone number (421900123456 is 12
- * digits), and a mail may print one first. So rank the candidates: one introduced by a "parcel number"
+ * A GLS number is 10-12 bare digits, exactly the shape of a printed phone number (421900123456 is 12
+ * digits, 0900123456 is 10), and a mail may print one first. So rank the candidates: one introduced by a "parcel number"
  * style label, then any that does not look like a phone number, then the first. The text is searched in
  * order, so within a rank the earlier one wins.
  */

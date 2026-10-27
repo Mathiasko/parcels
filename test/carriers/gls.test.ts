@@ -309,13 +309,14 @@ test('the rstt029 overview alone yields a status with no events', async () => {
   expect(r.events).toEqual([])
 })
 
-test('matches() accepts 11 and 12 digit numbers', () => {
-  expect(glsAdapter.matches('31217533227')).toBe(true)
-  expect(glsAdapter.matches('312175332275')).toBe(true)
-  expect(glsAdapter.matches('3121753322')).toBe(false)
-  expect(glsAdapter.matches('3121753322755')).toBe(false)
-  expect(glsAdapter.matches('3121753322AB')).toBe(false)
+test.each(['1234567890', '12345678901', '123456789012'])('matches() accepts %s (10, 11 and 12 digits)', n => {
+  expect(glsAdapter.matches(n)).toBe(true)
 })
+
+test.each(['123456789', '1234567890123', '12345678901234', '123456789A', '12345 67890', ''])(
+  'matches() rejects the near-miss %j', n => {
+    expect(glsAdapter.matches(n)).toBe(false)
+  })
 
 test('adapter metadata: one parcel per call, postcode required', () => {
   expect(glsAdapter.id).toBe('gls')

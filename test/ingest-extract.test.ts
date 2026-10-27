@@ -153,6 +153,20 @@ describe('extract: carriers without a fixture from the real mailbox', () => {
     expect(e.number).toBe('000000000007')
   })
 
+  test('GLS: a 10-digit number (the length of the first real parcel) is found when the sender is GLS', async () => {
+    const e = await extract(eml('noreply@gls-group.eu', 'Your parcel', 'Parcel number: 1234567890. Expected tomorrow.'))
+    expect(e).toMatchObject({ carrier: 'gls', number: '1234567890', confidence: 'sender' })
+  })
+
+  test('GLS: a 10-digit national-format phone number printed first does not win over the parcel number', async () => {
+    const e = await extract(eml('noreply@gls-group.eu', 'Your parcel', 'Questions? 0900123456\r\nParcel 1234567890'))
+    expect(e.number).toBe('1234567890')
+  })
+
+  test('GLS: 9 and 13 digit runs are not read as a parcel number', async () => {
+    expect((await extract(eml('noreply@gls-group.eu', 'Your parcel', 'ref 123456789 and 1234567890123'))).confidence).toBe('none')
+  })
+
   test('GLS: if the phone-shaped number is all there is, it is still returned (needs-attention is for NO candidate)', async () => {
     expect((await extract(eml('noreply@gls-group.eu', 'Your parcel', 'ref 421900123456'))).number).toBe('421900123456')
   })

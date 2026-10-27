@@ -7,9 +7,11 @@ import type {
 const ZONE = 'Europe/Bratislava'
 const BASE = 'https://gls-group.com/app/service/open/rest/SK/sk'
 const CALLER = 'witt002'
-// A bare 11-digit number is not distinctive (nothing else identifies GLS), so this only ever serves
-// manual entry. `rstt001`, which every older guide cites, is dead: it 303-redirects to a sign-up page.
-const NUMBER_SHAPE = /^\d{11,12}$/
+// A bare 10-12 digit number is not distinctive (nothing else identifies GLS), so this only ever serves
+// manual entry. The first real parcel seen live was 10 digits; 11 and 12 are the lengths in older
+// guides. dpd (14) and every other shape are disjoint from these lengths.
+// `rstt001`, which every older guide cites, is dead: it 303-redirects to a sign-up page.
+const NUMBER_SHAPE = /^\d{10,12}$/
 
 /** Real parcels carry a handful of events; GLS's fabricated dummy parcel carries every event code. */
 const MAX_PLAUSIBLE_EVENTS = 50

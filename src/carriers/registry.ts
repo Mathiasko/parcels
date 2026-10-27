@@ -7,7 +7,7 @@ import { spsAdapter } from './sps.js'
 
 const adapters = new Map<CarrierId, CarrierAdapter>()
 
-/** Most specific shape first. gls (11-12 bare digits) and dpd (14 digits) are ambiguous, so last. */
+/** Most specific shape first. gls (10-12 bare digits) and dpd (14 digits) are ambiguous, so last. */
 const DETECT_ORDER: readonly CarrierId[] = ['posta', 'packeta', 'sps', 'dpd', 'gls']
 
 export function register(a: CarrierAdapter): void {

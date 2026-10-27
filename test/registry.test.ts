@@ -20,7 +20,7 @@ const shapes: Record<CarrierId, RegExp> = {
   posta: /^[A-Z]{2}\d{9}SK$/,
   packeta: /^Z\d{10}$/,
   sps: /^703\d{11}[0-4]\d$/,
-  gls: /^\d{11,12}$/,
+  gls: /^\d{10,12}$/,
   dpd: /^\d{14}[A-Z0-9]?$/,
 }
 
@@ -94,6 +94,15 @@ describe('with the real adapters', () => {
     expect(detectCarrier('SK0TEST6000000000X')).toEqual(['sps'])
     expect(detectCarrier('01234567890123')).toEqual(['dpd'])
     expect(detectCarrier('31217533227')).toEqual(['gls'])
+  })
+
+  test('a 10-digit number (the live GLS parcel length) is gls and nothing else; 9 and 13 are nobody', () => {
+    expect(detectCarrier('1234567890')).toEqual(['gls'])
+    expect(resolveCarrier('1234567890')).toEqual({ ok: true, carrier: 'gls' })
+    expect(detectCarrier('123456789')).toEqual([])
+    expect(detectCarrier('1234567890123')).toEqual([])
+    expect(detectCarrier('12345678901234')).toEqual(['dpd'])   // 14 digits stays dpd's, not gls's
+    expect(detectCarrier('Z1234567890')).toEqual(['packeta'])   // Z + 10 is not read as 10 bare digits
   })
 
   test('the SK-prefixed SPS form and the S10 Slovenska posta form never collide', () => {
