@@ -524,7 +524,19 @@ It returns `entries.basic_dpd_token`, whose observed value base64-decodes to
   vocabulary. **Re-run step 3 with and without `dataForVerification` against the
   first real SK parcel and diff.**
 
-### 6.6 DHL — RECONNOITRED 2026-10-27, key not yet issued
+### 6.6 DHL — RECONNOITRED 2026-10-27, API access REFUSED 2026-10-28
+
+**The keyed API is not available to a personal applicant.** The request for
+*Shipment Tracking - Unified* (Production Europe, 250/day) was rejected outright:
+
+> "Sorry, access to the API you requested is rejected. For successful approval, please
+> submit your request using a business-domain email address."
+
+So the gate is the applicant's email domain, not the app, the volume or the use case.
+A gmail.com address cannot get a key; reapplying from a domain the applicant owns can.
+Until then DHL is tracked by mail alone (§6.7), which is built and working — and that
+path stays the right fallback afterwards anyway, for a key that is revoked or past its
+250 calls.
 
 Two products are wanted, Express and Parcel. One adapter covers both: DHL's
 "Shipment Tracking — Unified" API is explicitly cross-service and routes the number
