@@ -1,3 +1,8 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fakeImap } from './imap-fake.js'
+import { listActive } from '../src/db/parcels.js'
 import { describe, expect, test, vi } from 'vitest'
 import { buildServer, type WebDeps } from '../src/web/server.js'
 import { appendEvents } from '../src/db/events.js'
@@ -842,5 +847,82 @@ describe('the parcel page timeline and History, as built', () => {
     const body = (await get(memDb(), '/history')).body
     expect(body).toContain('<a href="/history" data-t="History" aria-current="page">')
     expect(body).toContain('data-t="In flight"')
+  })
+})
+
+describe('refresh reads the mailbox, not only the carriers', () => {
+  const imap = { host: 'imap.example.com', port: 993, user: 'u@example.com', pass: 'pw', mailbox: 'parcels' }
+  // A real captured pickup mail, so this tests the ingest the app actually has rather than a
+  // hand-written body that happens to suit the extractor.
+  const FIXTURE = readFileSync(new URL('./fixtures/mail/packeta-ready-zbox.eml', import.meta.url))
+  const pickupMail = (uid: number) => ({
+    uid, messageId: `<m${uid}@x>`, subject: 'Zásielka je pripravená na vyzdvihnutie',
+    from: 'noreply@packeta.sk', date: new Date('2026-10-26T10:00:00Z'), source: FIXTURE,
+  })
+
+  test('a whole-dashboard refresh ingests mail, so a new install can do something', async () => {
+    // The button is the only control on an empty dashboard. Without this it polled carriers for
+    // parcels that did not exist yet and reported "nothing", which is what a new user saw.
+    const db = memDb()
+    const dir = mkdtempSync(join(tmpdir(), 'parcels-refresh-'))
+    try {
+      const fake = fakeImap([pickupMail(1)])
+      const res = await post(db, '/refresh', {}, {
+        config: { ...config, imap, dbPath: join(dir, 'parcels.db') },
+        ingestClient: fake.client, http: bodyHttp(),
+        adapters: [stubAdapter('packeta', inputs => inputs.map(i => okResult(i.number, [ev('x', 'ready_for_pickup')])), 100)],
+      })
+      expect(res.headers.location).toMatch(/read=1/)
+      expect(res.headers.location).toMatch(/created=1/)
+      expect(listActive(db)).toHaveLength(1)
+      expect(fake.forbidden).toEqual([])            // still read-only against the mailbox
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  test('a single-parcel refresh never touches the mailbox', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'posta', trackingNumber: 'RR1', source: 'manual' })
+    const adapter = stubAdapter('posta', inputs => inputs.map(i => okResult(i.number, [ev('x', 'in_transit')])), 100)
+    const fake = fakeImap([pickupMail(1)])
+    const res = await post(db, '/refresh', { parcel: String(id) }, {
+      config: { ...config, imap }, ingestClient: fake.client, adapters: [adapter], http: bodyHttp(),
+    })
+    expect(res.headers.location).not.toMatch(/read=/)
+    expect(fake.calls).toEqual([])                  // not connected to at all
+  })
+
+  test('with no mail configured the refresh says nothing about mail', async () => {
+    const db = memDb()
+    const res = await post(db, '/refresh', {}, { adapters: [], http: bodyHttp() })
+    expect(res.headers.location).not.toMatch(/read=|created=/)
+    expect(res.headers.location).toMatch(/active=0/)
+  })
+})
+
+describe('what the refresh banner claims', () => {
+  test('an empty dashboard is not told its parcels are paused', async () => {
+    const db = memDb()
+    const body = (await server(db).inject({ method: 'GET', url: '/?refreshed=0&failures=0&active=0' })).body
+    expect(body).toContain('Nothing is in flight yet.')
+    expect(body).not.toContain('each parcel here is paused')
+  })
+
+  test('a dashboard that does have parcels still explains why none were polled', async () => {
+    const db = memDb()
+    insertParcel(db, { carrier: 'posta', trackingNumber: 'RR1', source: 'manual' })
+    const body = (await server(db).inject({ method: 'GET', url: '/?refreshed=0&failures=0&active=1' })).body
+    expect(body).toContain('each parcel here is paused')
+  })
+
+  test('mail that yielded nothing is reported as such, not as silence', async () => {
+    const db = memDb()
+    const body = (await server(db).inject({ method: 'GET', url: '/?refreshed=0&failures=0&active=0&read=0&created=0' })).body
+    expect(body).toContain('No new mail.')
+  })
+
+  test('mail that became parcels is reported first', async () => {
+    const db = memDb()
+    const body = (await server(db).inject({ method: 'GET', url: '/?refreshed=1&failures=0&active=1&read=3&created=2' })).body
+    expect(body).toContain('Read 3 new emails and added 2 parcels.')
   })
 })

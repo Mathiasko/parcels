@@ -1,3 +1,4 @@
+import { dirname, join } from 'node:path'
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import {
   readConfigDocument, runtimeConfigPath, validateConfig, writeConfigDocument, type Config, type ConfigDocument,
@@ -12,7 +13,7 @@ import { cachedGrid } from '../core/map-preview.js'
 import { parseTile } from '../core/slippy.js'
 import { readTile, tileDirFor } from '../core/tiles.js'
 import { isDormant } from '../core/backoff.js'
-import { runPoll } from '../core/poll.js'
+import { runPoll, type PollDeps } from '../core/poll.js'
 import { allAdapters } from '../carriers/registry.js'
 import { createNotifier } from '../notify/send.js'
 import type { Notifier } from '../notify/types.js'
@@ -61,6 +62,11 @@ export interface WebDeps {
   /** The IMAP client the connection test uses; injected so tests never touch the network. */
   imapClient?: (config: ImapConfig) => ImapProbeLike
   /**
+   * The IMAP client a whole-dashboard refresh ingests with; injected so tests never touch the
+   * network. Separate from `imapClient`: the connection test only looks, the ingest reads messages.
+   */
+  ingestClient?: NonNullable<PollDeps['ingest']>['client']
+  /**
    * What `/health` reports as the running version. Defaults to this checkout, resolved once (see
    * core/version.ts); injected by tests, which must not depend on the commit they happen to run at.
    */
@@ -104,7 +110,11 @@ export function refreshNote(query: Record<string, unknown>): RefreshNote | undef
   const polled = one(query.refreshed)
   if (polled === undefined) return undefined
   const n = (v: string | undefined) => (v !== undefined && /^\d{1,6}$/.test(v) ? Number(v) : 0)
-  return { polled: n(polled), failures: n(one(query.failures)), busy: false }
+  const opt = (v: string | undefined) => (v === undefined ? undefined : n(v))
+  return {
+    polled: n(polled), failures: n(one(query.failures)), busy: false,
+    read: opt(one(query.read)), created: opt(one(query.created)), active: opt(one(query.active)),
+  }
 }
 
 export function buildServer(deps: WebDeps): FastifyInstance {
@@ -398,14 +408,31 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     if (refreshing) return reply.redirect(`${back}?busy=1`, 303)   // a double click must not poll twice
     refreshing = true
     try {
+      // Read the mailbox too, but only for the whole-dashboard refresh. This is what the button is for
+      // on a new install: with no parcels yet, polling carriers can do nothing, and without this the
+      // only way to turn mail into parcels was to wait for the next hourly run. A single-parcel
+      // refresh asks about that parcel and should not go near the mailbox.
+      const ingest = target === '' && config.imap
+        ? {
+            imap: config.imap,
+            mailDir: join(dirname(config.dbPath), 'mail'),
+            ...(deps.ingestClient ? { client: deps.ingestClient } : {}),
+          }
+        : undefined
       const report = await runPoll({
-        db, config, parcelIds, forceAll: true,
+        db, config, parcelIds, forceAll: true, ingest,
         http: deps.http ?? createHttpClient(),
         adapters: deps.adapters ?? allAdapters(),
         notifier: deps.notifier ?? createNotifier(config.notifier),
         now: now(),
       })
-      return reply.redirect(`${back}?refreshed=${report.polled}&failures=${report.failures.length}`, 303)
+      const q = new URLSearchParams({ refreshed: String(report.polled), failures: String(report.failures.length) })
+      if (report.ingest) {
+        q.set('read', String(report.ingest.read))
+        q.set('created', String(report.ingest.created))
+      }
+      if (target === '') q.set('active', String(listActive(db).length))
+      return reply.redirect(`${back}?${q}`, 303)
     } finally {
       refreshing = false
     }

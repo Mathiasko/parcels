@@ -42,14 +42,34 @@ export function mapsUrl(p: Parcel): string | undefined {
 }
 
 /** The result of the last "refresh now" click, carried through the redirect as plain counters. */
-export interface RefreshNote { polled: number; failures: number; busy: boolean }
+export interface RefreshNote {
+  polled: number
+  failures: number
+  busy: boolean
+  /** New messages the mailbox yielded, and the parcels they became. Absent when no mail is configured. */
+  read?: number
+  created?: number
+  /** How many parcels were in flight afterwards, which is what makes "nothing to poll" readable. */
+  active?: number
+}
 
 export function refreshBanner(n: RefreshNote | undefined): Html {
   if (!n) return html``
   if (n.busy) return notice('neutral', html`<p>A refresh is already running; try again in a moment.</p>`, true)
-  const note = n.polled === 0
-    ? 'Nothing was polled: each parcel here is paused (its carrier is failing, or its postcode was rejected) or was tried under a minute ago.'
-    : `Polled ${plural(n.polled, 'parcel')}.`
+  // What the mailbox gave, when a mailbox is configured at all. Said first: on a new install this is
+  // the only part that can do anything, and "0 parcels polled" otherwise reads as a failure.
+  const created = n.created ?? 0
+  const mail = n.read === undefined ? ''
+    : created > 0 ? `Read ${plural(n.read, 'new email')} and added ${plural(created, 'parcel')}. `
+    : n.read > 0 ? `Read ${plural(n.read, 'new email')}, none of which named a parcel. `
+    : 'No new mail. '
+  // "Every parcel is paused" is only true when there ARE parcels. On a fresh install there are none,
+  // and claiming otherwise sends the reader looking for a problem that does not exist.
+  const note = n.polled > 0
+    ? `${mail}Polled ${plural(n.polled, 'parcel')}.`
+    : n.active === 0
+      ? `${mail}Nothing is in flight yet.`
+      : `${mail}Nothing was polled: each parcel here is paused (its carrier is failing, or its postcode was rejected) or was tried under a minute ago.`
   if (n.failures === 0) return notice('neutral', html`<p>${note}</p>`, true)
   return notice('warn', html`<p><strong>${plural(n.failures, 'carrier failure')}.</strong> See <a href="/health">Health</a>.</p><p>${note}</p>`, true)
 }
