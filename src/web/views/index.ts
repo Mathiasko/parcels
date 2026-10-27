@@ -4,13 +4,12 @@ import type { StoredEvent } from '../../db/events.js'
 import type { CanonicalStatus } from '../../core/types.js'
 import { isEmailOnlyCarrier } from '../../core/types.js'
 import {
-  calendarDaysBetween, CARRIER_NAME, formatAgo, formatDateTime, formatDay, isBadge, plural, statusIndicator,
-  toneClass,
+  calendarDaysBetween, CARRIER_NAME, formatAgo, formatDateTime, formatDay, isKnown, plural, quietIndicator,
+  statusIndicator,
 } from './format.js'
 import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
-import { STATUS_TITLE } from '../../notify/rules.js'
 
 export const parcelName = (p: Parcel): string => p.label ?? p.merchant ?? p.trackingNumber
 
@@ -127,9 +126,6 @@ export const sinceOf = (e: Entry): Date | undefined => e.parcel.lastChangedAt ??
 const stamp = (e: Entry): number => (e.last?.occurredAt ?? e.parcel.firstSeenAt).getTime()
 const newestFirst = (a: Entry, b: Entry): number => stamp(b) - stamp(a) || b.parcel.id - a.parcel.id
 
-/** At most this many pickup places get a card; any further pickups fall back to compact rows. */
-const MAX_PICKUP_CARDS = 4
-
 // --- the pickup clock ------------------------------------------------------------------------------
 
 type Urgency = 'none' | 'soon' | 'now'
@@ -169,54 +165,150 @@ export function noDeadlineNote(entries: Entry[]): string {
   return `${listNames(names)} did not give a pickup deadline.`
 }
 
-// --- the page ---------------------------------------------------------------------------------------
+// --- the card --------------------------------------------------------------------------------------
 
-function pickupCard(where: string, members: Entry[], ctx: PageCtx): Html {
-  const clocks = members.map(m => pickupClock(m, ctx.now))
-  const dueNow = clocks.some(c => c.urgency === 'now')
-  const maps = members.map(m => mapsUrl(m.parcel)).find(u => u !== undefined)
-  const note = noDeadlineNote(members)
-  return html`<article class="pk">
-<div class="pk-h${dueNow ? raw(' due-now') : ''}"><h2>${where}</h2>${statusIndicator('ready_for_pickup')}</div>
-<ul class="pk-l">${members.map((m, i) => html`<li><h3><a href="/parcel/${m.parcel.id}">${parcelName(m.parcel)}</a></h3>
-<span class="meta">${CARRIER_NAME[m.parcel.carrier]} · <span class="mono sel">${m.parcel.trackingNumber}</span></span>
-${clocks[i]!.out}${pickupCodeLine(m.code)}${postcodeRejected(m.parcel) ? html`<p class="meta t-warn">${glyph('problem')} Postcode needed: <a class="sel" href="/parcel/${m.parcel.id}">set one</a> to resume full tracking.</p>` : ''}</li>`)}</ul>
-${note || maps ? html`<p class="pk-f meta">${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps ↗</a>` : ''}</p>` : ''}
+/**
+ * What one card is about. Every parcel in flight is on exactly one card, and there is only ONE card: the
+ * same frame, the same header, the same body block, whether it holds one parcel or four. Before this,
+ * a pickup with a place got a blue-headed card and everything else got a row, so two parcels that both
+ * needed collecting could be rendered as different species - the row quieter, and ABOVE the card.
+ *
+ * The one grouping is the one the data earns: parcels waiting at the same pickup place are a single
+ * errand ("go to Hlavna 6"), so they share a card headed by that place. Everything else is a card of
+ * one, headed by the parcel's own name.
+ */
+interface Card {
+  /** The heading: the pickup place when the card is an errand, else the parcel's own name. */
+  head: string
+  /** The heading is a place, so each body block still has to say which parcel it is. */
+  placed: boolean
+  members: Entry[]
+}
+
+/**
+ * The cards, unsorted. A ready parcel joins the card of its pickup place when the carrier gave one; a
+ * ready parcel with NO place gets a card of its own, headed by its name, exactly like every other
+ * parcel - it is not demoted, which is what the row it used to fall into did to it.
+ */
+function buildCards(entries: Entry[]): Card[] {
+  const places = new Map<string, Entry[]>()
+  for (const e of entries) {
+    const where = e.parcel.status === 'ready_for_pickup' ? pickupSummary(e.parcel) : undefined
+    if (where) places.set(where, [...(places.get(where) ?? []), e])
+  }
+  const shared = new Set([...places.values()].flat().map(e => e.parcel.id))
+  return [
+    ...[...places].map(([head, members]) => ({ head, placed: true, members })),
+    ...entries.filter(e => !shared.has(e.parcel.id))
+      .map(e => ({ head: parcelName(e.parcel), placed: false, members: [e] })),
+  ]
+}
+
+/**
+ * Urgency, as bands. The four states that want something from you come first, in the order they want it.
+ * `out_for_delivery` stays above a pickup because it is bound to TODAY (be home, or miss it), while a
+ * pickup is bound to a deadline the card prints - the same reasoning that used to put Act rows above the
+ * pickup cards, now that the density difference no longer says it.
+ *
+ * There is no cap on cards any more. `MAX_PICKUP_CARDS` existed because a card was a louder species than
+ * a row, and four was as many as the first screenful could take; past the cap a pickup fell back to a
+ * row. With one design there is nothing quieter to fall back INTO, and demoting the fifth place would
+ * rebuild the two-species split this page has just lost.
+ */
+const ACT_ORDER: Partial<Record<CanonicalStatus, number>> = {
+  failed_attempt: 0, problem: 1, out_for_delivery: 2, ready_for_pickup: 3,
+}
+/** The first quiet band, after the four that ask for something. */
+const QUIET = 4
+
+/** Within the quiet bands: unclassified first (it could be anything), then returning, then moving, then parcels with no events. */
+const rank = (e: Entry): number => {
+  if (e.parcel.status === 'unknown') return e.last ? 0 : 3
+  if (e.parcel.status === 'returning') return 1
+  return e.last ? 2 : 3
+}
+
+const band = (c: Card): number => ACT_ORDER[c.members[0]!.parcel.status] ?? QUIET + rank(c.members[0]!)
+
+const earliestDue = (es: Entry[]): number => Math.min(...es.map(e => e.parcel.retainedTill?.getTime() ?? Infinity))
+const longestWaiting = (es: Entry[]): number => Math.min(...es.map(e => sinceOf(e)?.getTime() ?? Infinity))
+
+/**
+ * Cards, in the order to deal with them. Inside a band: pickups by earliest deadline and then by longest
+ * waiting (which errand to run first); everything else by newest event, which is what moved it. The id
+ * breaks the last tie so the page cannot shuffle between two identical renders.
+ */
+function byUrgency(a: Card, b: Card): number {
+  const bands = band(a) - band(b)
+  if (bands !== 0) return bands
+  // Two parcels with no deadline subtract to NaN, which is falsy, so that pair falls through to the age.
+  const within = band(a) === ACT_ORDER.ready_for_pickup
+    ? earliestDue(a.members) - earliestDue(b.members) || longestWaiting(a.members) - longestWaiting(b.members)
+    : newestFirst(a.members[0]!, b.members[0]!)
+  return within || b.members[0]!.parcel.id - a.members[0]!.parcel.id
+}
+
+/**
+ * The chip, in the same place on every card: the state, and the only thing on the card allowed to carry
+ * a hue. `--signal` rides here and nowhere else, so a card that needs nothing has no blue on it at all.
+ *
+ * `unknown` is the exception the data forces (see §2.4): with events the carrier's own sentence IS the
+ * status, so the slot stays empty rather than print a word we cannot stand behind; with no events, what
+ * is true is HOW an update would arrive.
+ */
+function cardChip(c: Card): Html {
+  if (c.placed) return statusIndicator('ready_for_pickup')
+  const e = c.members[0]!
+  if (isKnown(e.parcel.status)) return statusIndicator(e.parcel.status)
+  if (e.last) return html``
+  return quietIndicator(isEmailOnlyCarrier(e.parcel.carrier) ? 'Updates arrive by email' : 'No updates yet')
+}
+
+/**
+ * One body block: which parcel, then the lines that matter for the state it is in. The slots are the same
+ * on every card, and each is filled only from data the parcel actually has - the carrier's latest
+ * sentence, a deadline or how long it has been waiting, the locker code.
+ *
+ * The parcel's name is its link, and it is written once: in the block when the header is a place, and in
+ * the header itself when the card is that one parcel (`cardHead`). Printing it in both would be the same
+ * 15-17px label twice, two lines apart; History already drops a tracking number that its name repeats.
+ */
+function cardEntry(c: Card, e: Entry, ctx: PageCtx): Html {
+  const p = e.parcel
+  // Dropped only where the header and the chip have already said it: "ready for pickup at Z-BOX Hlavna 6".
+  const sentence = c.placed || !e.last ? html``
+    : html`<div class="ev${p.status === 'unknown' ? raw(' prose') : ''}">${e.last.description}${
+      e.last.location ? html` <span class="loc">· ${e.last.location}</span>` : ''}</div>`
+  return html`<li>${c.placed ? html`<h3 class="who"><a href="/parcel/${p.id}">${parcelName(p)}</a></h3>` : ''}
+<span class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span></span>
+${sentence}${pickupClock(e, ctx.now).out}${pickupCodeLine(e.code)}${postcodeRejected(p)
+    ? html`<p class="meta t-warn">${glyph('problem')} Postcode needed: <a class="sel" href="/parcel/${p.id}">set one</a> to resume full tracking.</p>`
+    : ''}</li>`
+}
+
+/** The header: a place, said plainly, or the one parcel's name, which is then the card's link. */
+const cardHead = (c: Card): Html =>
+  c.placed ? html`<h2>${c.head}</h2>` : html`<h2><a href="/parcel/${c.members[0]!.parcel.id}">${c.head}</a></h2>`
+
+/**
+ * The card: one frame (border, radius, hairlines), one header (what it is about, and the chip), one body
+ * of blocks, and a footer for the facts that belong to the PLACE rather than to any one parcel.
+ *
+ * The only paint the frame ever takes is `--warn-wash`, and only when a collection deadline is today or
+ * already past: the one state that is allowed to interrupt. The filled blue header is gone - it was the
+ * main reason a pickup card and a pickup row read as two different kinds of thing.
+ */
+function card(c: Card, ctx: PageCtx): Html {
+  const dueNow = c.members.some(m => pickupClock(m, ctx.now).urgency === 'now')
+  const ready = c.members.some(m => m.parcel.status === 'ready_for_pickup')
+  const note = ready ? noDeadlineNote(c.members) : ''
+  const maps = ready ? c.members.map(m => mapsUrl(m.parcel)).find(u => u !== undefined) : undefined
+  return html`<article class="card">
+<div class="card-h${dueNow ? raw(' due-now') : ''}">${cardHead(c)}${cardChip(c)}</div>
+<ul class="card-l">${c.members.map(m => cardEntry(c, m, ctx))}</ul>${note || maps
+    ? html`<p class="card-f meta">${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps ↗</a>` : ''}</p>`
+    : ''}
 </article>`
-}
-
-/** What a row says about the parcel, on its second line. The cause of an `unknown` status decides it (see §2.4). */
-function rowLine(e: Entry, overflowPlace?: string): { glyphCol: Html; line: Html } {
-  const { parcel: p, last } = e
-  const sentence = last ? html`${last.description}${last.location ? html` <span class="loc">· ${last.location}</span>` : ''}` : undefined
-  if (isBadge(p.status)) {
-    // The badge carries the glyph, so the glyph column stays empty rather than repeat it.
-    const body = p.status === 'ready_for_pickup' && overflowPlace ? html`${overflowPlace}` : sentence ?? html``
-    return { glyphCol: html``, line: html`<div class="ev">${statusIndicator(p.status)}${body}</div>` }
-  }
-  if (p.status === 'unknown') {
-    // "No updates yet" says something is expected and will arrive; for a carrier that is never polled
-    // what is true is HOW it would arrive, which is also the answer to "why is this not updating?".
-    const nothing = isEmailOnlyCarrier(p.carrier) ? 'Updates arrive by email' : 'No updates yet'
-    return sentence
-      // For a prose-only carrier the sentence IS the status: promoted one colour step, with no word beside it.
-      ? { glyphCol: html`<span class="gl t-3">${glyph('unknown')}</span>`, line: html`<div class="ev prose">${sentence}</div>` }
-      : { glyphCol: html`<span class="gl t-3">${glyph('unknown')}</span>`, line: html`<div class="ev quiet">${nothing}</div>` }
-  }
-  return {
-    glyphCol: html`<span class="gl ${toneClass(p.status)}">${glyph(p.status)}</span>`,
-    line: html`<div class="ev">${statusWord(p.status)}${sentence ?? ''}</div>`,
-  }
-}
-
-const statusWord = (s: CanonicalStatus): Html => html`<b>${STATUS_TITLE[s]}</b>`
-
-function parcelRow(e: Entry, ctx: PageCtx, overflowPlace?: string): Html {
-  const { parcel: p, last } = e
-  const { glyphCol, line } = rowLine(e, overflowPlace)
-  return html`<li class="row">${glyphCol}<h3><a href="/parcel/${p.id}">${parcelName(p)}</a><span class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span></span></h3>${line}${
-    last ? html`<time datetime="${last.occurredAt.toISOString()}">${formatDateTime(last.occurredAt, ctx.now)}</time>` : ''}${
-    postcodeRejected(p) ? html`<div class="meta t-warn full">Postcode needed: set one on the parcel page to resume full tracking.</div>` : ''}</li>`
 }
 
 /** The index lede: what is known, and a calm all-clear only when the data can support it. See design-language §5.2. */
@@ -250,35 +342,11 @@ export function indexLede(entries: Entry[], ctx: PageCtx): string {
 }
 
 export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote): Html {
-  const ACT_ORDER: Partial<Record<CanonicalStatus, number>> = { failed_attempt: 0, problem: 1, ready_for_pickup: 2, out_for_delivery: 3 }
-  const ready = entries.filter(e => e.parcel.status === 'ready_for_pickup')
-  const placed = new Map<string, Entry[]>()
-  for (const e of ready) {
-    const where = pickupSummary(e.parcel)
-    if (where) placed.set(where, [...(placed.get(where) ?? []), e])
-  }
-  // Cards: by earliest deadline (those with one first), then by how long they have been waiting. Past the cap, rows.
-  const earliest = (es: Entry[]) => Math.min(...es.map(e => e.parcel.retainedTill?.getTime() ?? Infinity))
-  const oldest = (es: Entry[]) => Math.min(...es.map(e => sinceOf(e)?.getTime() ?? Infinity))
-  const places = [...placed.entries()].sort(([, a], [, b]) => earliest(a) - earliest(b) || oldest(a) - oldest(b))
-  const carded = new Set(places.slice(0, MAX_PICKUP_CARDS).flatMap(([, es]) => es.map(e => e.parcel.id)))
-
-  const actRows = entries.filter(e => ACT_ORDER[e.parcel.status] !== undefined && !carded.has(e.parcel.id))
-    .sort((a, b) => ACT_ORDER[a.parcel.status]! - ACT_ORDER[b.parcel.status]! || newestFirst(a, b))
-  const rank = (e: Entry): number => {
-    if (e.parcel.status === 'unknown') return e.last ? 0 : 3        // unclassified first, no events last
-    if (e.parcel.status === 'returning') return 1
-    return e.last ? 2 : 3
-  }
-  const rest = entries.filter(e => ACT_ORDER[e.parcel.status] === undefined)
-    .sort((a, b) => rank(a) - rank(b) || newestFirst(a, b))
-
+  const cards = buildCards(entries).sort(byUrgency)
   const body = entries.length === 0
     ? html`<p class="empty">Nothing in flight. Parcels appear here when an email arrives or when you add one.</p>`
     : html`<p class="lede">${indexLede(entries, ctx)}</p>${refreshBanner(note, ctx.now, REFRESH_DOES)}${
-        actRows.length ? html`<ul class="list">${actRows.map(e => parcelRow(e, ctx, pickupSummary(e.parcel)))}</ul>` : ''}${
-        places.slice(0, MAX_PICKUP_CARDS).map(([where, es]) => pickupCard(where, es, ctx))}${
-        rest.length ? html`<ul class="list">${rest.map(e => parcelRow(e, ctx))}</ul>` : ''}`
+        cards.map(c => card(c, ctx))}`
   return layout('In flight', '/', html`
 <div class="col"><div class="head"><h1>In flight</h1>
   <form class="inline" method="post" action="/refresh"><button>Refresh now</button></form></div>

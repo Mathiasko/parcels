@@ -95,51 +95,50 @@ form.inline{display:inline}
 .spin{flex:none;width:14px;height:14px;margin-top:.3125rem;border:2px solid var(--rule-s);border-top-color:var(--ink-3);border-radius:50%;animation:spin 900ms linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* pickup card: one per place, the parcels waiting there listed beneath */
+/* The card: ONE frame for everything on the dashboard, whether it holds one parcel or four. The only
+   paint it ever takes is the warn wash of a collection deadline that is today or already past; the
+   signal blue lives on the chip and nowhere else, because a filled blue header was the main reason a
+   pickup card and a pickup row read as two different kinds of thing (docs/design-language.md §6.1). */
+.card{position:relative;background:var(--surface);border:1px solid var(--rule-s);border-radius:12px;margin-bottom:1rem;overflow:hidden}
+.card-h{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;padding:.75rem 1.5rem}
+.card-h.due-now{background:var(--warn-wash)}
+.card-h h2{margin:0;font-size:1.0625rem;line-height:1.4;font-weight:600;text-wrap:balance;overflow-wrap:break-word;min-width:0}
+/* A card of one parcel is named by its header, and that name is the link: its ::after covers the whole
+   card, so clicking anywhere on it opens the parcel. On a card headed by a PLACE the header is not a
+   link, and each entry's own name is (below), so there is never more than one stretched link per box. */
+.card-h a{color:inherit;text-decoration:none}
+.card-h a:hover{text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:3px}
+.card-h a::after{content:"";position:absolute;inset:0}
+.card-h a:focus-visible{outline:none}
+.card-h a:focus-visible::after{outline:2px solid var(--ink);outline-offset:-2px}
+.card-l{list-style:none;margin:0;padding:0}
+.card-l li{position:relative;padding:.75rem 1.5rem;border-top:1px solid var(--rule)}
+.card-l li:hover{background:var(--hover)}
+.card-l .who{display:inline;font-size:.9375rem;line-height:1.4667;overflow-wrap:break-word}
+.card-l .who a{color:inherit;text-decoration:none}
+.card-l .who a::after{content:"";position:absolute;inset:0}
+.card-l a:focus-visible{outline:none}
+.card-l a:focus-visible::after{outline:2px solid var(--ink);outline-offset:-2px}
+.card-l .who+.meta{margin-left:.5rem}
+.card-l .ev{margin:.125rem 0 0;color:var(--ink-2);overflow-wrap:break-word}
+.card-l .ev.prose{color:var(--ink)}
+.card-l .ev .loc{color:var(--ink-3)}
+.card-l .t-warn{display:flex;align-items:center;gap:.375rem;margin:.25rem 0 0}
+.card-f{margin:0;padding:.5rem 1.5rem .75rem;border-top:1px solid var(--rule)}
+.card-f a{position:relative;z-index:1}
+
+/* the pickup panel on a parcel's own page: the same frame, with the place as its heading */
 .pk{background:var(--surface);border:1px solid var(--rule-s);border-radius:12px;margin-bottom:1rem;overflow:hidden}
 .pk-h{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;background:var(--signal-wash);padding:1rem 1.5rem}
 .pk-h.due-now{background:var(--warn-wash)}
 .pk-h.plain{background:var(--paper)}
 .pk-h h2,.pk-h .where{margin:0;font-size:1.375rem;line-height:1.2727;font-weight:600;text-wrap:balance;overflow-wrap:break-word;min-width:0}
-.pk-l{list-style:none;margin:0;padding:0}
-.pk-l li{position:relative;padding:.75rem 1.5rem;border-top:1px solid var(--rule)}
-.pk-l li:hover{background:var(--hover)}
-.pk-l h3{display:inline;font-size:1.0625rem;line-height:1.4;overflow-wrap:break-word}
-.pk-l h3 a{color:inherit;text-decoration:none}
-.pk-l h3 a::after{content:"";position:absolute;inset:0}
-.pk-l a:focus-visible{outline:none}
-.pk-l a:focus-visible::after{outline:2px solid var(--ink);outline-offset:-2px}
-.pk-l .meta{margin-left:.5rem}
 .clock{margin:.125rem 0 0}
 .clock b{font-weight:600}
 .clock .due{color:var(--signal)}
 .clock .due-now{color:var(--warn)}
 .pk-b{padding:.75rem 1.5rem}
 .pk-b .meta{margin:.5rem 0 0}
-.pk-f{margin:0;padding:.5rem 1.5rem .75rem;border-top:1px solid var(--rule)}
-.pk-f a{position:relative;z-index:1}
-
-/* rows: everything that is not waiting at a place, in one container */
-.list{list-style:none;margin:0 0 1rem;padding:0;background:var(--surface);border:1px solid var(--rule-s);border-radius:12px;overflow:hidden}
-.row{position:relative;display:grid;grid-template-columns:1rem minmax(0,1fr) auto;gap:.125rem .75rem;padding:.75rem 1rem;border-top:1px solid var(--rule)}
-.row:first-child,.pk-l li:first-child{border-top:0}
-.row:hover{background:var(--hover)}
-.row>.g{margin-top:.25rem}
-.row .gl{margin-top:.25rem;grid-row:1;grid-column:1}
-.row h3{grid-column:2;grid-row:1;min-width:0;overflow-wrap:break-word}
-.row h3 a{color:inherit;text-decoration:none}
-.row h3 a::after{content:"";position:absolute;inset:0}
-.row a:focus-visible{outline:none}
-.row a:focus-visible::after{outline:2px solid var(--ink);outline-offset:-2px}
-.row h3 .meta{font-weight:400;margin-left:.5rem}
-.row .ev{grid-column:2;color:var(--ink-2);min-width:0;overflow-wrap:break-word;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.row .ev.prose{color:var(--ink)}
-.row .ev.quiet{color:var(--ink-3)}
-.row .ev b{font-size:.8125rem;font-weight:600;margin-right:.375rem}
-.row .full{grid-column:2/-1}
-.row .ev .b{margin-right:.5rem;vertical-align:-.3em}
-.row .ev .loc{color:var(--ink-3)}
-.row time{grid-column:3;grid-row:2;font-size:.8125rem;line-height:1.3846;color:var(--ink-3);white-space:nowrap;text-align:right;padding-top:.125rem}
 
 /* parcel page: two columns once the frame fits them */
 .cols{display:block}
@@ -244,6 +243,6 @@ summary{font-size:.8125rem;color:var(--ink-3);cursor:pointer;padding:.25rem 0}
 .bulk .who{font-size:.8125rem;color:var(--ink-2);overflow-wrap:anywhere}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:20rem;overflow:auto;background:var(--surface);border:1px solid var(--rule-s);border-radius:8px;padding:.75rem;margin:.25rem 0 .75rem;font:400 .75rem/1.5 ui-monospace,"SF Mono",Menlo,monospace}
 
-@media(max-width:40rem){.row{grid-template-columns:1rem minmax(0,1fr)}.row time{grid-column:2;grid-row:auto;text-align:left}.pk-h{flex-direction:column}}
+@media(max-width:40rem){.card-h,.pk-h{flex-direction:column}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}.spin{animation:none}}
 `

@@ -9,14 +9,16 @@ import { getRun } from '../src/db/poll-runs.js'
 import { appendEvents } from '../src/db/events.js'
 import { recordHealth } from '../src/db/health.js'
 import { recordIngest } from '../src/db/ingest-status.js'
+import { recordPickupCode } from '../src/db/pickup-codes.js'
 import type { Config } from '../src/core/config.js'
 import { findParcel, getParcel, insertParcel, setArchived, setNeedsPostcode, updateParcelState } from '../src/db/parcels.js'
 import type { Database } from '../src/db/index.js'
-import type { CarrierId } from '../src/core/types.js'
+import type { CanonicalStatus, CarrierId, PickupPoint } from '../src/core/types.js'
 import type { Notification } from '../src/notify/types.js'
 import { getAdapter } from '../src/carriers/registry.js'
 import { appVersion } from '../src/core/version.js'
 import { formatDateTime, formatDuration } from '../src/web/views/format.js'
+import { STYLE } from '../src/web/views/style.js'
 import { bodyHttp, config, ev, memDb, NOW, okResult, stubAdapter } from './poll-helpers.js'
 
 const DAY = 24 * 3_600_000
@@ -809,7 +811,7 @@ describe('GET /: the lede', () => {
     expect(await lede(memDb())).toBeUndefined()
   })
 
-  test('two parcels at one place share one card; time-bound rows come before the cards', async () => {
+  test('two parcels at one place share one card; what is bound to today comes before it', async () => {
     const db = memDb()
     for (const n of ['A1', 'A2']) {
       const id = insertParcel(db, { carrier: 'packeta', trackingNumber: n, label: `Parcel ${n}`, source: 'manual' })
@@ -818,10 +820,10 @@ describe('GET /: the lede', () => {
     const ofd = insertParcel(db, { carrier: 'gls', trackingNumber: '123456789012', label: 'On the van', source: 'manual' })
     updateParcelState(db, ofd, { status: 'out_for_delivery' })
     const body = (await get(db, '/')).body
-    expect(body.match(/class="pk"/g)).toHaveLength(1)
+    expect(body.match(/<article class="card"/g)).toHaveLength(2)        // the shared pickup, and the van
     expect(body.match(/Z-BOX Hlavna 6/g)).toHaveLength(1)
     expect(body).toContain('Packeta did not give a pickup deadline.')   // stated, not omitted: the reader would assume there is none
-    expect(body.indexOf('On the van')).toBeLessThan(body.indexOf('class="pk"'))
+    expect(body.indexOf('On the van')).toBeLessThan(body.indexOf('Z-BOX Hlavna 6'))
   })
 })
 
@@ -956,5 +958,178 @@ describe('what the refresh banner claims', () => {
     const db = memDb()
     const body = (await server(db).inject({ method: 'GET', url: '/?refreshed=1&failures=0&active=1&read=3&created=2' })).body
     expect(body).toContain('Read 3 new emails and added 2 parcels.')
+  })
+})
+
+// --- the unified card: one frame for every parcel in flight (design-language §6.1) -------------------
+
+describe('GET /: one card design, whatever the state or the carrier', () => {
+  /** Every card on the page, in order, each as the markup between its own `<article>` tags. */
+  const cards = (body: string): string[] =>
+    body.split('<article class="card').slice(1).map(s => s.split('</article>')[0]!)
+  /** The class list of every card frame, so that "one design" can be asserted rather than described. */
+  const frames = (body: string): string[] => [...body.matchAll(/<article class="([^"]*)"/g)].map(m => m[1]!)
+
+  /** A parcel in whatever state the test needs, with an optional carrier sentence behind it. */
+  function inflight(db: Database, o: {
+    name: string
+    carrier?: CarrierId
+    number?: string
+    status?: CanonicalStatus
+    says?: string
+    pickup?: PickupPoint
+    retainedTill?: Date
+    hoursAgo?: number
+  }): number {
+    const id = insertParcel(db, {
+      carrier: o.carrier ?? 'packeta', trackingNumber: o.number ?? o.name.replace(/\W/g, ''), label: o.name, source: 'manual',
+    })
+    if (o.says) appendEvents(db, id, [ev('x', o.status ?? 'in_transit', o.hoursAgo ?? 3, o.says)])
+    updateParcelState(db, id, {
+      status: o.status ?? 'in_transit', pickup: o.pickup, retainedTill: o.retainedTill,
+      lastChangedAt: new Date(NOW.getTime() - (o.hoursAgo ?? 3) * 3_600_000),
+    })
+    return id
+  }
+
+  test('every parcel in flight is inside a card, and none is rendered as a bare row', async () => {
+    const db = memDb()
+    inflight(db, { name: 'Rolling along', says: 'Departed sorting centre' })
+    inflight(db, { name: 'On the van', status: 'out_for_delivery', carrier: 'gls', number: '123456789012', says: 'Out for delivery' })
+    inflight(db, { name: 'Waiting at the box', status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
+    inflight(db, { name: 'Brand new', carrier: 'dpd', number: '11WG17063', status: 'unknown' })
+    const body = (await get(db, '/')).body
+    expect(frames(body)).toHaveLength(4)
+    for (const name of ['Rolling along', 'On the van', 'Waiting at the box', 'Brand new']) {
+      expect(cards(body).filter(c => c.includes(name)), name).toHaveLength(1)
+    }
+    // The row list is gone: there is no quieter second species for a parcel to be demoted into.
+    expect(body).not.toMatch(/class="row/)
+    expect(body).not.toMatch(/class="list"/)
+  })
+
+  test('a ready parcel with no pickup place gets the same card, headed by its own name, and invents no location', async () => {
+    const db = memDb()
+    inflight(db, {
+      name: 'No place given', status: 'ready_for_pickup', carrier: 'posta', number: 'RR123456789SK',
+      says: 'Zásielka je pripravená na vyzdvihnutie',
+    })
+    const body = (await get(db, '/')).body
+    const [only] = cards(body)
+    expect(frames(body)).toEqual(['card'])
+    expect(only).toContain('No place given')                   // headed by its own name
+    expect(only).toContain('Zásielka je pripravená na vyzdvihnutie')   // the carrier's sentence is the body
+    expect(only).toContain('Ready for pickup')                 // the chip still says what state it is in
+    expect(body).not.toMatch(/Pickup point|pickup place|unknown location|Z-BOX/i)
+  })
+
+  test('parcels waiting at one place share one card, and it is the same frame as a single-parcel card', async () => {
+    const db = memDb()
+    for (const n of ['A1', 'A2']) {
+      inflight(db, { name: `Parcel ${n}`, number: n, status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
+    }
+    inflight(db, { name: 'Rolling along', says: 'Departed sorting centre' })
+    const body = (await get(db, '/')).body
+    const shared = cards(body).find(c => c.includes('Z-BOX Hlavna 6'))!
+    const single = cards(body).find(c => c.includes('Rolling along'))!
+    expect(frames(body)).toEqual(['card', 'card'])              // one design, not two
+    expect(body.match(/Z-BOX Hlavna 6/g)).toHaveLength(1)       // the place is said once, in the header
+    for (const n of ['Parcel A1', 'Parcel A2']) expect(shared).toContain(n)
+    // Identical structure: the same header, the same entry list, in both.
+    for (const c of [shared, single]) {
+      expect(c).toMatch(/<div class="card-h">/)
+      expect(c).toMatch(/<ul class="card-l">/)
+    }
+    expect(shared.match(/<li/g)).toHaveLength(2)                // one block per parcel
+    expect(single.match(/<li/g)).toHaveLength(1)                // the same structure with one entry
+  })
+
+  test('the chip carries the state, so no card that needs nothing is painted with the signal colour', async () => {
+    const db = memDb()
+    inflight(db, { name: 'Rolling along', says: 'Departed sorting centre' })
+    inflight(db, { name: 'Coming back', status: 'returning', says: 'Returning to sender' })
+    inflight(db, { name: 'Waiting at the box', status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
+    const body = (await get(db, '/')).body
+    const quiet = cards(body).filter(c => !c.includes('Z-BOX Hlavna 6'))
+    expect(quiet).toHaveLength(2)
+    for (const c of quiet) expect(c).not.toContain('t-signal')
+    // And the one that does need you wears it on its chip, not as a wash over the whole header.
+    const ready = cards(body).find(c => c.includes('Z-BOX Hlavna 6'))!
+    expect(ready).toContain('t-signal')
+    expect(ready).toMatch(/<div class="card-h">/)               // same header class as the quiet ones
+  })
+
+  test('the locker code and the collect-by deadline still render on the card', async () => {
+    const db = memDb()
+    const id = inflight(db, {
+      name: 'Waiting at the box', status: 'ready_for_pickup', carrier: 'posta', number: 'RR123456789SK',
+      pickup: { kind: 'post_office', name: 'Pošta Bratislava 1', street: 'Nám. SNP 35', city: 'Bratislava' },
+      retainedTill: new Date('2026-11-02T10:00:00Z'),
+    })
+    recordPickupCode(db, id, '004467', 1, NOW)
+    const [only] = cards((await get(db, '/')).body)
+    expect(only).toMatch(/Collect by[^<]*2 Nov/)
+    expect(only).toContain('Open the box with')
+    expect(only).toContain('004467')
+  })
+
+  test('cards are ordered by urgency, whatever shape each one is', async () => {
+    const db = memDb()
+    inflight(db, { name: 'Rolling along', says: 'Departed sorting centre' })
+    inflight(db, { name: 'Waiting at the box', status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
+    inflight(db, { name: 'On the van', status: 'out_for_delivery', carrier: 'gls', number: '123456789012', says: 'Out for delivery' })
+    inflight(db, { name: 'Nobody home', status: 'failed_attempt', carrier: 'dpd', number: '11WG17063', says: 'Nepodarilo sa nám doručiť' })
+    const body = (await get(db, '/')).body
+    const order = cards(body).map(c => ['Nobody home', 'On the van', 'Waiting at the box', 'Rolling along'].find(n => c.includes(n)))
+    expect(order).toEqual(['Nobody home', 'On the van', 'Waiting at the box', 'Rolling along'])
+  })
+
+  test('a parcel that is not waiting for collection is never filed under a place', async () => {
+    const db = memDb()
+    // A pickup point the carrier left on the parcel after it moved on. Filing this under the place would
+    // head its card with somewhere it is not, and the card's chip would then claim it is ready.
+    inflight(db, { name: 'Moved on', status: 'in_transit', says: 'Left the pickup point', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
+    inflight(db, { name: 'Really waiting', number: 'A2', status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
+    const body = (await get(db, '/')).body
+    const moved = cards(body).find(c => c.includes('Moved on'))!
+    expect(moved).toContain('In transit')
+    expect(moved).not.toContain('Ready for pickup')
+    expect(moved).not.toContain('Z-BOX Hlavna 6')         // its header is its own name, not a place
+    expect(cards(body).filter(c => c.includes('Z-BOX Hlavna 6'))).toHaveLength(1)
+  })
+
+  test('a name is printed once: in the header, or in the block, never in both', async () => {
+    const db = memDb()
+    inflight(db, { name: 'Rolling along', says: 'Departed sorting centre' })
+    for (const n of ['A1', 'A2']) {
+      inflight(db, { name: `Parcel ${n}`, number: n, status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
+    }
+    const body = (await get(db, '/')).body
+    for (const name of ['Rolling along', 'Parcel A1', 'Parcel A2', 'Z-BOX Hlavna 6']) {
+      expect(body.match(new RegExp(name, 'g')), name).toHaveLength(1)
+    }
+    // The name that is in the header is the card's link; the names inside a shared card are the links.
+    expect(cards(body).find(c => c.includes('Rolling along'))!).toMatch(/<h2><a href="\/parcel\/\d+">Rolling along<\/a><\/h2>/)
+    expect(cards(body).find(c => c.includes('Z-BOX Hlavna 6'))!).toMatch(/<h2>Z-BOX Hlavna 6<\/h2>/)
+  })
+
+  test('the dashboard is still script-free under an unchanged policy', async () => {
+    const db = memDb()
+    inflight(db, { name: 'Waiting at the box', status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
+    const res = await get(db, '/')
+    expect(res.headers['content-security-policy'])
+      .toBe("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'")
+    expect(res.body).not.toContain('<script')
+    expect(res.body).not.toContain('onclick')
+  })
+})
+
+// A CSS guard, because this one cannot be seen in the markup: the card's header holds the stretched
+// link of a one-parcel card (`inset: 0`), so the card itself has to be the positioning context. Without
+// `position: relative` here the overlay resolves against the viewport and covers the whole page.
+describe('the card frame', () => {
+  test('the card is the positioning context for its own stretched link', () => {
+    expect(STYLE).toMatch(/\.card\{[^}]*position:relative/)
+    expect(STYLE).toMatch(/\.card-h a::after\{[^}]*position:absolute;inset:0/)
   })
 })

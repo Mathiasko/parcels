@@ -14,11 +14,11 @@ Author: Angie. Status: **revision 2**, after Alex's review (`docs/design-review-
 **This is a quiet instrument that is allowed to be silent when it has evidence, and that spends its voice only on the parcels that need a person.** The owner opens it because a notification fired or because they want to know whether anything needs them. Most of the time the correct answer is "no", and the page should say so calmly and let them leave. So the interface has one job in the first two seconds (*is anything waiting for me, and where?*) and everything else is reference material that must stay out of that job's way. Six rules fall out of that, and the rest of this document is those rules applied:
 
 1. **Mark the exception, not the norm.** `unknown` events, archived parcels, healthy carriers and repeated statuses get *no* mark, or the quietest one. A thing that is true of 32 of 34 rows is not information; it is texture, and it is rendered as texture.
-2. **Cards are earned.** Only a parcel that is waiting for you at a place gets a card. Everything else is a row in a list. The difference in density *is* the hierarchy.
+2. **One card, whatever the parcel is doing.** *(Rev 4; this rule used to read "cards are earned", and it was wrong - see §6.1.)* Every parcel in flight is shown in the same card: same frame, same header, same body. The hierarchy is carried by the ORDER of the cards and by the chip in each header, not by giving some parcels a louder container than others. Density is still a tool, but between *pages* (§4.4), never between two parcels on the same page.
 3. **Colour is a call to action, never a fact about the data.** `unknown` and `archived` are facts. They are grey because they ask nothing of you, not because they are "bad".
 4. **Word first, shape second, colour third.** Every status is readable with colour removed (it has a word), and distinguishable with colour *and* words ignored (it has a silhouette). Colour is the fastest channel but the least trustworthy, so it is never the only one.
 5. **The signal hue is scarce.** Blue means exactly one thing on this site: *this is waiting on you*. It is not the link colour, not the button colour, not the focus colour.
-6. **Never assert an absence the data cannot support.** *(new)* The status field is `unknown` on 33 of 36 real parcels: two carriers send prose with no code, and 32 parcels are old mail that was never tracked. "Nothing needs you" is a claim about the world, and the page is only allowed to make it when every parcel it covers has a known status and nothing it depends on is broken. When the page doesn't know, it says what it knows and points at the carrier's own words. This rule is the reason the lede (§5.2), the status labels (§2.4) and the row content (§6.2) changed.
+6. **Never assert an absence the data cannot support.** *(new)* The status field is `unknown` on 33 of 36 real parcels: two carriers send prose with no code, and 32 parcels are old mail that was never tracked. "Nothing needs you" is a claim about the world, and the page is only allowed to make it when every parcel it covers has a known status and nothing it depends on is broken. When the page doesn't know, it says what it knows and points at the carrier's own words. This rule is the reason the lede (§5.2), the status labels (§2.4) and the card body (§6.1) changed.
 
 The posture: warm paper, ink, one scarce colour, generous but not wasteful space, nothing that moves. Closer to a good railway timetable than to a "dashboard", and, like a timetable, it prints "no information" rather than a confident blank.
 
@@ -310,7 +310,7 @@ Radii: **12** card / list container, **8** inner panel and notice, **6** control
 Not a dashboard grid. A list of three parcels does not become better by being spread across 2560px.
 
 - **27" (≥ 1600px):** the root font grows to 17px (18px at ≥ 2200px), so the frame and column grow too (they are in rem). The page stays a single left-aligned column; on the parcel page only, the 17rem details column appears at the right. At 18px the frame is 1152px wide; I rendered the six-pickup page at 2560px and it holds.
-- **13-14" laptop (~1440 × 900):** the default. **Measured:** the real index (one pickup card, two rows) is 622px tall and fits whole. The six-pickup stress case (§6.1) is 1308px tall; with the sort order of §6.2 its first screen (~800px of visible window) holds the two time-bound rows *and* the first, three-parcel pickup card.
+- **13-14" laptop (~1440 × 900):** the default. **Measured (rev 2, when the index was one card and the rest rows):** the real index was 622px and fitted whole; the six-pickup stress case was 1308px, its first screen holding the two time-bound rows and the first card. *(Rev 4: a card per parcel is taller per parcel and shorter per page than that comparison suggests, because grouping does the compressing - ten in-flight parcels rendered as nine cards in the check below, with the two that need a person inside the first screen. The six-pickup case is unchanged at three cards: it was already grouped.)*
 - **Narrow (< 40rem):** nothing is hidden. Card footer wraps; the parcel page returns to one column with the order header → notices → timeline → details → raw responses.
 
 Only **four media queries**: `min-width: 1600px` and `2200px` (root size), `min-width: 64rem` (parcel two-column), `max-width: 40rem` (row meta wraps). Everything else is intrinsic (`flex-wrap`, `min-width: 0`).
@@ -319,7 +319,7 @@ Only **four media queries**: `min-width: 1600px` and `2200px` (root size), `min-
 
 | Page | Density | Reasoning |
 |---|---|---|
-| In flight | **Loose** for the pickup card (24px padding, 22px location type); **medium** for rows (≈ 64px, two lines) | The few things that matter get room; the rest is compact |
+| In flight | One density: the card (12px/24px padding, 17px header, 2-4 body lines ≈ 100px) *(Rev 4; was loose for pickup cards and medium for rows)* | Every parcel is the same kind of thing to look at; what differs is the order and the chip |
 | Parcel | Medium; timeline rows ≈ 40px | A timeline is read top to bottom; it should not need scrolling for ~10 events |
 | History | **Tight**: 40px rows, one line | 34 rows and growing; this is an archive. 40px keeps a 44px-ish target without needing paging |
 | Health | Medium, 3-4 lines per carrier row at most | Seven things, glanced at |
@@ -387,93 +387,73 @@ The primary action of the page sits right-aligned on the `h1` row (`Refresh now`
 
 ## 6. Components
 
-### 6.1 Pickup card (one per *place*)
+### 6.1 The card: one design for every parcel in flight
 
-> **[Rev 2]** Redesigned, not patched (Alex M2, S3, S5). Revision 1 built the card around a deadline and a Maps link, and gave the pickup its own panel per parcel. The real data says: **only Slovenská pošta ever sends a deadline; 0 of 36 parcels have coordinates; every pickup so far is the same Z-BOX.** So the typical card has no "Collect by" line and no Maps link, and three parcels waiting at one locker would be three identical 22px headlines. The card is now **one card per pickup location, with the parcels listed under it**, and its content is built from what the data always has.
+> **[Rev 4]** Rewritten after the owner's complaint, which was about the thing this section used to be proudest of. Revision 2 gave a *place* a card and everything else a row (old §6.2), on the argument that "cards are earned". What that actually produced on the live page: a parcel ready for collection at a named Z-BOX got a prominent card with a filled `--signal-wash` header, and a parcel ready for collection with **no** place in the carrier's data got the quietest row on the page - *above* the card, because Act rows sorted first. Two parcels in the same state, both wanting the same thing from the owner, rendered as two different species, and the one the app knew LESS about was rendered more quietly. The split is gone. There is now one card, and the place-grouped pickup is a case of it, not a different component.
 
-**What is the actual most useful largest thing?** Still the *place*, and for a better reason than before. (a) It is the one fact that is *always* present for a ready parcel. (b) It is what you do something with: you go to it, and you paste it into a message. (c) With grouping, it is also what *unifies* parcels: three parcels at one locker is one fact, "go to Hlavna 6", not three. What I considered and rejected: making the *age* the largest thing. It is the only urgency signal for four of five carriers, but "3 days" alone is not actionable and has nothing to be compared with, so it earns bold weight, not the headline.
+**One component.** Same `<article>`, same border, radius, margin, padding, same header, same body blocks, whether the card holds one parcel or four.
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ Z-BOX Bratislava, Hlavna 6              ▣ Ready for pickup │  header: --signal-wash, 22/28 600
+│ Z-BOX, Bottova 6, Bratislava            ▣ Ready for pickup │  header: surface, 17/600 + chip
 ├────────────────────────────────────────────────────────────┤
-│ Bratiska  Packeta · Z1234567890                             │  name 17/600 + meta 13 ink-3
-│ Since Mon 26 Oct, 17:19                                     │  clock 15, ink
+│ Bratiska  Packeta · Z1172430119                            │  name 15/600 + meta 13 ink-3
+│ Collect by Thu 29 Oct · in 2 days                          │  the line that matters for this state
+│ Open the box with  7 9 9 8 7 4                             │
 ├────────────────────────────────────────────────────────────┤
-│ gymbeam.sk  Packeta · Z1748571211                           │
-│ Since Sat 24 Oct, 09:02 · **3 days**                        │
+│ gymbeam.sk  Packeta · Z9000000001                          │  the same block again
+│ Collect by Thu 29 Oct · in 2 days                          │
 ├────────────────────────────────────────────────────────────┤
-│ Packeta gives no pickup deadline.  Search in Maps ↗         │  footer 13 ink-3
+│ Packeta did not give a pickup deadline.  Open in Maps ↗    │  footer 13 ink-3
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│ Pošta Allegro                           ▣ Ready for pickup │  ready, with no place: the SAME card
+├────────────────────────────────────────────────────────────┤
+│ Slovenská pošta · RR123456789SK                            │
+│ Zásielka je pripravená na vyzdvihnutie                     │  the carrier's sentence, nothing invented
+│ Since Tue 27 Oct, 02:57                                    │
+├────────────────────────────────────────────────────────────┤
+│ Slovenská pošta did not give a pickup deadline.            │
 └────────────────────────────────────────────────────────────┘
 ```
 
-Rendered with the real parcel #35 (one-line card, **~195px**) and with six parcels at three places (three cards of **344 / 199 / 206px**, vs 1668px for six cards under revision 1).
-
-- **Grouping key:** the pickup name string, exactly as stored (`Z-BOX Bratislava, Hlavna 6`). Equal strings group; variants don't, and that is acceptable (§12.4). **Cap:** at most four location cards; any further pickups render as compact Act rows (§6.2).
-- **The badge appears once, in the card header**, not per parcel. The card is *the* container; the lines beneath are plain.
-- **The clock line** is the second most important line, and it is the only line whose content depends on the carrier:
+- **Header = what the card is about.** A pickup place when parcels are waiting at one; otherwise the parcel's own name (label, else merchant, else tracking number). 17/600, `text-wrap: balance`, and the chip at the right end of the same row. Both cases are the same element at the same size: the header is the only place either string is printed.
+- **The chip carries the state**, and is the only thing on the frame allowed a hue. `--signal` therefore appears exactly where §2.5 wants it - on a parcel that is waiting on you - and nowhere else on the card. **The filled blue header is gone**; it was most of why a card and a row read as different species, and a page of ten blue headers would have retired the colour entirely. `unknown` follows §2.4: with events the chip slot is **empty** and the carrier's sentence in the body is the status; with no events it is the quiet dot and `No updates yet` / `Updates arrive by email`.
+- **Body = the same block, repeated, one per parcel:** who it is (`name  carrier · number`), then the lines that matter for its state, each printed only when the data has it - the carrier's latest sentence, the clock (below), the locker code (§6.x `.code`), and a `Postcode needed` warn line. A one-parcel card is this block once, not a different layout.
+- **A name is printed once.** On a card headed by a *place*, each block carries its parcel's name, and that name is the block's stretched link. On a card headed by the parcel itself, the name is in the header and the header is the link (its `::after` covers the whole card, so the whole card opens the parcel). Printing the same label twice, two lines apart, is what a one-parcel card would otherwise do; History already drops a tracking number that the name repeats, for the same reason.
+- **The clock line** is the only line whose content depends on the carrier, and it is unchanged from revision 2:
 
   | Data | Clock line | Weight / colour |
   |---|---|---|
-  | **No deadline** (Packeta, GLS, DPD, SPS: all of today's data) | `Since Mon 26 Oct, 17:19` + ` · 3 days` once ≥ 1 full day has passed | absolute date/time at 400 ink; the day count at 600 |
+  | **No deadline** (Packeta, GLS, DPD, SPS) | `Since Mon 26 Oct, 17:19` + ` · 3 days` once ≥ 1 full day has passed | absolute date/time at 400 ink; the day count at 600 |
   | Deadline ≥ 3 days away | `Collect by Sat 31 Oct · 4 days left` | deadline at 600 signal, count at 400 ink-2 |
   | Deadline 1-2 days away | `Collect by Wed 28 Oct · tomorrow` | deadline 600 signal, relative word 600 ink |
-  | Deadline today, or passed | `Collect by Tue 27 Oct · today` / `· deadline passed` | **the card header switches to `--warn-wash`**; deadline text `--warn` 600 |
+  | Deadline today, or passed | `Collect by Tue 27 Oct · today` / `· deadline passed` | **the header takes `--warn-wash`**; deadline text `--warn` 600 |
 
-  The **absolute date is always printed next to the relative count**, so a tab left open overnight still tells the truth (Alex S8). There is **no urgency colour on the age line**: without a deadline we do not know the limit, and inventing one (a per-carrier hold period) would cry wolf. If the owner wants age-based nagging that is a *product* feature (a default hold per carrier) and I'd then add it as a fourth row of this table.
-- **"No deadline" is stated, once, in the card footer** (`Packeta gives no pickup deadline.`; `Packeta and GLS give no pickup deadline.` for mixed groups). In revision 1 I argued the opposite (print nothing, because "no deadline" reads as information we have). Alex is right and I was wrong: the user will otherwise assume *there is no limit*, and parcel lockers do have one. Absence of a line is silence; absence of a deadline is a fact worth printing.
-- **Maps link only with coordinates.** *(Rev 3: the name-based "Search in Maps" fallback I specified in revision 2 is struck. Alex was right: a link built from a name alone is a guess, and a guess is worse than no link. It is not implemented, and `src/web/views/index.ts` says why.)* With coordinates: `Open in Apple Maps ↗`, in the footer in ink with an `--edge` underline. Today no carrier supplies them, so today there is never a link.
-- **Copy works.** The tracking number and the location are lifted above the stretched link (`position: relative; z-index: 1`), so they can be selected and `user-select: all` works (Alex S5). The *name* is the stretched link: clicking anywhere else on a parcel line opens the parcel. The header is not a link.
-- **When there is no parseable location** (a Packeta pickup event with no place text), the parcel does **not** get a card: it degrades to a compact Act row with the solid badge (§6.2). A blue card with nothing in it is the worst possible outcome.
-- **States:** rest; a parcel line hovers to `--hover`; focus-visible ring is drawn *inside* the line (`outline-offset: -2px`) because the card clips with `overflow: hidden`. No disabled or selected states.
-- **`failed_attempt` and `problem` do not get cards** (revision 1 gave them a warn-tinted one). They have no place; their content is the carrier's own latest sentence, which a row shows well. They become Act rows with a solid warn badge.
+  The absolute date is always printed next to the relative count: the page has no script and a tab left open overnight would otherwise lie. The warn wash is the **only** paint the frame ever takes, and it is the one state that is allowed to interrupt - the exception marked, not the norm (§1 rule 1).
+- **The footer carries facts about the place, not about a parcel**: `Packeta did not give a pickup deadline.` (stated, never omitted - absence of a line is silence, absence of a deadline is a fact) and `Open in Apple Maps ↗`. It appears only on a card whose parcels are ready for collection, because that is the only state in which either sentence is true.
+- **Grouping key:** the pickup summary string exactly as stored (`Z-BOX, Bottova 6, Bratislava`). Equal strings group; variants do not, and that is acceptable (§12.4). A ready parcel whose carrier gave **no** place joins no group and is a card of its own, headed by its name. **No invented location, ever** - not the carrier's name, not "pickup point", not the city from somewhere else.
+- **No cap.** `MAX_PICKUP_CARDS = 4` existed because a card was a louder species than a row, and four was as many as the first screenful could carry; past the cap, a pickup fell back to a row. With one design there is nothing quieter to fall back *into*, and demoting the fifth place would rebuild exactly the split this revision removes. Grouping is what keeps the page short, and it is doing more work than the cap ever did (six pickups at three places are three cards).
+- **Copy works.** The tracking number, the locker code and the postcode link are lifted above the stretched link (`position: relative; z-index: 1`), so `user-select: all` still selects a number instead of following a link.
+- **States:** rest; a body block hovers to `--hover`; the header link underlines on hover; focus-visible draws *inside* the frame (`outline-offset: -2px`, because the card clips with `overflow: hidden`). No disabled or selected states.
 
-### 6.2 Parcel row, and what the whole index looks like
+### 6.2 What the whole index looks like
 
-> **[Rev 2]** The row grammar changed (Alex M1 case 3 and 4, S5) and the page now has an explicit sort. Meta moved inline after the name (right-aligned meta fought long names for width; a 49-character name plus `Slovenská pošta · RA123456785SK` would not have fit), the timestamp sits in its own column, and the content of line two now depends on the cause of the status (§2.4).
+> **[Rev 4]** The row is gone, so this section is now the *order* of the cards and nothing else. The grammar it used to specify (glyph column, status word lead-in, right-aligned timestamp, two-line clamp) lives on in the card body in a simpler form: the chip replaced the glyph column and the status word, and the clock line replaced the timestamp column, because a card has room to print `Since Mon 26 Oct, 17:19` where a row had to right-align `Mon 26 Oct, 17:19` and hope.
 
-For every parcel that is not in a pickup card. All rows share **one** bordered container (radius 12, hairlines between), not a box each.
+Cards are ordered by **urgency**, in bands. Within a band, pickups sort by earliest deadline and then by longest waiting; everything else by newest event; the parcel id breaks the last tie so two identical renders cannot differ.
 
-```
-  ○  Smoke test  Slovenská pošta · RA123456785SK
-     No updates yet
-  ──────────────────────────────────────────────────────────
-  •  MTBIKER order 1948688  GLS · 1234567890
-     No updates yet
-  ──────────────────────────────────────────────────────────
-  •  Bratiska  Packeta · Z1234567890
-     It’s almost there! Your parcel is on its way to you.      Mon 26 Oct, 14:31
-  ──────────────────────────────────────────────────────────
-  ◐  Pepita Group Zrt. QR kód pre vyzdvihnutie balíka:  DPD · 11WG17063
-     In transit  Vaše zásielky boli roztriedené na prepravu        Tue 20 Oct, 21:20
-     do ďalšieho depa · Dolny Hricov
-  ──────────────────────────────────────────────────────────
-     Cotton Garments  DPD · 11WG17999
-     [◆ Delivery attempt failed]  Nepodarilo sa nám doručiť …     Mon 26 Oct, 08:45
-```
+1. `failed_attempt`
+2. `problem`
+3. `out_for_delivery` - **above** the pickups, because it is bound to *today*: be home, or miss it. A pickup is bound to a deadline, and the card prints that deadline. (This is the measured rev-2 reasoning for putting Act rows first, kept now that the density difference no longer says it.)
+4. `ready_for_pickup`, grouped by place; the card with the nearest deadline first, so a `Collect by today` card leads the band and wears the warn wash.
+5. Unclassified: `unknown` *with* events, newest first. These could be anything, so they rank above known-quiet parcels.
+6. `returning`
+7. Known and quiet: `in_transit`, `pre_transit`, newest event first.
+8. No events at all, newest `first_seen` first. These have nothing to say yet, so they say so in the chip and sort last.
 
-Grid: `1rem | 1fr | auto`. **Line 1:** the glyph (col 1), the name (15/600, wraps) with the carrier · number *inline after it* in 13px ink-3. **Line 2:** the content, clamped to two lines, and the timestamp (13px, ink-3, `nowrap`, right-aligned, `tabular-nums`) in column 3. The timestamp is never inline after the sentence.
-
-**Line 2, by case:**
-
-| Case | Line 2 |
-|---|---|
-| **Known, Watch** (`in_transit`, `pre_transit`, `returning`) | the status word at 13/600 as a lead-in, then the latest sentence in ink-2 |
-| **Known, Act** (`out_for_delivery`, `failed_attempt`, `problem`, and `ready_for_pickup` with no location) | the **badge** (outlined for `out_for_delivery`, solid otherwise), then the sentence. Column 1 is left empty, because the badge carries the glyph (revision 1's mock showed the glyph twice) |
-| **Unknown, has events** | **just the sentence, in full ink** (no word; §2.4). Glyph: the 4px dot |
-| **Unknown, no events, live** | `No updates yet` (one line) |
-
-Whole row is the link (stretched pseudo-element); the tracking number is lifted above it so it can be selected. States: rest, hover (`--hover`), focus-visible (ring inset). The row container is `overflow: hidden` for the radius, so the ring is `outline-offset: -2px` (Alex S5).
-
-**Sort order of the index** (this is design, not decoration; the lede and the sort are the two-second answer):
-
-1. **Act rows:** `failed_attempt`, `problem`, `ready_for_pickup` without a location, then `out_for_delivery` (newest event first within each). They are *time-bound* and *short* (~80px each), so they go first and cost almost nothing.
-2. **Pickup cards**, by earliest deadline, then by longest waiting.
-3. **Unclassified**: unknown with events, newest event first. These could be anything, so they rank above known-quiet parcels.
-4. **Watch**: `returning`, then `in_transit`, `pre_transit`, newest event first.
-5. **No events** (live), by `first_seen` newest. Parcels with no event time have to sort somewhere; last.
-
-Zones 1 and 3-5 are separate rounded containers; zone 2 is the cards. There are no headings; the density change is the boundary. **Why Act rows above the cards** (a change from revision 1): Alex measured six cards pushing `out_for_delivery` ("be home today") below the second screenful. With grouping and this order, the six-pickup case is 1308px tall and the two time-bound rows plus the first card all fit in the first 800px. Delivered parcels are History's; they are not on the index (that is how the live data behaves today: #34 is in History).
+There are no headings between the bands: the order *is* the statement, and the lede (§5.2) says in words what the top of the page shows. Delivered and returned parcels are History's and are not here.
 
 ### 6.3 Status indicator
 
@@ -490,7 +470,7 @@ One component, three presentations, all built from the same sprite symbol:
 <span class="st st-quiet"><svg class="g" aria-hidden="true"><use href="#g-unknown"/></svg>No updates yet</span>
 ```
 
-Anatomy: 16px glyph, 6px gap, 13px/600 word (400 for Silent). Badge (Act): 24px tall, `padding: 0 10px 0 8px`, radius 4, `border: 1px solid transparent` (so that it survives `forced-colors`). `white-space: nowrap`. The glyph is `aria-hidden`; the word is the accessible text. No states (not interactive). `unknown` *with events* has no indicator at all; the sentence is the status (§6.2).
+Anatomy: 16px glyph, 6px gap, 13px/600 word (400 for Silent). Badge (Act): 24px tall, `padding: 0 10px 0 8px`, radius 4, `border: 1px solid transparent` (so that it survives `forced-colors`). `white-space: nowrap`. The glyph is `aria-hidden`; the word is the accessible text. No states (not interactive). `unknown` *with events* has no indicator at all; the sentence is the status (§6.1).
 
 The class name derives from the status with `status.replace(/_/g,'-')` as today; the rename is `chip` → `st`. Ten status classes only set `color` (and `background`/`border-color` for the badges). The `out_for_delivery` badge needs a *real* 1px border in `--signal` (Alex: "keep it really distinct, not just a ring in blue"), which it has in the render.
 
@@ -702,7 +682,7 @@ The only transitions allowed:
 
 - **Contrast:** §2.3. Text ≥ 4.5:1 everywhere including worst-case washes and the `hover` state; primary text ≥ 7:1; control edges, link underlines and glyphs ≥ 3:1; no meaning conveyed by a ≤ 1.7:1 hairline.
 - **Beyond colour:** word + silhouette + register for every status (§2.5), and now a stated *test*: no component may reduce a status to a coloured word alone. Health states the same. The deadline's urgency is spelled out in words (`tomorrow`, `today`, `deadline passed`), not only in tint.
-- **Focus:** `:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px }` on every link, button, input, select, summary. **Ink, not blue** (a blue ring on the blue wash is ~1:1 against its own panel; Alex agrees). Inside any container that clips (`overflow: hidden` for the radius: the row list, the pickup card) the ring is **inset**: `outline-offset: -2px`, otherwise it is cut off on the first and last rows. On stretched-link rows the ring is drawn on the row (`a:focus-visible::after`). Mouse clicks do not show it.
+- **Focus:** `:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px }` on every link, button, input, select, summary. **Ink, not blue** (a blue ring on the blue wash is ~1:1 against its own panel; Alex agrees). Inside any container that clips (`overflow: hidden` for the radius: the card) the ring is **inset**: `outline-offset: -2px`, otherwise it is cut off on the first and last blocks. On a stretched link the ring is drawn on the link's own overlay (`a:focus-visible::after`), which is the card for a one-parcel card and the block for a card headed by a place. Mouse clicks do not show it.
 - **Hit areas:** ≥ 32px everywhere; rows and pickup lines are whole-surface links; history name cells 40px; buttons 36px (32px inline). This is a Mac with a pointer, so I did not size for touch, but nothing is below WCAG 2.5.8's 24px floor.
 - **Links** are ink with a **1px underline in `--edge`** (3.23:1 on paper, 3.04 on the blue wash, 3.21 on the warn wash), offset 3px, darkening to ink on hover. In-text links and *history names* are underlined. Nav items, row titles and pickup-line names are not (they are targets by position, hover and ring, not by being words in a sentence). **No blue.**
 - **Selection is protected.** A stretched link would otherwise cover the two strings you actually copy. The tracking number and the pickup location sit above the overlay (`position: relative; z-index: 1`) and the number has `user-select: all`; clicking them selects instead of navigating, and clicking anywhere else on the row navigates. On the parcel page there is no overlay and it just works.
@@ -717,7 +697,7 @@ The only transitions allowed:
 
 > **[Rev 2]** Updated for the location card, the new lede, the cause-dependent header, and the four-column history table.
 
-- **In flight.** `h1` + a *conditional* lede (§5.2) + `Refresh now`. Then, in sort order (§6.2): time-bound Act rows, pickup cards (one per place), unclassified rows, then the quiet rows. Refresh-result notice sits between the lede and the first item.
+- **In flight.** `h1` + a *conditional* lede (§5.2) + `Refresh now`. Then one card per parcel, or per pickup place (§6.1), in the urgency order of §6.2. Refresh-result notice sits between the lede and the first card.
 - **Parcel.** `h1` (28/32); status line by cause (§6.4: indicator / nothing / `No updates yet` / `Archived`); one-line `carrier · number · merchant` in 13px; carrier's own `statusRaw` as `Carrier says: …` in ink-3. For a ready parcel, its place and "since" clock (the same line as in the card). Notices (postcode). Timeline (newest first, runs). On wide: details column on the right (Label, Postcode, Refresh this parcel; refresh only for parcels still tracked, as now). Raw responses. An archived parcel shows `Found in old mail; never tracked.` instead of a timeline.
 - **History.** Lede with counts, a filter toolbar (visible labels; `Clear` only when a filter is active), year-grouped four-column table, then the median table.
 - **Health.** Honest lede, one board (§6.9).
@@ -760,7 +740,7 @@ One `<style>`; one stylesheet that can be read in a single sitting; components a
 
 1. **Nav counts** need `layout()` to receive data on every page (`healthBad` now; `attentionCount` once Dismiss exists).
 2. **A status presentation function**, not a map: `presentation(status, hasEvents, archived)` → `{ word | sentence | none, register, glyph }` (§2.4). `STATUS_TITLE` stays for notifications.
-3. **The index sort and zoning** (§6.2), including where parcels without events sort.
+3. **The index sort** (§6.2), including where parcels without events sort. *(Rev 4: there is no zoning any more - one kind of card, in one order.)*
 4. **Lede logic** (§5.2): clauses plus the two conditions that gate `Nothing needs you.` (needs "carrier is failing for an in-flight parcel" from the health table). Health's lede counts what is actually reporting.
 5. **Date formatter by age, on full calendar date, in `Europe/Bratislava`** (§3.4), with the fixtures listed there (two of them are real rows in `attention.html`).
 6. **Pickup clocks** (§6.1): `Since <absolute>` + day count; `Collect by <absolute> · <relative>`; the urgency class. Needs **the time of the event that put the parcel into `ready_for_pickup`** (today probably `lastChangedAt`; to confirm).
@@ -780,7 +760,7 @@ One `<style>`; one stylesheet that can be read in a single sitting; components a
 20. **Test fixtures** for the formatter (§3.4) and for the lede (the table in §5.2 is the test list).
 21. **Packeta event zone:** events are stored as `Europe/Prague`; display in `Europe/Bratislava`. Same offset today; say so in a test.
 22. **`unknown` with events:** the "latest sentence" is the newest event by display order, same tie-break.
-23. **A cap on pickup cards** (four), after which parcels render as Act rows.
+23. ~~**A cap on pickup cards** (four), after which parcels render as Act rows.~~ *(Rev 4: struck. There is nothing to demote to; see §6.1.)*
 
 ---
 
@@ -790,7 +770,7 @@ One `<style>`; one stylesheet that can be read in a single sitting; components a
 
 - **Left-aligned column in a centred 64rem frame.** I looked at it at 1440 and 2560px and chose it over a jumping nav; on a very wide window the column sits ~100px left of centre with an empty right margin. If the owner finds that lopsided, the fix is to put something useful in that margin, not to centre the column.
 - **Group-by-place assumes the stored name string is stable.** Real data is one string; a Packeta variant of the same Z-BOX (`Z-BOX Bratislava, Hlavna 6` vs `Hlavna 6, Z-BOX`) would split into two cards. Acceptable; flagged.
-- **Act rows above the pickup cards** is a judgment: it puts "be home today" and "delivery failed" on top at ~80px each. If the owner thinks the *pickup* should always be first, the cost is that out_for_delivery can be off the first screen when there are many pickups. It would take a swap of two rules in §6.2.
+- **`out_for_delivery` above the pickups** is a judgment that survived revision 4 (it used to be "Act rows above the pickup cards"): it puts "be home today" on top. If the owner thinks the *pickup* should always be first, the cost is that `out_for_delivery` can fall off the first screen when there are many pickups. It is two numbers in `ACT_ORDER` (§6.2).
 - **The "since" clock without a deadline** is my best use of information that doesn't answer the question the user has ("how long do I have?"). Stating "no deadline given" is honest; it is not helpful. The real fix is a per-carrier hold period in config, which is not mine to invent.
 - **`No updates yet`** vs Alex's `Not tracked yet`: mine, argued in §2.4, with `Archived` carrying the other case. If the label misleads for a *live* parcel that has been silent for weeks, that is the dormant list's job (it already exists).
 - **The `unknown`-with-events promotion** (sentence in full ink, no word) leans on carrier prose being legible to the owner. For Slovak/English it is. For a language the owner can't read it would be a regression, and I have not seen such a case in the data.
@@ -875,3 +855,24 @@ Alex reviewed the running build (`docs/design-review-2.md`): good enough to ship
 - **Alex's section 5 on Maps.** Agreed: the name-search Maps fallback in §6.1 is not implemented, and should be struck from the spec. A link that is a guess is worse than no link.
 
 **Still not seen.** `failed_attempt`, `out_for_delivery`, a deadline row and an uncoded-prose row exist only in tests and in Alex's injected DOM, not in the live data. Light mode of the built pages was checked from computed styles on the rendered elements (the tokens match §2.2 exactly) but not looked at; the screenshot tool timed out on a backgrounded tab. `forced-colors`. A real failing carrier on the Health page.
+
+---
+
+## 16. Round 4 (the unified card)
+
+The owner, looking at the live page: *"unify the cards to have one style no matter what state or company the parcel is."* He was right, and the fault was mine twice over - in §1 rule 2 (*"cards are earned"*) and in the sort order that printed the demoted parcel **above** the card it had been demoted from.
+
+**What it looked like.** Parcel #35, ready at `Z-BOX, Bottova 6, Bratislava`, had a card with a filled `--signal-wash` header. A parcel equally ready for collection whose carrier named no place had no card at all: it fell to a compact Act row, the quietest presentation on the page, and sorted *above* the card. Same state, same demand on the owner, two species, and the quieter one was the one we knew less about. A `ready_for_pickup` parcel also lost its locker code and its deadline when it fell into a row - the row grammar had nowhere to print them.
+
+**What changed.**
+1. **One card** (§6.1): one `<article class="card">`, one header (subject + chip), one body block per parcel, one footer for facts about the place. Four presentations (`pickupCard`, Act row, quiet row, unclassified row) became one.
+2. **The blue header wash is gone.** `--signal` now appears only on the chip, which is also the only place it appeared on a row - so the two can no longer read as different species, and a page of ten pickups no longer retires the colour. The only paint the frame takes is `--warn-wash`, for a deadline today or past.
+3. **`MAX_PICKUP_CARDS` is deleted.** It only made sense while there was something quieter to demote to.
+4. **The order** (§6.2) is still urgency, with `out_for_delivery` above the pickups for the reason Alex measured in round 2, now carried by the sort alone instead of by a density difference.
+5. **A name is printed once:** in the header when the card is one parcel (and the header is then the card's stretched link), in each block when the header is a place.
+
+**Checked.** Rendered from a copy of the real database (`data/parcels.db`, never written): the live two-parcel page, and a constructed set of ten covering every band - `failed_attempt`, `out_for_delivery`, a deadline *today* (the warn wash), a two-parcel Z-BOX group with two locker codes, **a ready parcel with no place**, uncoded prose, `returning`, `in_transit`, and an email-only DHL parcel with no events. Light and dark at 1000px, and the card header stacking at the ≤40rem breakpoint. Ten parcels became nine cards; the two that need a person were in the first screen.
+
+**Not seen.** A card with a *passed* deadline (only "today" was rendered); `problem`; `forced-colors`; a real 375px window (headless Chrome still enforces a minimum width, as in round 3).
+
+**Owed.** Nothing in README is falsified by this (it documents networking, ingest and carriers, and never describes the page's layout). If the owner wants the dashboard's shape written down outside this file, the one sentence it is missing is: every parcel in flight is one card, and parcels waiting at the same pickup place share one.
