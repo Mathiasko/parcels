@@ -25,6 +25,8 @@ export interface SettingsValues {
   defaultPostalCode: string
   notifier: string
   mapPreview: boolean
+  /** Whether the file actually has a mail block, as opposed to the form merely showing defaults. */
+  imapConfigured: boolean
   imapHost: string
   imapPort: string
   imapUser: string
@@ -44,17 +46,27 @@ const storedPass = (doc: ConfigDocument): string | undefined => {
   return typeof pass === 'string' && pass !== '' ? pass : undefined
 }
 
+/**
+ * Gmail, because that is what the setup instructions, the filter file and the App Password steps all
+ * assume. Shown only when the file has no mail block at all, so a first-time reader fills in two
+ * boxes instead of five and never has to know the host or the port. Every field stays editable, and
+ * nothing is written until the form is saved - these are a starting point, not a decision.
+ */
+const GMAIL_DEFAULTS = { host: 'imap.gmail.com', port: '993', mailbox: 'parcels' } as const
+
 /** The saved values, for the page's first render. Shows the effective default for anything absent. */
 export function settingsValues(doc: ConfigDocument): SettingsValues {
   const imap = imapBlock(doc)
+  const fresh = imap === undefined
   return {
     defaultPostalCode: text(doc.defaultPostalCode),
     notifier: text(doc.notifier) || 'auto',
     mapPreview: doc.mapPreview !== false,
-    imapHost: text(imap?.host),
-    imapPort: text(imap?.port),
+    imapConfigured: !fresh,
+    imapHost: fresh ? GMAIL_DEFAULTS.host : text(imap?.host),
+    imapPort: fresh ? GMAIL_DEFAULTS.port : text(imap?.port),
     imapUser: text(imap?.user),
-    imapMailbox: text(imap?.mailbox),
+    imapMailbox: fresh ? GMAIL_DEFAULTS.mailbox : text(imap?.mailbox),
     passSet: storedPass(doc) !== undefined,
   }
 }
@@ -66,6 +78,7 @@ export function settingsValues(doc: ConfigDocument): SettingsValues {
  */
 export function submittedSettings(f: SettingsForm, doc: ConfigDocument): SettingsValues {
   return {
+    imapConfigured: imapBlock(doc) !== undefined,
     defaultPostalCode: (f.defaultPostalCode ?? '').trim(),
     notifier: (f.notifier ?? '').trim() || 'auto',
     mapPreview: f.mapPreview !== 'false',

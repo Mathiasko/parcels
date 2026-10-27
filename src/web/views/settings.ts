@@ -83,7 +83,7 @@ function testResult(r: ImapProbeResult): Html {
 
 /** What the button is about to do, in the saved values, so the test is never a black box. */
 function testTarget(v: SettingsValues): Html {
-  if (v.imapHost === '' && v.imapUser === '' && v.imapMailbox === '') {
+  if (!v.imapConfigured) {
     return html`<p class="meta">No mail account is saved yet, so there is nothing to test.</p>`
   }
   return html`<p class="meta">Connects to <span class="mono">${v.imapHost}</span> on port <span class="mono">${v.imapPort}</span> as <span class="mono">${v.imapUser}</span> and opens <span class="mono">${v.imapMailbox}</span> read-only, exactly as a poll does: it counts what is in the mailbox and marks nothing as read. It uses the settings <strong>as they are saved</strong>, not unsaved edits below.</p>`

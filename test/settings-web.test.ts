@@ -8,6 +8,7 @@ import type { ImapProbeLike } from '../src/ingest/imap-probe.js'
 import type { ImapConfig } from '../src/ingest/imap.js'
 import { fakeImap, type FakeImap } from './imap-fake.js'
 import { config, memDb, NOW } from './poll-helpers.js'
+import { settingsValues, applySettings } from '../src/web/settings.js'
 
 const PASS = 'abcdefghijklmnop'
 
@@ -290,5 +291,50 @@ describe('POST /settings/test', () => {
     expect(res.headers.location).toBeUndefined()
     const bad = await harness().get('/settings/test')
     expect(bad.statusCode).toBe(404)
+  })
+})
+
+describe('a first-time mail setup asks for two things, not five', () => {
+  test('with no mail block the form arrives filled in for Gmail', () => {
+    // Setup writes no imap block on purpose, so this is what the friend's first visit shows. Knowing
+    // imap.gmail.com and 993 is not something an installer should have to look up.
+    const v = settingsValues({ defaultPostalCode: '81101' })
+    expect(v.imapHost).toBe('imap.gmail.com')
+    expect(v.imapPort).toBe('993')
+    expect(v.imapMailbox).toBe('parcels')   // the label gmail-filter.xml applies
+    expect(v.imapUser).toBe('')             // the two the reader must supply
+    expect(v.passSet).toBe(false)
+    expect(v.imapConfigured).toBe(false)    // defaults shown is not the same as mail set up
+  })
+
+  test('a saved account is shown as saved, never overwritten by the defaults', () => {
+    const v = settingsValues({
+      defaultPostalCode: '81101',
+      imap: { host: 'imap.fastmail.com', port: 993, user: 'a@b.c', pass: 'x', mailbox: 'Parcels/In' },
+    })
+    expect(v.imapHost).toBe('imap.fastmail.com')
+    expect(v.imapMailbox).toBe('Parcels/In')
+    expect(v.imapConfigured).toBe(true)
+  })
+
+  test('the defaults alone are not enough to save: the account is still required', () => {
+    const r = applySettings({ defaultPostalCode: '81101' }, {
+      defaultPostalCode: '81101', notifier: 'auto', mapPreview: 'true',
+      imapHost: 'imap.gmail.com', imapPort: '993', imapMailbox: 'parcels', imapUser: '', imapPass: '',
+    })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.message).toMatch(/account to log in as/)
+  })
+
+  test('typing only the account and the password is enough', () => {
+    const r = applySettings({ defaultPostalCode: '81101' }, {
+      defaultPostalCode: '81101', notifier: 'auto', mapPreview: 'true',
+      imapHost: 'imap.gmail.com', imapPort: '993', imapMailbox: 'parcels',
+      imapUser: 'friend@gmail.com', imapPass: 'abcd efgh ijkl mnop',
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.config.imap).toEqual({
+      host: 'imap.gmail.com', port: 993, user: 'friend@gmail.com', pass: 'abcdefghijklmnop', mailbox: 'parcels',
+    })
   })
 })

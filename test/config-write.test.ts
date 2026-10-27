@@ -168,6 +168,12 @@ describe('applySettings', () => {
 
   test('settingsValues shows the effective defaults for fields the file omits', () => {
     const values = settingsValues({ defaultPostalCode: '81101' } as ConfigDocument)
-    expect(values).toMatchObject({ notifier: 'auto', mapPreview: true, imapHost: '', imapPort: '', imapMailbox: '' })
+    // The mail fields default to Gmail's, so a first-time reader fills in two boxes rather than five;
+    // `imapConfigured` is what still says no account is actually set up. Only the account itself is
+    // left blank, because it is the one thing nobody can guess.
+    expect(values).toMatchObject({
+      notifier: 'auto', mapPreview: true, imapConfigured: false,
+      imapHost: 'imap.gmail.com', imapPort: '993', imapMailbox: 'parcels', imapUser: '',
+    })
   })
 })
