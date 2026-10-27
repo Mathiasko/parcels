@@ -1,7 +1,7 @@
 import { test, expect, beforeEach, vi } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
 import { openDb, type Database } from '../src/db/index.js'
 import {
@@ -298,4 +298,32 @@ test('openDb on a database from an older schema fails at open, naming the missin
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('the database is not readable by other accounts on the machine', () => {
+  // It holds pickup addresses, the user's postcode, the senders and subjects of their mail, and the
+  // codes that open parcel lockers. data/mail is 0700 and config.json is 0600; this was 0644.
+  const dir = mkdtempSync(join(tmpdir(), 'parcels-perm-'))
+  try {
+    const path = join(dir, 'nested', 'parcels.db')
+    const db = openDb(path)
+    insertParcel(db, base)                       // force a write so the WAL exists
+    expect(statSync(path).mode & 0o777).toBe(0o600)
+    expect(statSync(dirname(path)).mode & 0o777).toBe(0o700)
+    if (existsSync(`${path}-wal`)) expect(statSync(`${path}-wal`).mode & 0o777).toBe(0o600)
+    db.close()
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('a database left world-readable by an older version is tightened on the next open', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'parcels-perm2-'))
+  try {
+    const path = join(dir, 'parcels.db')
+    openDb(path).close()
+    chmodSync(path, 0o644)
+    chmodSync(dir, 0o755)
+    openDb(path).close()
+    expect(statSync(path).mode & 0o777).toBe(0o600)
+    expect(statSync(dir).mode & 0o777).toBe(0o700)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
 })

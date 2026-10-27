@@ -1,5 +1,5 @@
 import BetterSqlite3 from 'better-sqlite3'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { applyMigrations, isEmptyDatabase, MIGRATIONS, type Migration } from './migrate.js'
 
@@ -8,12 +8,35 @@ export type Database = BetterSqlite3.Database
 const schema = readFileSync(new URL('./schema.sql', import.meta.url), 'utf8')
 
 /**
+ * The database holds more than tracking numbers: pickup addresses, the user's own postcode, the
+ * senders and subjects of their mail, and the codes that open parcel lockers. It is as sensitive as
+ * `data/mail` (0700) and `config.json` (0600), and was the only one of the three left readable by
+ * every account on the machine.
+ *
+ * Tightening is done on every open, not only at creation: a database made by an earlier version is
+ * already world-readable, and nothing else would ever fix it. The WAL and shared-memory files get
+ * the same treatment - they carry the same rows, and SQLite creates them on its own schedule.
+ */
+function restrict(path: string): void {
+  try {
+    if (statSync(dirname(path)).uid === process.getuid?.()) chmodSync(dirname(path), 0o700)
+    for (const f of [path, `${path}-wal`, `${path}-shm`]) if (existsSync(f)) chmodSync(f, 0o600)
+  } catch (err) {
+    // A database that cannot be tightened is still a database; say so and carry on rather than
+    // refusing to start over a permission bit on someone else's unusual setup.
+    console.error(`db: could not restrict permissions on ${path}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+/**
  * Opens (creating the parent directory and file if needed) the SQLite database and applies the
  * schema idempotently. `data/` is gitignored, so a fresh clone relies on this to exist.
  */
 export function openDb(path: string, migrations: Migration[] = MIGRATIONS): Database {
-  if (path !== ':memory:' && path !== '') mkdirSync(dirname(path), { recursive: true })
+  const onDisk = path !== ':memory:' && path !== ''
+  if (onDisk) mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   const db = new BetterSqlite3(path)
+  if (onDisk) restrict(path)
   try {
     db.pragma('journal_mode = WAL')
     db.pragma('foreign_keys = ON')
