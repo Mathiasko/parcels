@@ -5,7 +5,7 @@ import type { PollerStatus } from '../../core/pollwatch.js'
 import { CARRIER_NAME, formatDateTime } from './format.js'
 import { glyph, type GlyphName } from './glyphs.js'
 import { html, type Html } from './html.js'
-import { layout, type PageCtx } from './layout.js'
+import { layout, scroller, type PageCtx } from './layout.js'
 
 /** `gated` means the adapter itself is broken (key rotated, endpoint closed): always an alarm while it persists. */
 export const needsAttention = (h: HealthRow | undefined): boolean =>
@@ -59,7 +59,7 @@ export function healthPage(
   return layout('Health', '/health', html`
 <h1>Health</h1>
 <p class="lede">${lede(byCarrier, ids)}</p>
-<table class="board"><thead><tr><th scope="col">State</th><th scope="col">Name</th><th scope="col">Last ok</th>${anyError ? html`<th scope="col">Last error</th>` : ''}</tr></thead>
+${scroller('Carrier and system health', html`<table class="board"><thead><tr><th scope="col">State</th><th scope="col">Name</th><th scope="col">Last ok</th>${anyError ? html`<th scope="col">Last error</th>` : ''}</tr></thead>
 <tbody><tr class="grp"><th scope="rowgroup" colspan="${cols}">Carriers</th></tr>${ids.map(id => {
     const h = byCarrier.get(id)
     return html`<tr data-carrier="${id}"${bad(h) ? html` class="bad"` : ''}><td>${verdict(h)}</td><td>${CARRIER_NAME[id]}</td>
@@ -68,6 +68,6 @@ export function healthPage(
 <tr class="grp"><th scope="rowgroup" colspan="${cols}">System</th></tr>
 <tr id="poller-health"${poller.overdue ? html` class="bad"` : ''}><td>${pollState}</td><td>Poller</td><td>${poller.lastPollAt ? formatDateTime(poller.lastPollAt, ctx.now) : 'never'}</td>${anyError ? html`<td class="meta">—</td>` : ''}</tr>${
   showIngest ? html`<tr id="ingest-health"${ing && ing.consecutiveFailures > 0 ? html` class="bad"` : ''}><td>${ingestState}</td><td>Mail ingest</td>
-<td>${ing?.lastOkAt ? formatDateTime(ing.lastOkAt, ctx.now) : 'never'}</td>${errCell(ing?.lastErrorAt, ing?.lastError)}</tr>` : ''}</tbody></table>${
+<td>${ing?.lastOkAt ? formatDateTime(ing.lastOkAt, ctx.now) : 'never'}</td>${errCell(ing?.lastErrorAt, ing?.lastError)}</tr>` : ''}</tbody></table>`)}${
   poller.overdue ? html`<p class="meta">No poll has completed for over 2 hours of the 07:00-21:00 day. Parcels are not being updated: check that the launchd poller agent is loaded and that the Node path in its plist still exists.</p>` : ''}`, ctx)
 }

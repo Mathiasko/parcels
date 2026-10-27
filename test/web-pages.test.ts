@@ -9,7 +9,7 @@ import type { Database } from '../src/db/index.js'
 import type { CarrierId } from '../src/core/types.js'
 import type { Notification } from '../src/notify/types.js'
 import { getAdapter } from '../src/carriers/registry.js'
-import { formatDuration } from '../src/web/views/format.js'
+import { formatDateTime, formatDuration } from '../src/web/views/format.js'
 import { bodyHttp, config, ev, memDb, NOW, okResult, stubAdapter } from './poll-helpers.js'
 
 const DAY = 24 * 3_600_000
@@ -560,5 +560,166 @@ describe('GET /health: mail ingest', () => {
     const section = body.slice(body.indexOf('id="ingest-health"')).split('</table>')[0]!
     expect(section).toMatch(/ok<\/span>/)
     expect(section).not.toContain('failing')
+  })
+})
+
+// --- the index lede: it may only say "Nothing needs you." when the data can support it ----------------
+
+describe('GET /: the lede', () => {
+  const lede = async (db: Database) => {
+    const body = (await get(db, '/')).body
+    return body.match(/<p class="lede">([^<]*)<\/p>/)?.[1]
+  }
+  /** A parcel with a coded, known, unremarkable status: the quiet case the all-clear is for. */
+  function moving(db: Database, number: string, carrier: CarrierId = 'posta'): number {
+    const id = insertParcel(db, { carrier, trackingNumber: number, label: number, source: 'manual' })
+    appendEvents(db, id, [ev('x', 'in_transit', 2, 'On the way')])
+    updateParcelState(db, id, { status: 'in_transit', lastChangedAt: new Date(NOW.getTime() - 2 * 3_600_000) })
+    return id
+  }
+
+  test('the all-clear is printed only for a quiet, classified, fully polled set', async () => {
+    const db = memDb()
+    moving(db, 'RR1')
+    moving(db, 'RR2')
+    expect(await lede(db)).toBe('2 in flight. Nothing needs you.')
+  })
+
+  test('a parcel waiting at a place is said first, and there is no all-clear', async () => {
+    const db = memDb()
+    const id = moving(db, 'RR1')
+    updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
+    expect(await lede(db)).toBe('1 ready for pickup. 1 in flight.')
+  })
+
+  test('an uncoded prose status is "no status", never a calm all-clear', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'packeta', trackingNumber: 'Z1', label: 'Prose', source: 'manual' })
+    appendEvents(db, id, [{ ...ev('x', 'unknown', 3, 'Your parcel is on its way to you.'), code: undefined }])
+    const text = await lede(db)
+    expect(text).toBe('1 in flight. 1 has no status; read its latest message.')
+    expect(text).not.toContain('Nothing needs you')
+    // The carrier's own sentence is the status on the row: in the status slot, with no status word beside it.
+    const body = (await get(db, '/')).body
+    expect(body).toContain('class="ev prose">Your parcel is on its way to you.')
+  })
+
+  test('a parcel with no events is new, not unknown: it does not block the all-clear, and says so', async () => {
+    const db = memDb()
+    moving(db, 'RR1')
+    insertParcel(db, { carrier: 'gls', trackingNumber: '123456789012', label: 'Brand new', source: 'manual' })
+    expect(await lede(db)).toBe('2 in flight. Nothing needs you.')
+    expect((await get(db, '/')).body).toContain('No updates yet')
+  })
+
+  test('a rejected postcode is said, and forfeits the all-clear (the poller never asks about it again)', async () => {
+    const db = memDb()
+    moving(db, 'RR1')
+    const id = insertParcel(db, { carrier: 'gls', trackingNumber: '123456789012', postalCode: '99999', label: 'Stuck', source: 'manual' })
+    setNeedsPostcode(db, id, '99999')
+    const text = await lede(db)
+    expect(text).toBe('2 in flight. 1 needs a postcode.')
+    expect(text).not.toContain('Nothing needs you')
+    expect((await get(db, '/')).body).toContain('Postcode needed')
+  })
+
+  test('a dormant parcel (no longer polled) is said, and forfeits the all-clear', async () => {
+    const db = memDb()
+    moving(db, 'RR1')
+    const old = insertParcel(db, { carrier: 'posta', trackingNumber: 'OLD1', label: 'Silent for ages', source: 'manual' })
+    db.prepare('UPDATE parcels SET first_seen_at = ? WHERE id = ?').run(new Date(NOW.getTime() - 40 * DAY).toISOString(), old)
+    const text = await lede(db)
+    expect(text).toBe('2 in flight. 1 is no longer polled (see Attention).')
+  })
+
+  test('a failing carrier it depends on is said, and forfeits the all-clear; an unrelated one is not', async () => {
+    const db = memDb()
+    moving(db, 'RR1', 'posta')
+    recordHealth(db, 'dpd', 'transport', 'timeout')          // no DPD parcel in flight: irrelevant here
+    expect(await lede(db)).toBe('1 in flight. Nothing needs you.')
+    recordHealth(db, 'posta', 'transport', 'timeout')
+    const text = await lede(db)
+    expect(text).toBe('1 in flight. Slovenská pošta is failing, so this may be out of date.')
+  })
+
+  test('a poller that has stopped means every status may be stale: no all-clear', async () => {
+    const db = memDb()
+    moving(db, 'RR1')
+    db.prepare('INSERT INTO last_poll (id, polled_at_ms) VALUES (1, ?)').run(NOW.getTime() - 30 * 3_600_000)
+    const text = await lede(db)
+    expect(text).toContain('The poller has not run lately')
+    expect(text).not.toContain('Nothing needs you')
+  })
+
+  test('an empty page has no lede at all, not "0 in flight"', async () => {
+    expect(await lede(memDb())).toBeUndefined()
+  })
+
+  test('two parcels at one place share one card; time-bound rows come before the cards', async () => {
+    const db = memDb()
+    for (const n of ['A1', 'A2']) {
+      const id = insertParcel(db, { carrier: 'packeta', trackingNumber: n, label: `Parcel ${n}`, source: 'manual' })
+      updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' }, lastChangedAt: new Date(NOW.getTime() - 3_600_000) })
+    }
+    const ofd = insertParcel(db, { carrier: 'gls', trackingNumber: '123456789012', label: 'On the van', source: 'manual' })
+    updateParcelState(db, ofd, { status: 'out_for_delivery' })
+    const body = (await get(db, '/')).body
+    expect(body.match(/class="pk"/g)).toHaveLength(1)
+    expect(body.match(/Z-BOX Hlavna 6/g)).toHaveLength(1)
+    expect(body).toContain('Packeta gives no pickup deadline.')   // stated, not omitted: the reader would assume there is none
+    expect(body.indexOf('On the van')).toBeLessThan(body.indexOf('class="pk"'))
+  })
+})
+
+describe('the parcel page timeline and History, as built', () => {
+  test('day headings are read aloud (they are the only date a row carries), and a code is on the text, not the list item', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'dpd', trackingNumber: '01505515835276', source: 'manual' })
+    appendEvents(db, id, [
+      { ...ev('a', 'in_transit', 30, 'Sorted'), code: 'HUS' },
+      { ...ev('b', 'in_transit', 5, 'Sorted again'), code: 'HUS' },
+      { ...ev('c', 'unknown', 2, 'Returned for expiry'), code: 'DODEX' },
+    ])
+    const body = (await get(db, `/parcel/${id}`)).body
+    const tl = body.slice(body.indexOf('id="timeline"'), body.indexOf('</ol>'))
+    expect(tl).toMatch(/<li class="day[^"]*">[A-Z][a-z]{2} \d+ [A-Z][a-z]{2}<\/li>/)
+    expect(tl).not.toMatch(/<li class="day[^>]*aria-hidden/)   // the glyphs are aria-hidden, the headings are not
+    expect(tl).not.toMatch(/<li[^>]*title=/)
+    expect(tl).toContain('<div class="tx" title="carrier code DODEX">')
+    // The unknown row is outside the run below it: only the two `in_transit` rows are joined by a bar.
+    const rows = tl.split('<li class="er').slice(1)
+    expect(rows[0]).not.toContain(' bar')                         // newest: the unknown row
+    expect(rows[1]).toMatch(/^[^>]*bar[^>]*top/)                  // head of the run
+    expect(rows[2]).toMatch(/^[^>]*bar[^>]*end/)                  // its last member
+  })
+
+  test('History shows the tracking number beside a name that is not the number, and the date filter is not called "Delivered"', async () => {
+    const db = memDb()
+    delivered(db, { number: 'Z1748571211', label: 'Vinted' })
+    delivered(db, { number: 'Z1999000111', label: 'Vinted' })
+    delivered(db, { number: 'Z7777777777' })                     // named by its number: not repeated
+    const body = (await get(db, '/history')).body
+    expect(body).toContain('>Z1748571211</span>')
+    expect(body).toContain('>Z1999000111</span>')
+    expect(body.match(/Z7777777777/g)).toHaveLength(1)          // the link text only: no repeated trailing token
+    expect(body).toContain('Date from')
+    expect(body).not.toContain('Delivered from')
+  })
+
+  test('dates are never relative and the year appears once it is not this year', () => {
+    // The Attention-page trap: an email from exactly a year ago has today\'s day and month.
+    const now = new Date('2026-10-27T10:00:00Z')
+    expect(formatDateTime(new Date('2025-10-27T14:57:00Z'), now)).toBe('27 Oct 2025, 15:57')
+    expect(formatDateTime(new Date('2025-11-12T19:07:00Z'), now)).toBe('12 Nov 2025, 20:07')
+    expect(formatDateTime(new Date('2026-10-26T16:19:00Z'), now)).toBe('Mon 26 Oct, 17:19')
+    expect(formatDateTime(new Date('2026-03-12T10:00:00Z'), now)).toBe('12 Mar, 11:00')
+    // 22:05 UTC on the 24th is 00:05 on the 25th in Bratislava: the day comes from the zone, not from UTC.
+    expect(formatDateTime(new Date('2026-10-24T22:05:00Z'), now)).toBe('Sun 25 Oct, 00:05')
+  })
+
+  test('the nav reserves its bold width and marks the current page', async () => {
+    const body = (await get(memDb(), '/history')).body
+    expect(body).toContain('<a href="/history" data-t="History" aria-current="page">')
+    expect(body).toContain('data-t="In flight"')
   })
 })

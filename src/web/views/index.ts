@@ -1,3 +1,4 @@
+import { isDormant } from '../../core/backoff.js'
 import { postcodeRejected, type Parcel } from '../../db/parcels.js'
 import type { StoredEvent } from '../../db/events.js'
 import type { CanonicalStatus } from '../../core/types.js'
@@ -133,23 +134,32 @@ function parcelRow(e: Entry, ctx: PageCtx, overflowPlace?: string): Html {
 }
 
 /** The index lede: what is known, and a calm all-clear only when the data can support it. See design-language §5.2. */
-export function indexLede(entries: Entry[], health: PageCtx['health']): string {
+export function indexLede(entries: Entry[], ctx: PageCtx): string {
+  const { health, now } = ctx
   const n = (pred: (e: Entry) => boolean) => entries.filter(pred).length
   const ready = n(e => e.parcel.status === 'ready_for_pickup')
   const ofd = n(e => e.parcel.status === 'out_for_delivery')
   const attn = n(e => e.parcel.status === 'failed_attempt' || e.parcel.status === 'problem')
   // An uncoded latest sentence is not "nothing": we cannot tell, and must say so rather than call it quiet.
   const unclassified = n(e => e.parcel.status === 'unknown' && e.last !== undefined)
+  // States that are actionable but are not statuses: the poller will never ask about these parcels again
+  // (a carrier-rejected postcode; dormancy), or has stopped asking about all of them. Each one must be
+  // said, and each one forfeits the all-clear: a page that stopped learning cannot claim there is nothing to learn.
+  const noPostcode = n(e => postcodeRejected(e.parcel))
+  const dormant = n(e => isDormant(e.parcel, now))
   const carriers = new Set(entries.map(e => e.parcel.carrier))
   const failing = health.filter(h => h.consecutiveFailures > 0 && carriers.has(h.carrier)).map(h => CARRIER_NAME[h.carrier])
   const parts: string[] = []
   const act = [ready && `${ready} ready for pickup`, ofd && `${ofd} out for delivery`, attn && `${attn} ${attn === 1 ? 'needs' : 'need'} attention`].filter(Boolean)
   if (act.length) parts.push(`${act.join(', ')}.`)
   parts.push(`${entries.length} in flight.`)
+  if (noPostcode) parts.push(`${noPostcode} ${noPostcode === 1 ? 'needs' : 'need'} a postcode.`)
+  if (dormant) parts.push(`${dormant} ${dormant === 1 ? 'is' : 'are'} no longer polled (see Attention).`)
   if (unclassified) parts.push(`${unclassified} ${unclassified === 1 ? 'has' : 'have'} no status; read ${unclassified === 1 ? 'its' : 'their'} latest message.`)
   if (failing.length) parts.push(`${listNames(failing)} ${failing.length === 1 ? 'is' : 'are'} failing, so this may be out of date.`)
-  // The all-clear is earned: nothing waiting, nothing unreadable, and no carrier it depends on is broken.
-  if (!act.length && !unclassified && !failing.length) parts.push('Nothing needs you.')
+  if (ctx.pollerOverdue) parts.push('The poller has not run lately, so this may be out of date (see Health).')
+  // The all-clear is earned: nothing waiting, nothing unreadable or unpolled, and nothing it depends on is broken.
+  if (!act.length && !unclassified && !failing.length && !noPostcode && !dormant && !ctx.pollerOverdue) parts.push('Nothing needs you.')
   return parts.join(' ')
 }
 
@@ -179,7 +189,7 @@ export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote): H
 
   const body = entries.length === 0
     ? html`<p class="empty">Nothing in flight. Parcels appear here when an email arrives or when you add one.</p>`
-    : html`<p class="lede">${indexLede(entries, ctx.health)}</p>${refreshBanner(note)}${
+    : html`<p class="lede">${indexLede(entries, ctx)}</p>${refreshBanner(note)}${
         actRows.length ? html`<ul class="list">${actRows.map(e => parcelRow(e, ctx, pickupSummary(e.parcel)))}</ul>` : ''}${
         places.slice(0, MAX_PICKUP_CARDS).map(([where, es]) => pickupCard(where, es, ctx))}${
         rest.length ? html`<ul class="list">${rest.map(e => parcelRow(e, ctx))}</ul>` : ''}`

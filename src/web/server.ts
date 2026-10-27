@@ -78,7 +78,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   const app = Fastify({ logger: false })
   const now = () => (deps.now ?? (() => new Date()))()
   /** What every page needs besides its own data: the clock, and carrier health (for the lede and the nav dot). */
-  const ctx = (): PageCtx => ({ now: now(), health: carrierHealth(db) })
+  const ctx = (): PageCtx => ({ now: now(), health: carrierHealth(db), pollerOverdue: pollerStatus(db, now()).overdue })
 
   // Without authentication, a page the user happens to visit must not be able to drive this server:
   // a foreign Host header is a DNS-rebinding attempt, and a cross-site POST is a forged form. The Origin

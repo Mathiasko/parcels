@@ -2,7 +2,7 @@ import type { Parcel } from '../../db/parcels.js'
 import type { UnparsedMessage } from '../queries.js'
 import { formatDateTime } from './format.js'
 import { html, type Html } from './html.js'
-import { layout, notice, type PageCtx } from './layout.js'
+import { layout, notice, scroller, type PageCtx } from './layout.js'
 import { parcelFields, type AddValues } from './add.js'
 import { parcelName } from './index.js'
 
@@ -23,7 +23,7 @@ ${messages.length === 0 ? html`<p class="empty">Nothing waiting.</p>` : messages
 </div>`)}</div>
 <h2>Dormant parcels</h2>
 <p class="meta">No tracking event for over 30 days, so they are no longer polled.</p>
-${dormant.length === 0 ? html`<p class="empty">None.</p>` : html`<table><thead><tr><th scope="col">Parcel</th><th scope="col">Number</th><th scope="col" class="d">Waiting</th></tr></thead><tbody>${dormant.map(p => html`<tr>
+${dormant.length === 0 ? html`<p class="empty">None.</p>` : scroller('Dormant parcels', html`<table><thead><tr><th scope="col">Parcel</th><th scope="col">Number</th><th scope="col" class="d">Waiting</th></tr></thead><tbody>${dormant.map(p => html`<tr>
   <td><a href="/parcel/${p.id}">${parcelName(p)}</a></td><td><span class="mono">${p.trackingNumber}</span></td>
-  <td class="d">${Math.floor((ctx.now.getTime() - p.firstSeenAt.getTime()) / 86_400_000)} days</td></tr>`)}</tbody></table>`}`, ctx)
+  <td class="d">${Math.floor((ctx.now.getTime() - p.firstSeenAt.getTime()) / 86_400_000)} days</td></tr>`)}</tbody></table>`)}`, ctx)
 }

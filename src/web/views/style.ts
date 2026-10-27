@@ -23,9 +23,11 @@ a:hover{text-decoration-color:var(--ink)}
 .frame{max-width:64rem;margin:0 auto;padding:3rem 1.5rem 4.5rem}
 .col{max-width:42rem}
 header{max-width:42rem;margin-bottom:2rem}
-nav{display:flex;gap:1.5rem;align-items:baseline}
+nav{display:flex;flex-wrap:wrap;gap:0 1.5rem;align-items:baseline}
 nav b{font-weight:600;margin-right:.5rem}
-nav a{color:var(--ink-3);text-decoration:none;padding:.25rem 0}
+nav a{display:inline-flex;flex-direction:column;align-items:flex-start;white-space:nowrap;color:var(--ink-3);text-decoration:none;padding:.25rem 0}
+/* the bold current item would widen by a few px and nudge its neighbours: reserve its bold width on every item */
+nav a::after{content:attr(data-t);font-weight:600;height:0;overflow:hidden;visibility:hidden}
 nav a:hover{color:var(--ink)}
 nav a[aria-current]{color:var(--ink);font-weight:600;box-shadow:0 2px 0 var(--ink)}
 nav .add{margin-left:auto}
@@ -42,7 +44,7 @@ h3{font-size:.9375rem;line-height:1.4667;font-weight:600;margin:0}
 .sel{position:relative;z-index:1;-webkit-user-select:all;user-select:all}
 .empty{color:var(--ink-3)}
 time{font-variant-numeric:tabular-nums}
-.t-signal{color:var(--signal)}.t-warn{color:var(--warn)}.t-ok{color:var(--ok)}.t-2{color:var(--ink-2)}.t-3{color:var(--ink-3)}
+.t-signal{color:var(--signal);--bar:var(--signal)}.t-warn{color:var(--warn);--bar:var(--warn)}.t-ok{color:var(--ok);--bar:var(--ok)}.t-2{color:var(--ink-2);--bar:var(--ink-2)}.t-3{color:var(--ink-3);--bar:var(--ink-3)}
 
 /* status: glyph + word. Solid and outlined labels are the only containers on the site. */
 .st{display:inline-flex;align-items:center;gap:.375rem;font-size:.8125rem;line-height:1.3846;font-weight:600;white-space:nowrap}
@@ -61,7 +63,7 @@ button.pri:hover{background:var(--btn-hover)}
 button.link{border:0;background:none;color:var(--ink-2);padding:0 .25rem;text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:3px}
 input,select{height:2.25rem;padding:0 .75rem;border:1px solid var(--edge);border-radius:6px;background:var(--surface);max-width:100%}
 input:hover,select:hover{border-color:var(--ink-3)}
-input:user-invalid{border-color:var(--warn)}
+input:user-invalid{border-color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn)}
 ::placeholder{color:var(--ink-3);opacity:1}
 label{display:block;font-size:.8125rem;line-height:1.3846;font-weight:600;color:var(--ink-2)}
 label input,label select{display:block;width:100%;margin-top:.25rem;font-size:.9375rem;font-weight:400}
@@ -146,11 +148,16 @@ form.inline{display:inline}
 .tl>li:first-child{padding-top:0}
 .day::before,.er::before{content:"";position:absolute;left:calc(3rem + .75rem + 7.5px);top:0;bottom:0;width:1px;background:var(--rule-s)}
 .tl>li:first-child::before{top:1.75rem}
+.bar::before{width:2px;margin-left:-.5px;background:var(--bar)}
+.day.bar{color:var(--ink-2)}
+.er.top::before{top:1rem}
+.er.end::before{bottom:auto;height:calc(100% - .75rem)}
 .er{display:grid;grid-template-columns:3rem 1rem minmax(0,1fr);gap:.75rem;padding-bottom:.75rem}
 .er.last{padding-bottom:0}
 .er.last::before{bottom:auto;height:1rem}
 .er time{font-size:.8125rem;line-height:1.3846;color:var(--ink-3);padding-top:.125rem}
 .er .gl{position:relative;z-index:1;background:var(--paper);height:1.25rem;padding:2px 0;margin-top:.125rem}
+.er .gl.dotg{background:none}
 .er .tx{color:var(--ink-2);overflow-wrap:break-word}
 .er.now .tx{color:var(--ink)}
 .er .w{display:block;font-size:.8125rem;line-height:1.3846;font-weight:600;margin-bottom:.125rem}
@@ -158,13 +165,14 @@ form.inline{display:inline}
 
 /* tables */
 table{width:100%;border-collapse:collapse}
+.scroll{overflow-x:auto}
 th{text-align:left;font-size:.8125rem;line-height:1.3846;font-weight:600;color:var(--ink-3);padding:.5rem .75rem;border-bottom:1px solid var(--rule-s)}
 td{padding:.5rem .75rem;border-bottom:1px solid var(--rule);vertical-align:top;height:2.5rem;overflow-wrap:break-word}
 th.d,td.d{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 tbody tr:hover td{background:var(--hover)}
 tr.yr th,tr.yr:hover th{padding-top:1rem;border-bottom:0;background:none}
 tr.yr:hover td{background:none}
-td .meta{margin-left:.5rem}
+td .meta,td .num{margin-left:.5rem}
 td .st{line-height:1.375rem}
 .board td:first-child{width:12rem}
 .board td{height:auto;padding:.625rem .75rem}

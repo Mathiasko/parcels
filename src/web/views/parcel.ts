@@ -20,24 +20,31 @@ const isTracked = (p: Parcel): boolean =>
 /**
  * The timeline, newest first. The query returns oldest first (ties by id), so reversing it gives
  * `occurred_at DESC, id DESC`. A *run* is consecutive rows of one known status; its head is the newest row,
- * the first one met reading down, and carries the glyph and the status word. The other rows of the run, and
- * every `unknown` row (two carriers send prose with no code, legitimately), are a plain dot and the carrier's
- * own sentence: nothing that could read as an error. A carrier's code is not shown; it is in the `title`.
+ * the first one met reading down, and carries the glyph and the status word. When a run has more than one row,
+ * a 2px bar in the status colour joins its members (and passes through any day heading between them), so a
+ * row that is NOT part of the run above (an `unknown` row, say the carrier's "returned for expiry" directly
+ * under "Delivered") is visibly outside it. `unknown` rows, coded or not (two carriers send prose with no
+ * code, legitimately), are a plain dot and the carrier's own sentence: nothing that could read as an error.
+ * A carrier's code is not shown; it is in a `title`.
  */
 function timeline(events: StoredEvent[], ctx: PageCtx): Html {
   const shown = [...events].reverse()
+  const same = (i: number, j: number): boolean => shown[j] !== undefined && isKnown(shown[i]!.status) && shown[i]!.status === shown[j]!.status
   let prevDay = ''
-  let prevStatus: string | undefined
   return html`<ol class="tl" id="timeline">${shown.map((e, i) => {
     const day = dayKey(e.occurredAt)
-    const heading = day !== prevDay ? html`<li class="day" aria-hidden="true">${formatDayHeading(e.occurredAt, ctx.now)}</li>` : ''
-    const head = isKnown(e.status) && e.status !== prevStatus
+    const joinedAbove = same(i, i - 1)
+    const joinedBelow = same(i, i + 1)
+    const head = isKnown(e.status) && !joinedAbove
+    // A day heading sits inside a run when the row above it (newer) and this one share a status.
+    const heading = day !== prevDay
+      ? html`<li class="day${joinedAbove ? html` bar ${toneClass(e.status)}` : ''}">${formatDayHeading(e.occurredAt, ctx.now)}</li>` : ''
     prevDay = day
-    prevStatus = e.status
-    return html`${heading}<li class="er${i === 0 ? raw(' now') : ''}${i === shown.length - 1 ? raw(' last') : ''}"${e.code ? html` title="carrier code ${e.code}"` : ''}>
+    const bar = joinedAbove || joinedBelow
+    return html`${heading}<li class="er${i === 0 ? raw(' now') : ''}${i === shown.length - 1 ? raw(' last') : ''}${bar ? html` bar ${toneClass(e.status)}` : ''}${head && joinedBelow ? raw(' top') : ''}${bar && !joinedBelow ? raw(' end') : ''}">
 <time datetime="${e.occurredAt.toISOString()}">${formatClock(e.occurredAt)}</time>
-<span class="gl ${head ? toneClass(e.status) : 't-3'}">${glyph(head ? e.status : 'unknown')}</span>
-<div class="tx">${head ? html`<span class="w ${toneClass(e.status)}">${STATUS_TITLE[e.status]}</span>` : ''}${e.description}${e.location ? html` <span class="loc">· ${e.location}</span>` : ''}</div></li>`
+<span class="gl ${head ? toneClass(e.status) : 't-3 dotg'}">${glyph(head ? e.status : 'unknown')}</span>
+<div class="tx"${e.code ? html` title="carrier code ${e.code}"` : ''}>${head ? html`<span class="w ${toneClass(e.status)}">${STATUS_TITLE[e.status]}</span>` : ''}${e.description}${e.location ? html` <span class="loc">· ${e.location}</span>` : ''}</div></li>`
   })}</ol>`
 }
 

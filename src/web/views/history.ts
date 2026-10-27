@@ -3,7 +3,7 @@ import type { Parcel } from '../../db/parcels.js'
 import type { CarrierDeliveryStats } from '../queries.js'
 import { CARRIER_NAME, formatDayMonth, formatDuration, statusIndicator, yearOf } from './format.js'
 import { html, type Html } from './html.js'
-import { layout, type PageCtx } from './layout.js'
+import { layout, scroller, type PageCtx } from './layout.js'
 import { parcelName } from './index.js'
 
 export interface HistoryFilters { carrier?: string; q?: string; from?: string; to?: string }
@@ -29,7 +29,7 @@ const dateOf = (p: Parcel): Date => p.deliveredAt ?? (p.status === 'returned' ? 
 function row(p: Parcel): Html {
   const o = outcomeOf(p)
   const name = parcelName(p)
-  return html`<tr><td><a href="/parcel/${p.id}">${name}</a>${p.merchant && p.merchant !== name ? html`<span class="meta">${p.merchant}</span>` : ''}</td>
+  return html`<tr><td><a href="/parcel/${p.id}">${name}</a>${p.merchant && p.merchant !== name ? html`<span class="meta">${p.merchant}</span>` : ''}${name !== p.trackingNumber ? html`<span class="mono t-3 num">${p.trackingNumber}</span>` : ''}</td>
 <td>${CARRIER_NAME[p.carrier]}</td>
 <td>${o === 'delivered' ? statusIndicator('delivered') : o === 'returned' ? statusIndicator('returned') : ''}</td>
 <td class="d"><time datetime="${dateOf(p).toISOString()}">${formatDayMonth(dateOf(p))}</time></td></tr>`
@@ -54,17 +54,17 @@ ${parcels.length === 0 ? '' : html`<p class="lede">${lede(parcels, filtered)} Da
   <label class="grow">Search<input name="q" value="${f.q ?? ''}" placeholder="Merchant, label or number"></label>
   <label>Carrier<select name="carrier"><option value="">All carriers</option>${carriers.map(id =>
     html`<option value="${id}"${f.carrier === id ? ' selected' : ''}>${CARRIER_NAME[id]}</option>`)}</select></label>
-  <label>Delivered from<input type="date" name="from" value="${f.from ?? ''}"></label>
+  <label>Date from<input type="date" name="from" value="${f.from ?? ''}"></label>
   <label>to<input type="date" name="to" value="${f.to ?? ''}"></label>
   <button>Filter</button>${filtered ? html`<a href="/history">Clear</a>` : ''}</form>
 ${parcels.length === 0
     ? html`<p class="empty">No delivered, returned or archived parcels${filtered ? ' match these filters' : ' yet'}.</p>`
-    : html`<table><thead><tr><th scope="col">Parcel</th><th scope="col">Carrier</th><th scope="col">Outcome</th><th scope="col" class="d">Date</th></tr></thead>${
+    : scroller('Finished parcels', html`<table><thead><tr><th scope="col">Parcel</th><th scope="col">Carrier</th><th scope="col">Outcome</th><th scope="col" class="d">Date</th></tr></thead>${
         years.map(y => {
           const inYear = parcels.filter(p => yearOf(dateOf(p)) === y)
           return html`<tbody><tr class="yr"><th scope="rowgroup" colspan="4">${y} · ${inYear.length}</th></tr>${inYear.map(row)}</tbody>`
-        })}</table>`}
+        })}</table>`)}
 <h2>Median delivery time</h2>
 <p class="meta">Per carrier across all delivered parcels, from its first scan to delivery. Parcels with no usable scan history are left out; n shows how many were measured.</p>
-<table class="stats"><thead><tr><th scope="col">Carrier</th><th scope="col" class="d">Median</th><th scope="col">Based on</th></tr></thead><tbody>${carriers.map(c => statsRow(c, stats.get(c)))}</tbody></table>`, ctx)
+${scroller('Median delivery time per carrier', html`<table class="stats"><thead><tr><th scope="col">Carrier</th><th scope="col" class="d">Median</th><th scope="col">Based on</th></tr></thead><tbody>${carriers.map(c => statsRow(c, stats.get(c)))}</tbody></table>`)}`, ctx)
 }

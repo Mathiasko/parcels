@@ -355,10 +355,11 @@ Every page has an `h1` (22/28) and optionally a **lede**: one line, 15px, ink-2,
 2. `N has no status; read its latest message.` for each in-flight parcel that has events but an uncoded status (§2.4). **This is the clause that stops the lede lying.**
 3. `N in flight.`
 4. `Packeta is failing, so this may be out of date.` if a carrier serving an in-flight parcel is `failing` or `needs attention`.
+5. *(Rev 3)* **States that are actionable but are not statuses**, because the poller will never ask about those parcels again, or has stopped asking about all of them: `N needs a postcode.` (a carrier-rejected postcode: `core/poll.ts` skips the parcel for ever), `N is no longer polled (see Attention).` (dormant), and `The poller has not run lately, so this may be out of date (see Health).`
 
 and the one sentence that must be earned:
 
-> **`Nothing needs you.`** appears **only if** (a) no clause 1 or 2 applies, **and** (b) no in-flight parcel's carrier is failing. Otherwise it is not printed, and nothing replaces it.
+> **`Nothing needs you.`** appears **only if** (a) no clause 1 or 2 applies, (b) no in-flight parcel's carrier is failing, **and** (c) *(Rev 3)* none of clause 5 applies. Otherwise it is not printed, and nothing replaces it.
 
 Real examples, with the data as it is today:
 
@@ -419,7 +420,7 @@ Rendered with the real parcel #35 (one-line card, **~195px**) and with six parce
 
   The **absolute date is always printed next to the relative count**, so a tab left open overnight still tells the truth (Alex S8). There is **no urgency colour on the age line**: without a deadline we do not know the limit, and inventing one (a per-carrier hold period) would cry wolf. If the owner wants age-based nagging that is a *product* feature (a default hold per carrier) and I'd then add it as a fourth row of this table.
 - **"No deadline" is stated, once, in the card footer** (`Packeta gives no pickup deadline.`; `Packeta and GLS give no pickup deadline.` for mixed groups). In revision 1 I argued the opposite (print nothing, because "no deadline" reads as information we have). Alex is right and I was wrong: the user will otherwise assume *there is no limit*, and parcel lockers do have one. Absence of a line is silence; absence of a deadline is a fact worth printing.
-- **Maps link is conditional and honest.** With coordinates: `Open in Apple Maps ↗` (precise). Without (today, always): `Search in Maps ↗`, a name-based search URL, whose label says what it is. It sits in the footer in ink with an `--edge` underline. It is a product choice whether to offer it at all, given that this owner's habitual pickup is one address they know; I'd keep it because it costs one line and the first time at a *new* locker is when you want it.
+- **Maps link only with coordinates.** *(Rev 3: the name-based "Search in Maps" fallback I specified in revision 2 is struck. Alex was right: a link built from a name alone is a guess, and a guess is worse than no link. It is not implemented, and `src/web/views/index.ts` says why.)* With coordinates: `Open in Apple Maps ↗`, in the footer in ink with an `--edge` underline. Today no carrier supplies them, so today there is never a link.
 - **Copy works.** The tracking number and the location are lifted above the stretched link (`position: relative; z-index: 1`), so they can be selected and `user-select: all` works (Alex S5). The *name* is the stretched link: clicking anywhere else on a parcel line opens the parcel. The header is not a link.
 - **When there is no parseable location** (a Packeta pickup event with no place text), the parcel does **not** get a card: it degrades to a compact Act row with the solid badge (§6.2). A blue card with nothing in it is the worst possible outcome.
 - **States:** rest; a parcel line hovers to `--hover`; focus-visible ring is drawn *inside* the line (`outline-offset: -2px`) because the card clips with `overflow: hidden`. No disabled or selected states.
@@ -500,6 +501,7 @@ The class name derives from the status with `status.replace(/_/g,'-')` as today;
 **Runs.** A *run* is consecutive rows with the same status. In #34, newest first: `delivered`, `unknown`, `ready_for_pickup ×3`, `failed_attempt`, `out_for_delivery ×3`, `in_transit ×9`, `unknown ×5`.
 
 - **The head of a run is its newest row, the first one you meet reading down.** The head shows the glyph and the status word (13/600, in the status colour) above the carrier's sentence. The remaining rows of the run show a 4px dot on the rail and the sentence only. So the word always sits *above* the rows it labels.
+- **Rev 3: a run of two or more rows is joined by a 2px bar in its status colour**, running from the head's glyph to the last member and *through* any day heading in between. A row that is not part of the run above (an `unknown` row, such as DPD's "returned for expiry" directly under "Delivered", or the two `Integrovali sme Vaše údaje` rows under the `In transit` run) is on the plain 1px rail, so it visibly does not belong to it. One-row runs have no bar. Continuation and `unknown` rows share the dot, and the bar, not a second glyph, separates them. The paper-coloured backing behind a glyph is only for ring glyphs; behind a dot it masked the bar (found by rendering it).
 - **`unknown` runs have no head.** Their rows are dots and plain sentences. A stretch of them looks like what it is: a carrier narrating in prose.
 - **Coded `unknown` is not treated differently from uncoded `unknown`.** I'm dropping the word "Unrecognised". Alex showed it is not even consistent (`SPL` is `unknown` at Erftstadt and `in_transit` at Mörsdorf a day later); the code is a carrier identifier, not a diagnosis. **Where I part from his suggestion:** he proposes showing the code as a trailing mono token on those rows. I'm not putting codes on the rows. Twenty rows carrying `HUS · SPL · DEHDY` is visual noise on the one page that is already the longest, and the owner is not the person who maps codes. The code goes in the row's `title` attribute (hover) and stays in the raw responses. A *developer* who wants to notice unmapped codes needs a developer surface (a log line, or a Health note), not the owner's timeline.
 
@@ -757,7 +759,7 @@ One `<style>`; one stylesheet that can be read in a single sitting; components a
 5. **Date formatter by age, on full calendar date, in `Europe/Bratislava`** (§3.4), with the fixtures listed there (two of them are real rows in `attention.html`).
 6. **Pickup clocks** (§6.1): `Since <absolute>` + day count; `Collect by <absolute> · <relative>`; the urgency class. Needs **the time of the event that put the parcel into `ready_for_pickup`** (today probably `lastChangedAt`; to confirm).
 7. **Group by pickup location** (§6.1): key is the stored `pickup_name`; today that is the *whole* string (street and city columns are empty in the real data), so equal-string grouping works for Z-BOXes and not for variants.
-8. **Maps link:** coordinates → `Open in Apple Maps`; otherwise a name search labelled `Search in Maps`; or none (product choice).
+8. **Maps link:** coordinates → `Open in Apple Maps`; otherwise none *(Rev 3: the name-search fallback is struck, §15)*.
 9. **Duplicate suppression** between the latest event and the pickup line (the card shows the place once, as the header).
 10. **Timeline: reverse the events** (`db/events.ts:69` returns oldest first) **with `id DESC` as the tie-break**; **run heads** (status differs from the *newer* neighbour); day headings in the display zone; carrier code in `title`.
 11. **Product question: the Attention page has no Dismiss.** Both items are Packeta e-mail verifications that can never become parcels; the page can never empty, so a nav count would be permanently lit. I would not ship the count until a Dismiss exists.
@@ -843,3 +845,27 @@ Format: what he said → what I did. **Accepted**, **Changed differently** (I to
 
 Headless Chrome, real strings from the copy of `data/parcels.db`: the real index; the six-pickup case (light, dark, 1440px and 2560px / 18px root); parcel #34 verbatim, 24 events, reversed with the id tie-break and with run heads (light and dark); the unclassified-row cases; the History excerpt with the real distribution; the real Health state; all ten glyphs at 16px and 40px (dark and light) including the redrawn `returned`. Measured: real index 622px; six-pickup 1308px (cards 344/199/206); #34 page 1475px; History excerpt 1026px; Health 698px.
 
+---
+
+## 15. Round 3 (after Alex's review of the build)
+
+Alex reviewed the running build (`docs/design-review-2.md`): good enough to ship, one must, seven cheap polish items, and all five of the §14 rejections upheld. Verified in a real browser at 375 and 1440 (not 2560 this round).
+
+**Must (done).** The lede ignored a parcel whose postcode the carrier rejected, so it could print `Nothing needs you.` above a `Postcode needed` row. The same class of bug, found by reading `core/poll.ts` instead of the page. I checked for other states that are both actionable and invisible to the lede and found two more, both fixed in the same clause (§5.2 item 5): **dormant** parcels (never polled again, status frozen) and an **overdue poller** (every status on the page may be stale). Tests pin each case and the all-clear itself, so it can regress in neither direction. Verified by serving a copy of the database with the postcode rejection constructed on it: `3 in flight. 1 needs a postcode.` directly above the warn row, and `3 in flight. Nothing needs you.` on an otherwise identical quiet copy. The real database was not written.
+
+**Polish taken.**
+1. *S1.* Day headings are no longer `aria-hidden`; a screen reader hears the date before the rows under it. Also from Alex's section 5: the `title` carrying a carrier code is on the sentence, not on the list item (it was giving each row the accessible name "carrier code DODEY").
+2. *S2.* Taken, but not with a second glyph: a 2px status-coloured bar joins the members of a run (§6.4). A hollow ring for `unknown` would collide with `pre_transit`'s ring, and "unknown = hollow" says something about the data I do not want to say.
+3. *S3.* The History date filters are labelled `Date from` / `to`; they filter archived rows by first-seen date, so "Delivered from" lied.
+4. *S4.* History shows the tracking number as a mono ink-3 token after any name that is not the number. Five rows named `Vinted` were indistinguishable.
+5. *S5.* The nav wraps instead of overflowing, and the three tables that can be wide scroll inside a focusable region. Measured at a real 375px viewport: no horizontal overflow on any of the eight pages. (A headless screenshot cannot show this; Chrome enforces a minimum window width.)
+6. *S6.* `:user-invalid` adds a 1px inset ring to the border change (effectively 2px), so it is no longer a hue-only cue. Verified by triggering it on `/add`.
+7. *S7.* The nav reserves its bold width on every item (`::after` with the label, hidden). Measured: the five link positions are identical to 0.1px on `/add`, `/history` and `/health`.
+
+**Declined, and why.**
+- **T3, drop the green mark from Health's `ok` rows.** I hold the position. Alex's point is that it inverts rule 1: six green discs, and the exception (`no data`) is the quietest row. But the lede and the nav dot carry the exception, and the rows are an inventory, not a to-do list: a calm column of identical marks is what makes the one that breaks the rhythm findable, and the word is always there. If the owner finds it noisy, the first thing to try is weight, not removal.
+- **T2, cap the one-column parcel page at 42rem.** Cosmetic misalignment of `Refresh this parcel` at one width; not worth a media-query exception to the frame rule in §4.2.
+- **T4, T5, T6, T7, T8.** `carrier says: …` is raw data kept on purpose; the empty carrier rows in the Median table are the honest "no data" for four of five carriers; `default` as a postcode placeholder is accurate (it *is* the default); no skip link for a five-item nav; `forced-colors` rules are irrelevant on macOS.
+- **Alex's section 5 on Maps.** Agreed: the name-search Maps fallback in §6.1 is not implemented, and should be struck from the spec. A link that is a guess is worse than no link.
+
+**Still not seen.** `failed_attempt`, `out_for_delivery`, a deadline row and an uncoded-prose row exist only in tests and in Alex's injected DOM, not in the live data. Light mode of the built pages was checked from computed styles on the rendered elements (the tokens match §2.2 exactly) but not looked at; the screenshot tool timed out on a backgrounded tab. `forced-colors`. A real failing carrier on the Health page.
