@@ -80,6 +80,17 @@ Setup, in this order:
 2. **Create a Gmail filter** for your shipping mail whose action is **Apply the label** `parcels`.
    Do not choose forwarding. Tick **Also apply filter to matching conversations**: labels apply
    retroactively, which back-fills your history on the first run.
+
+   **Include your e-shops in the filter, not only the carriers.** A filter that matches only carrier
+   domains (`packeta.sk`, `dpd.sk`, `gls-group.eu`, ...) never labels the shop's own "your order has been
+   dispatched" mail, and that mail is often the *first* notice of a parcel, days before the carrier
+   writes, and sometimes the only one. Add the shops you order from as `from:` terms (for example
+   `from:(packeta.sk OR dpd.sk OR gls-group.eu OR mtbiker.sk)`), or match on dispatch wording such as
+   `subject:(odoslan OR dispatched OR "číslo balíka")`. The app can now use that mail: when a sender is
+   not a carrier it looks for a **carrier named in the mail together with a labelled tracking number of
+   that carrier's shape** (for example `Číslo balíka: 1234567890` next to "GLS"). Both are required;
+   a mail that only names a carrier (an order confirmation saying the delivery method is GLS) goes to
+   needs-attention, never to a parcel.
 3. **Make the label visible to IMAP. This is the step that catches everyone.** Gmail hides labels
    from IMAP by default. Go to **Settings, Labels** and tick **Show in IMAP** for `parcels`.
    If you skip this the app connects fine, authenticates fine, and reports an empty folder.
@@ -219,7 +230,7 @@ node dist/cli.js probe <carrier> <number>
 | SPS | **Confirmed live** (2026-10-27). Nothing owed. |
 | Slovenská pošta | Owed: `events[]` field names; `localDate` carries no offset; `postOffice` appears under `p=1`. |
 | Packeta | Owed: `item` field names and `packetStatusId` values; whether `branchAddress` is absent for courier delivery. |
-| GLS | Owed: whether `rstt029` includes `history` or only `progressBar`; which `addresses[]` entry is the parcel shop (needs a captured `INPICKUP` record). |
+| GLS | `rstt028` **confirmed live** (2026-10-27, an `INTRANSIT` parcel): a *bare* object, not wrapped in `tuStatus[]` like `rstt029`; the adapter reads both. Real numbers are 10 digits. Owed: whether `rstt029` includes `history` or only `progressBar`; which `addresses[]` entry is the parcel shop (needs a captured `INPICKUP` record). |
 | DPD | Owed: the postcode-verified shape; diff of step 3 with and without `dataForVerification`. |
 
 ## Your data

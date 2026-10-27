@@ -9,8 +9,10 @@ export interface Extraction {
   number?: string
   merchant?: string
   /**
-   * `sender`: the carrier came from the sender's domain. `shape`: no known sender, but the number has
-   * a distinctive carrier-specific shape. `none`: nothing usable; the message goes to needs-attention.
+   * `sender`: the carrier came from the sender's domain. `shape`: no known sender, but the carrier
+   * and number agree: either the number has a distinctive carrier-specific shape, or (an e-shop's
+   * dispatch mail) the text names the carrier AND a labelled number of that carrier's shape sits beside
+   * it. `none`: nothing usable; the message goes to needs-attention.
    */
   confidence: 'sender' | 'shape' | 'none'
 }
@@ -51,6 +53,17 @@ const NUMBER: Record<CarrierId, RegExp> = {
 /** Shapes distinctive enough to trust without a sender hint. Bare digits (dpd, gls) are not. */
 const SHAPE_ONLY: readonly CarrierId[] = ['posta', 'packeta', 'sps']
 
+/**
+ * How a mail from a non-carrier (an e-shop) names a carrier whose numbers are bare digits. Only used
+ * together with a labelled number of that carrier's shape: a name alone proves nothing (an order
+ * confirmation says "GLS" for the chosen delivery method), which is why both signals are required.
+ * Packeta, SPS and Slovenska posta need no name here: their number shapes are distinctive by themselves.
+ */
+const CARRIER_NAME = {
+  gls: /(?<![\p{L}\d])GLS(?![\p{L}\d])/iu,
+  dpd: /(?<![\p{L}\d])DPD(?![\p{L}\d])/iu,
+} as const
+
 const MERCHANT_MAX = 80
 const MAX_TEXT = 400_000
 const MAX_HTML = 1_000_000
@@ -82,8 +95,42 @@ function glsNumber(haystack: string): string | undefined {
   return best && normalizeNumber(best.number)
 }
 
+/** Like `NUMBER`, but the digits must be a whole token: no letter or digit may touch either end. */
+const STANDALONE = {
+  gls: /(?<![\p{L}\d])\d{10,12}(?![\p{L}\d])/gu,
+  dpd: /(?<![\p{L}\d])\d{14}(?![\p{L}\d])/gu,
+} as const
+
+/** Words that mark a number as something other than a tracking number (the shop's own, an invoice, a phone). */
+const NOT_TRACKING = /objedn|order|fakt[uú]r|invoice|variabil|referenc|tel\b|telef|phone|mobil|ičo|dič|iban/i
+
 /**
- * Plain text from html, for mail that has no text part. mailparser only derives `text` from `html` for
+ * The tracking number a non-carrier mail prints for a bare-digit carrier (gls, dpd), or undefined.
+ * Stricter than `firstNumber`, because here nothing but the text vouches for the carrier: the number
+ * must be introduced by a "parcel number" style label (never by an order/phone/invoice one), must not
+ * be cut out of a longer alphanumeric token (a URL id, a message id), and must not look like a phone.
+ * Two different such numbers are ambiguous, which is refused rather than guessed.
+ */
+function labelledNumber(carrier: 'gls' | 'dpd', haystack: string): string | undefined {
+  const found = new Set<string>()
+  for (const m of haystack.matchAll(STANDALONE[carrier])) {
+    const before = haystack.slice(Math.max(0, m.index - 50), m.index)
+    const sentence = before.split(/[.!?\n\d]/).pop() ?? ''
+    if (!GLS_LABEL.test(before) || PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0]) || NOT_TRACKING.test(sentence)) continue
+    found.add(normalizeNumber(m[0]))
+  }
+  return found.size === 1 ? [...found][0] : undefined
+}
+
+/** Carriers the text names that also have a labelled number of their bare-digit shape beside it. */
+function namedBareNumbers(haystack: string): { c: CarrierId; n: string }[] {
+  return (['gls', 'dpd'] as const)
+    .filter(c => CARRIER_NAME[c].test(haystack))
+    .flatMap(c => { const n = labelledNumber(c, haystack); return n ? [{ c, n }] : [] })
+}
+
+/**
+ * Plain text from html that has no text part. mailparser only derives `text` from `html` for
  * some structures; a `multipart/mixed` html mail with an attachment (DPD's pickup-pass mails) gets none.
  * Good enough to find a number in prose; not a renderer.
  */
@@ -165,7 +212,10 @@ export async function extract(raw: Buffer): Promise<Extraction> {
     }
 
     // No hint from the sender: trust only a distinctive shape, and only if it is unambiguous.
-    const found = SHAPE_ONLY.flatMap(c => [...new Set((haystack.match(NUMBER[c]) ?? []).map(normalizeNumber))].map(n => ({ c, n })))
+    let found = SHAPE_ONLY.flatMap(c => [...new Set((haystack.match(NUMBER[c]) ?? []).map(normalizeNumber))].map(n => ({ c, n })))
+    // An e-shop's dispatch mail has no distinctive shape to go on, but it names the carrier and prints
+    // a labelled number of that carrier's bare-digit shape. Both signals, or nothing.
+    if (found.length === 0) found = namedBareNumbers(haystack)
     if (found.length !== 1) return { confidence: 'none' }
     const origin = wrapper ?? { from: envelope?.address, name: envelope?.name }
     return {

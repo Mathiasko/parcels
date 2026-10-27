@@ -190,10 +190,100 @@ describe('extract: no sender hint', () => {
     expect(e.merchant).toBe('Example Shop')   // the e-shop, from the sender display name
   })
 
-  test('an e-shop mail naming GLS with a bare 12-digit number is ambiguous: needs attention, not a guess', async () => {
-    const e = await extract(fx('synthetic-eshop-dispatch-gls'))
-    expect(e.confidence).toBe('none')
-    expect(e.number).toBeUndefined()
+  test('the real MTBIKER order confirmation names GLS but prints no tracking number: confidence none', async () => {
+    // It says "ODBERNE MIESTO GLS / ALZABOX" (the chosen delivery method) and carries a 12-digit phone number
+    // and a 10-digit id inside a URL token. Neither is a tracking number; a name alone must not make one up.
+    const e = await extract(fx('mtbiker-order-confirmation-names-gls'))
+    expect(e).toEqual({ confidence: 'none' })
+  })
+  describe('e-shop dispatch mail: a named carrier AND a labelled number of its shape, both required', () => {
+    const shop = 'MTBIKER shop <objednavky@mtbiker.sk>'
+
+    test('English dispatch mail naming GLS with a labelled 12-digit number -> shape, merchant from the sender', async () => {
+      const e = await extract(fx('synthetic-eshop-dispatch-gls'))
+      expect(e).toMatchObject({ carrier: 'gls', number: '000000000001', confidence: 'shape', merchant: 'Example Shop' })
+    })
+
+    test.each([
+      ['10 digits (the length of the first real GLS parcel)', '1234567890'],
+      ['11 digits', '12345678901'],
+      ['12 digits', '123456789012'],
+    ])('Slovak dispatch mail, GLS ParcelShop, %s', async (_, n) => {
+      const e = await extract(eml(shop, 'Objednávka č. 0000004 bola odoslaná',
+        `Tvoju objednávku sme odovzdali GLS ParcelShopu.\r\nČíslo balíka: ${n}\r\nSledovanie na gls-group.com.`))
+      expect(e).toMatchObject({ carrier: 'gls', number: n, confidence: 'shape', merchant: 'MTBIKER shop' })
+    })
+
+    test('the carrier may be named in the subject while the number is in the body', async () => {
+      const e = await extract(eml(shop, 'Objednávka odoslaná cez GLS', 'Sledovacie číslo: 1234567890'))
+      expect(e).toMatchObject({ carrier: 'gls', number: '1234567890', confidence: 'shape' })
+    })
+
+    test('DPD named with a labelled 14-digit number', async () => {
+      const e = await extract(eml(shop, 'Vaša zásielka je na ceste', 'Doručí DPD. Číslo balíka: 00000000000001'))
+      expect(e).toMatchObject({ carrier: 'dpd', number: '00000000000001', confidence: 'shape' })
+    })
+
+    test.each([
+      ['Packeta', 'Odoslané cez Packeta. Sledovanie: Z 000 0000 003', 'packeta', 'Z0000000003'],
+      ['Zásielkovňa', 'Odoslané cez Zásielkovňu. Číslo zásielky Z0000000004', 'packeta', 'Z0000000004'],
+      ['Slovenská pošta', 'Odoslané Slovenskou poštou, číslo RR000000001SK', 'posta', 'RR000000001SK'],
+      ['SPS', 'Odoslané cez SPS, číslo 7030000000000010', 'sps', '7030000000000010'],
+    ] as const)('%s: its own distinctive shape still works', async (_, body, carrier, number) => {
+      expect(await extract(eml(shop, 'Objednávka odoslaná', body))).toMatchObject({ carrier, number, confidence: 'shape' })
+    })
+
+    test('a carrier name alone (no number) -> none', async () => {
+      expect(await extract(eml(shop, 'Objednávka odoslaná cez GLS', 'Balík vám doručí GLS ParcelShop. Ďakujeme.')))
+        .toEqual({ confidence: 'none' })
+    })
+
+    test('a labelled number alone (no carrier named) -> none', async () => {
+      expect(await extract(eml(shop, 'Objednávka odoslaná', 'Číslo balíka: 1234567890'))).toEqual({ confidence: 'none' })
+    })
+
+    test('a carrier named and a bare number with NO tracking label -> none', async () => {
+      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Ďakujeme, 1234567890 je kód pre kupón.'))).toEqual({ confidence: 'none' })
+    })
+
+    test.each([
+      ['an order number', 'Číslo objednávky: 1234567890'],
+      ['an English order number', 'Order number: 1234567890'],
+      ['an invoice number', 'Číslo faktúry: 1234567890'],
+      ['a phone number', 'Telefónne číslo: 1234567890'],
+      ['a national-format phone number', 'Číslo balíka: 0900123456'],
+      ['a +421 phone number', 'Phone number: 421900123456'],
+    ])('a GLS-named mail whose only labelled number is %s -> none', async (_, line) => {
+      expect(await extract(eml(shop, 'Odoslané cez GLS', line))).toEqual({ confidence: 'none' })
+    })
+
+    test('a number cut out of a longer alphanumeric token is not taken', async () => {
+      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Číslo balíka: 5523b1793017928'))).toEqual({ confidence: 'none' })
+    })
+
+    test('9 and 13 digits are not a GLS number', async () => {
+      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Číslo balíka: 123456789'))).toEqual({ confidence: 'none' })
+      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Číslo balíka: 1234567890123'))).toEqual({ confidence: 'none' })
+    })
+
+    test('two different labelled numbers are ambiguous, not a guess', async () => {
+      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Číslo balíka: 1234567890\r\nČíslo balíka: 1234567891')))
+        .toEqual({ confidence: 'none' })
+    })
+
+    test('two carriers each named with their own labelled number are ambiguous -> none', async () => {
+      expect(await extract(eml(shop, 'Odoslané', 'Balík 1 cez GLS, číslo balíka: 1234567890\r\nBalík 2 cez DPD, číslo balíka: 00000000000001')))
+        .toEqual({ confidence: 'none' })
+    })
+
+    test('"GLS" inside another word is not the carrier', async () => {
+      expect(await extract(eml(shop, 'Odoslané', 'Angels and OGLS. Číslo balíka: 1234567890'))).toEqual({ confidence: 'none' })
+    })
+
+    test('a known carrier sender is unaffected: it still goes through the sender path', async () => {
+      expect(await extract(eml('noreply@gls-group.eu', 'Your parcel', 'Parcel number: 1234567890')))
+        .toMatchObject({ carrier: 'gls', confidence: 'sender' })
+    })
   })
 
   test('a newsletter with number-like strings but no carrier yields confidence none', async () => {
@@ -302,6 +392,14 @@ describe('ingestMessages', () => {
     expect(findParcel(db, 'packeta', 'Z0000000005')!.merchant).toBe('Example Shop')
   })
 
+  test('an e-shop dispatch mail naming GLS creates a gls parcel, labelled with the shop, the first notice of it', async () => {
+    const { db, deps } = setup([mail(1, 'synthetic-eshop-dispatch-gls', 1)])
+    const r = await ingestMessages(db, deps)
+    expect(r).toMatchObject({ read: 1, created: 1, needsAttention: 0 })
+    expect(findParcel(db, 'gls', '000000000001')).toMatchObject({ source: 'email', merchant: 'Example Shop', postalCode: '81101' })
+    expect(listUnparsedMessages(db)).toEqual([])
+  })
+
   test('the Packeta app-verification mail lands in needs-attention and creates NO parcel', async () => {
     const { db, deps } = setup([mail(1, 'packeta-app-verification', 2)])
     const r = await ingestMessages(db, deps)
@@ -315,7 +413,7 @@ describe('ingestMessages', () => {
 
   test('unparsed mail is recorded with parsed_ok = 0 and never dropped', async () => {
     const { db, deps } = setup([
-      mail(1, 'synthetic-newsletter-number-like', 1), mail(2, 'synthetic-no-number', 1), mail(3, 'synthetic-eshop-dispatch-gls', 1),
+      mail(1, 'synthetic-newsletter-number-like', 1), mail(2, 'synthetic-no-number', 1), mail(3, 'mtbiker-order-confirmation-names-gls', 1),
     ])
     const r = await ingestMessages(db, deps)
     expect(r).toMatchObject({ read: 3, created: 0, needsAttention: 3 })
