@@ -90,12 +90,34 @@ function runsPanel(runs: PollRun[], ctx: PageCtx): Html {
 <td class="did">${r.error ?? r.summary ?? (r.finishedAt ? 'nothing to report' : 'still going')}</td></tr>`)}</tbody></table>`)}`
 }
 
+/**
+ * The way a non-technical user reports a fault.
+ *
+ * The button is the whole feature: one press gathers the diagnostics (see core/support.ts) and prints
+ * them here, in a block that one click selects whole (`.sel`), with a download of the same bytes beside
+ * it. There is no clipboard button because there cannot be one - the CSP ships no JavaScript - so
+ * "select it and copy it" has to be made easy by the markup instead of done for them by a script.
+ *
+ * The bundle is shown rather than merely offered, and the link to the file appears only once it has
+ * been shown, because the person pressing this is about to send a file about their own mailbox to
+ * somebody else: they get to read it first, in full, before there is anything to send.
+ */
+function supportPanel(bundle: string | undefined): Html {
+  return html`<h2>Support</h2>
+<p class="meta">If something here looks wrong, this gathers what the author needs to work out why: the versions, whether the background jobs are loaded, the counts, and the end of the logs. Your parcels themselves are left out — no tracking numbers, parcel names, shops, addresses, locker codes, mail subjects or senders, and never your mail address or your App Password. You can read the whole file below before you send it.</p>
+<form method="post" action="/support"><button>Gather support bundle</button></form>${bundle === undefined ? '' : html`
+<p>Select the text below and copy it, or <a href="/support.txt">download it as a file</a>, and send it to whoever is helping you.</p>
+<pre class="sel bundle" id="support-bundle">${bundle}</pre>`}`
+}
+
 export function healthPage(
   rows: HealthRow[], ingest: { configured: boolean; status?: IngestStatus }, poller: PollerStatus, ctx: PageCtx,
   /** `0.1.0 (0db9a83)`, or `unknown`. Resolved once at startup; see core/version.ts. */
   version: string,
   /** The activity log, newest first. Empty (and absent for a caller that has none) is a stated fact, not a gap. */
   runs: PollRun[] = [],
+  /** The support bundle, when one has just been gathered. Absent on a plain view of the page. */
+  support?: string,
 ): Html {
   const byCarrier = new Map(rows.map(r => [r.carrier, r]))
   const ids = Object.keys(CARRIER_NAME) as CarrierId[]
@@ -132,5 +154,6 @@ ${scroller('Carrier and system health', html`<table class="board"><thead><tr><th
 <td>${ing?.lastOkAt ? formatDateTime(ing.lastOkAt, ctx.now) : 'never'}</td>${errCell(ing?.lastErrorAt, ing?.lastError)}</tr>` : ''}</tbody></table>`)}${
   poller.overdue ? html`<p class="meta">No poll has completed for over 2 hours of the 07:00-21:00 day. Parcels are not being updated: check that the launchd poller agent is loaded and that the Node path in its plist still exists.</p>` : ''}
 ${runsPanel(runs, ctx)}
+${supportPanel(support)}
 <p class="meta" id="version">Version ${version}</p>`, ctx)
 }

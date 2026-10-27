@@ -37,6 +37,9 @@ import { addPage } from './views/add.js'
 import { attentionPage, type AttentionError } from './views/attention.js'
 import { healthPage } from './views/health.js'
 import { pollerStatus } from '../core/pollwatch.js'
+import {
+  buildSupportBundle, supportBundleFilename, type LaunchdReport, type SupportEnv,
+} from '../core/support.js'
 import { appVersion } from '../core/version.js'
 import { historyPage } from './views/history.js'
 import { indexPage, type RefreshNote } from './views/index.js'
@@ -72,6 +75,12 @@ export interface WebDeps {
    * core/version.ts); injected by tests, which must not depend on the commit they happen to run at.
    */
   version?: string
+  /**
+   * The parts of the support bundle that cannot be read from the database: the machine, the launchd
+   * agents, and the directory holding the logs and the mail. Injected so a test never spawns
+   * `launchctl`, never depends on the host it runs on, and never reads the author's own `data/`.
+   */
+  support?: { env?: SupportEnv; launchd?: LaunchdReport; dataDir?: string }
 }
 
 /**
@@ -309,16 +318,47 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     return send(reply, historyPage(parcels, deliveryStats(db), filters, ctx()))
   })
 
-  app.get('/health', async (_req, reply) => {
+  const health = (reply: FastifyReply, support?: string) => {
     const c = ctx()
     // Reaped here too, not only on the pages that wait for a run: this is the page somebody opens to ask
     // whether the app is working, and a run abandoned by a killed process must read as failed on it.
     reapStaleRuns(db, c.now)
     return send(reply, healthPage(
       c.health, { configured: config.imap !== undefined, status: getIngestStatus(db) },
-      pollerStatus(db, c.now), c, version, listRuns(db, RUNS_SHOWN),
+      pollerStatus(db, c.now), c, version, listRuns(db, RUNS_SHOWN), support,
     ))
+  }
+
+  app.get('/health', async (_req, reply) => health(reply))
+
+  /**
+   * The support bundle, generated fresh on every request. `config` is read from the holder rather than
+   * from `deps`, so a bundle gathered after a settings save describes what the server is running on now.
+   *
+   * One generator for both routes (see core/support.ts): the block the sender reads and the file he
+   * attaches are the same bytes, give or take the "Generated" line if he waits between the two.
+   */
+  const supportBundle = (): string => buildSupportBundle({
+    db, config, version, now: now(),
+    env: deps.support?.env, launchd: deps.support?.launchd, dataDir: deps.support?.dataDir,
   })
+
+  /**
+   * POST, not GET: it spawns `launchctl` and walks the mail directory, which a prefetch or a reload of
+   * /health must not do. It answers with the Health page carrying the bundle rather than with a redirect,
+   * because the bundle is not stored anywhere - there is nothing for a redirect to come back and read.
+   */
+  app.post('/support', async (_req, reply) => health(reply, supportBundle()))
+
+  /**
+   * The same bundle as a file. This is the only way to offer a download without JavaScript, and the
+   * only reason it is a separate route: `Content-Disposition` cannot be set on a page that also has to
+   * show the thing. The clipboard route is the `.sel` block on /health; see views/health.ts.
+   */
+  app.get('/support.txt', async (_req, reply) => reply.code(200)
+    .type('text/plain; charset=utf-8')
+    .header('content-disposition', `attachment; filename="${supportBundleFilename(now())}"`)
+    .send(supportBundle()))
 
   const attention = (reply: FastifyReply, error?: AttentionError, status = 200) =>
     send(reply, attentionPage(

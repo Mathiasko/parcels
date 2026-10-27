@@ -242,6 +242,11 @@ summary{font-size:.8125rem;color:var(--ink-3);cursor:pointer;padding:.25rem 0}
 .bulk form{margin:0}
 .bulk .who{font-size:.8125rem;color:var(--ink-2);overflow-wrap:anywhere}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:20rem;overflow:auto;background:var(--surface);border:1px solid var(--rule-s);border-radius:8px;padding:.75rem;margin:.25rem 0 .75rem;font:400 .75rem/1.5 ui-monospace,"SF Mono",Menlo,monospace}
+/* The support bundle. Its columns are what make it readable, so it is the one block on the site that
+   must NOT be re-wrapped: it scrolls sideways instead. Taller than a raw response because the whole
+   point is that the person sending it can read it, and .sel makes selecting all of it one click -
+   there is no clipboard button because there is no JavaScript to write one with. */
+pre.bundle{white-space:pre;overflow-wrap:normal;max-height:30rem}
 
 @media(max-width:40rem){.card-h,.pk-h{flex-direction:column}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}.spin{animation:none}}
