@@ -120,8 +120,6 @@ export function statusIndicator(status: CanonicalStatus): Html {
     : html`<span class="b ${r.kind} t-${r.tone}">${glyph(status)}${word}</span>`
 }
 
-/** The register's bare badge (glyph and word), used on rows and cards where the container matters. */
-export const isBadge = (s: CanonicalStatus): boolean => isKnown(s) && REGISTER[s].kind !== 'plain'
 
 /** The 4px dot and a muted word, for "No updates yet" and "Archived". No hue: the absence of a mark. */
 export function quietIndicator(word: string): Html {
