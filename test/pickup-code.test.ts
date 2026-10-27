@@ -27,8 +27,8 @@ function mail(parcelId: number, path: string, receivedAt = '2026-10-26T17:19:00Z
 // --- extraction ---------------------------------------------------------------------------------
 
 test('reads the code out of the pickup email, digits spaced one per cell', () => {
-  expect(extractPickupCode('Kód pre otvorenie schránky 7 9 9 8 7 4 Miesto, kde je vaša zásielka uložená'))
-    .toBe('123456')
+  expect(extractPickupCode('Kód pre otvorenie schránky 9 8 7 6 5 4 Miesto, kde je vaša zásielka uložená'))
+    .toBe('987654')
 })
 
 test('a leading zero survives, because the code is text and not a number', () => {
@@ -72,9 +72,9 @@ test('a found code is never looked for again; a missing one is only re-checked w
   expect(needsPickupCodeCheck(db, id, 2)).toBe(false)         // same mail: do not re-read from disk
   expect(needsPickupCodeCheck(db, id, 3)).toBe(true)          // a third mail arrived: worth another look
 
-  recordPickupCode(db, id, '123456', 3, NOW)
+  recordPickupCode(db, id, '405162', 3, NOW)
   expect(needsPickupCodeCheck(db, id, 9)).toBe(false)         // found is found: a locker code does not change
-  expect(getPickupCode(db, id)).toBe('123456')
+  expect(getPickupCode(db, id)).toBe('405162')
 })
 
 test('re-recording the same parcel keeps the code a later scan did not find again', () => {
@@ -94,7 +94,7 @@ test('a leading-zero code round-trips through the database unchanged', () => {
 
 test('deleting a parcel takes its code with it and leaves no dangling reference', () => {
   const id = readyParcel()
-  recordPickupCode(db, id, '123456', 1, NOW)
+  recordPickupCode(db, id, '405162', 1, NOW)
   deleteParcel(db, id)
   expect(db.prepare('SELECT count(*) AS n FROM pickup_codes').get()).toEqual({ n: 0 })
   expect(db.pragma('foreign_key_check')).toEqual([])
@@ -150,14 +150,14 @@ test('a parcel that is not waiting for collection is never scanned', async () =>
 test('a second poll does not re-read mail it has already scanned', async () => {
   const id = readyParcel()
   mail(id, '/mail/1.eml')
-  const body = Buffer.from('Subject: x\r\n\r\nKód pre otvorenie schránky 7 9 9 8 7 4 Miesto')
+  const body = Buffer.from('Subject: x\r\n\r\nKód pre otvorenie schránky 9 8 7 6 5 4 Miesto')
   let reads = 0
   const read = () => { reads++; return body }
   await runPickupCodes({ db, now: NOW, readMail: read })
   expect(reads).toBe(1)
   await runPickupCodes({ db, now: NOW, readMail: read })
   expect(reads).toBe(1)   // nothing new arrived, so nothing was opened again
-  expect(getPickupCode(db, id)).toBe('123456')
+  expect(getPickupCode(db, id)).toBe('987654')
 })
 
 // --- what the reader sees -----------------------------------------------------------------------
@@ -191,22 +191,22 @@ test('a parcel no longer waiting does not show a code it once had', async () => 
   const { buildServer } = await import('../src/web/server.js')
   const { config } = await import('./poll-helpers.js')
   const id = readyParcel()
-  recordPickupCode(db, id, '123456', 1, NOW)
+  recordPickupCode(db, id, '405162', 1, NOW)
   updateParcelState(db, id, { status: 'delivered' })
   const body = (await buildServer({ db, config }).inject({ method: 'GET', url: `/parcel/${id}` })).body
-  expect(body).not.toContain('123456')
+  expect(body).not.toContain('405162')
 })
 
 test('the code never reaches a notification: banners show on the lock screen', async () => {
   const { buildNotifications } = await import('../src/notify/rules.js')
   const id = readyParcel()
-  recordPickupCode(db, id, '123456', 1, NOW)
+  recordPickupCode(db, id, '405162', 1, NOW)
   const notes = buildNotifications(db, [{ parcelId: id, status: 'ready_for_pickup' }] as never, NOW, 8787)
   expect(notes.length).toBeGreaterThan(0)   // a pointless assertion if nothing was built
-  for (const n of notes) expect(`${n.title} ${n.message} ${n.url ?? ''}`).not.toContain('123456')
+  for (const n of notes) expect(`${n.title} ${n.message} ${n.url ?? ''}`).not.toContain('405162')
 })
 
 test('the digits are found when the mail separates them with newlines, one per table cell', () => {
   // How the real .eml renders: this is what made a live poll find nothing while the unit tests passed.
-  expect(extractPickupCode('Kód pre otvorenie schránky\n7\n9\n9\n8\n7\n4\nMiesto, kde je vaša zásielka')).toBe('123456')
+  expect(extractPickupCode('Kód pre otvorenie schránky\n9\n8\n7\n6\n5\n4\nMiesto, kde je vaša zásielka')).toBe('987654')
 })
