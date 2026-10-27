@@ -74,6 +74,15 @@ check "setup.sh never reads a credential"                  bash -c "! grep -nE '
 check "setup.sh prompts for nothing but a postcode and y/n" bash -c "! grep -nE '^[^#]*read -r' '$SETUP' | grep -qvE 'postcode|answer'"
 check "setup.sh points at /settings for the mail set-up"   grep -q '/settings' "$SETUP"
 
+# What it may install, and what it must only ever suggest. Homebrew creates /opt/homebrew, edits a
+# shell profile and asks for sudo; a script someone got from a friend must not do that unprompted.
+check "setup.sh never executes the Homebrew installer"    bash -c "! grep -nE 'install\.sh' '$SETUP' | grep -qvE '^[0-9]+: *(#|echo)'"
+check "setup.sh never curl-pipes anything into a shell"   bash -c "! grep -nE 'curl[^|]*\|[[:space:]]*(ba)?sh' '$SETUP' | grep -qvE '^[0-9]+: *(#|echo)'"
+check "setup.sh offers Node only via brew install"        grep -q 'brew install node' "$SETUP"
+check "setup.sh offers terminal-notifier"                 grep -q 'terminal-notifier' "$SETUP"
+check "setup.sh says how to get git when it is absent"    grep -q 'xcode-select --install' "$SETUP"
+check "a missing optional never stops the run"            bash -c "! grep -nE 'exit 1' '$SETUP' | grep -qiE 'terminal-notifier|git '"
+
 BAD="$TMP/bad.json"
 check "setup.sh refuses a postcode that is not five digits" bash -c "! PARCELS_CONFIG='$BAD' PARCELS_POSTCODE=not-a-code '$SETUP' --config-only </dev/null"
 check "and writes nothing when it refuses"                  test ! -e "$BAD"

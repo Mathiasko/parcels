@@ -16,7 +16,8 @@
 # PARCELS_CONFIG    which config file to create (default <repo>/config.json). Used by the test.
 # PARCELS_POSTCODE  answers the postcode prompt, for a non-interactive run.
 # PARCELS_NODE      which node to use; see scripts/lib/node.sh.
-# PARCELS_INSTALL_NODE  1 or 0 to answer the "install Node with Homebrew?" prompt without a tty.
+# PARCELS_INSTALL_NODE    1 or 0 to answer the "install Node with Homebrew?" prompt without a tty.
+# PARCELS_INSTALL_EXTRAS  1 or 0 to answer the optional-extras prompts the same way.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -85,6 +86,46 @@ offer_node() {
   require_node scripts/setup.sh
 }
 offer_node
+
+# --- 1c. the optional extras -------------------------------------------------------------------------
+# Everything below is a nicety, never a blocker: the app runs without any of it. Each is reported
+# whether or not it is here, so one run tells you the whole picture instead of one thing at a time.
+
+# git is not needed to RUN the app, only to update it. Someone who unpacked a tarball can still use
+# everything; they just cannot `git pull`, and update.sh says so plainly rather than failing oddly.
+if command -v git >/dev/null 2>&1; then
+  echo "git $(git --version 2>/dev/null | awk '{print $3}')"
+else
+  echo "git is not installed. The app runs fine; scripts/update.sh cannot pull updates without it."
+  echo "    Install with:  xcode-select --install      (or, with Homebrew:  brew install git)"
+fi
+
+# PARCELS_INSTALL_EXTRAS=1 answers these prompts yes, for a non-interactive run; =0 answers no.
+offer_brew_formula() { # offer_brew_formula <command> <formula> <what it buys you>
+  local cmd="$1" formula="$2" why="$3" answer
+  if command -v "$cmd" >/dev/null 2>&1; then echo "$cmd is installed"; return 0; fi
+  echo "$cmd is not installed. $why"
+  if ! command -v brew >/dev/null 2>&1; then
+    echo "    Homebrew would install it. Homebrew itself is a system-wide change this script will not"
+    echo "    make for you; if you want it:"
+    echo "      /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+    echo "      brew install $formula"
+    return 0
+  fi
+  answer="${PARCELS_INSTALL_EXTRAS:-}"
+  if [ -z "$answer" ]; then
+    if [ -t 0 ]; then printf 'Install it with "brew install %s"? [y/N] ' "$formula"; read -r answer || answer=n
+    else answer=n; fi
+  fi
+  case "$answer" in
+    1|y|Y|yes|YES)
+      brew install "$formula" || echo "    brew install $formula failed; carrying on without it." ;;
+    *) echo "    Skipped. Install it later with:  brew install $formula" ;;
+  esac
+}
+
+offer_brew_formula terminal-notifier terminal-notifier \
+  "Without it, notifications fall back to osascript: they appear, but with no app identity and no click-through."
 
 # --- 2. dependencies --------------------------------------------------------------------------------
 if [ "$config_only" = 0 ]; then

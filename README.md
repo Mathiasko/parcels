@@ -12,41 +12,62 @@ The full design and its rationale are in
 
 ## Install
 
-Prerequisites: macOS, and Node 24 or newer. Homebrew and git are not strictly required, but with
-both present this is the whole install. `setup.sh` checks Node itself and, when Homebrew is
-available, offers to run `brew install node` for you; it will not install Homebrew unasked, because
-that is a system-wide change (a new `/opt/homebrew`, an edited shell profile, sudo) that an
-installer has no business making on its own. `better-sqlite3` ships prebuilt macOS binaries, so
-there is nothing to compile and no Xcode toolchain to install.
-
-Answer the Node prompt without a terminal by setting `PARCELS_INSTALL_NODE=1`.
-
 On a fresh Mac, from a real Terminal window:
 
 ```sh
-git clone git@github.com:Mathiasko/parcels.git && cd parcels
+git clone https://github.com/Mathiasko/parcels.git && cd parcels
 scripts/setup.sh
 ```
 
-That checks the machine (macOS, Node 24 or newer with npm beside it), installs the dependencies,
-writes a `config.json` if there is none — it asks only for your postcode — and installs the two
-launchd agents, building `dist/` on the way. It is **idempotent and needs no sudo**: it never
-overwrites an existing `config.json`, so re-running it is safe. `scripts/setup.sh --config-only`
-writes just the config and stops.
+`setup.sh` is idempotent, needs **no sudo**, and never overwrites an existing `config.json`, so
+re-running it is always safe. `scripts/setup.sh --config-only` writes just the config and stops.
 
-`better-sqlite3` ships prebuilt macOS binaries, so there is nothing to compile and no Xcode needed.
+### What the script checks, and what it will install
 
-**It does not ask for your Gmail App Password**, on purpose. Three things are left for you, and the
-script prints them when it finishes:
+| | |
+|---|---|
+| **macOS** | Required. The scheduler is launchd and the notifications are macOS notifications; there is no other-platform path. Refuses to continue. |
+| **Node 24+, with npm** | The only thing the app needs that macOS does not ship. If it is missing or too old and Homebrew is present, the script **offers to run `brew install node`**. |
+| **git** | Reported, never required. The app runs fine without it; only `scripts/update.sh` needs it, to pull. Install with `xcode-select --install`, or `brew install git`. |
+| **terminal-notifier** | Optional. The script **offers to install it** via Homebrew. Without it, notifications fall back to `osascript`: they appear, but with no app identity and no click-through. |
+| **Homebrew** | Reported, never installed. See below. |
+| **A compiler** | Not needed. `better-sqlite3` ships prebuilt macOS binaries for Intel and Apple Silicon. |
 
-1. **Gmail.** Open `/settings` on the dashboard, paste an App Password
-   (<https://myaccount.google.com/apppasswords>), Save, then press **Test mail connection** — it
-   proves the credentials in one line instead of failing silently three polls later.
-2. **The filter.** Import [`gmail-filter.xml`](gmail-filter.xml) into Gmail and tick *Also apply
-   filter to matching conversations*. See [Mail ingest](#mail-ingest-parcels-that-add-themselves),
-   step 2: import does **not** label mail that has already arrived unless you tick that box.
-3. **Optional.** `sudo scripts/install-hostname.sh` for <http://parcels.local> instead of a port
-   number, and the one-time macOS approval that upgrades notifications to `terminal-notifier`.
+Both prompts can be answered without a terminal: `PARCELS_INSTALL_NODE=1` and
+`PARCELS_INSTALL_EXTRAS=1`.
+
+**The script will not install Homebrew**, and this is deliberate rather than an omission. Installing
+it creates `/opt/homebrew`, edits your shell profile and asks for sudo — a system-wide change that an
+installer someone handed you has no business making on its own. It prints the command instead:
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+A test asserts the script only ever *prints* that line, never runs it.
+
+### What no script can do for you
+
+These need a browser, a GUI prompt or a password, and the script lists them when it finishes.
+
+1. **Gmail credentials.** On the dashboard open `/settings`, paste an App Password from
+   <https://myaccount.google.com/apppasswords> (2-step verification must be on first), Save, then
+   press **Test mail connection**. That answer is the only thing that proves ingest works — a wrong
+   password or a label hidden from IMAP otherwise looks exactly like "no new mail".
+2. **The Gmail filter.** Import [`gmail-filter.xml`](gmail-filter.xml) (Settings → Filters and
+   Blocked Addresses → Import filters) and tick **Also apply filter to matching conversations**:
+   import alone labels nothing that has already arrived. Then Settings → Labels → tick **Show in
+   IMAP** for the `parcels` label. Add your own shops' domains to the filter while you are there.
+3. **The hostname** (optional), which edits `/etc/hosts` and `pf` and so needs a password:
+
+   ```sh
+   sudo scripts/install-hostname.sh
+   ```
+
+   That gives you <http://parcels.local> instead of a port number.
+4. **Notification approval** (optional, one-time). From a real Terminal window run
+   `terminal-notifier -title x -message y` and approve the macOS prompt. Check which mechanism is
+   live with `node dist/cli.js notify-test`.
 
 Updating an installed copy:
 
