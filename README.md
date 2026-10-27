@@ -227,8 +227,8 @@ Setup, in this order:
 
    The filter deliberately has **no "never send it to Spam" action**. "Your parcel is waiting" is one
    of the most-copied phishing templates in this region, and exempting a query this broad from the
-   spam filter would be a bad trade. Mail this labels that is not a parcel costs one click on
-   `/attention`.
+   spam filter would be a bad trade. Mail this labels that is not a parcel is stored and then left
+   alone; see [What reaches the attention page](#what-reaches-the-attention-page).
 3. **Make the label visible to IMAP. This is the step that catches everyone.** Gmail hides labels
    from IMAP by default. Go to **Settings, Labels** and tick **Show in IMAP** for `parcels`.
    If you skip this the app connects fine, authenticates fine, and reports an empty folder — which
@@ -243,10 +243,12 @@ Notes on behaviour:
 - The first run over a long label does not poll dead parcels: a parcel whose newest mail is older
   than 30 days is created already archived (never polled, status left `unknown`) and shows up under
   History.
-- Mail that cannot be parsed, or that names several different numbers, is never dropped. It lands
-  on the **Needs attention** page (`/attention`), where one click assigns a carrier and number.
-  Mail that is simply junk (a verification notice with no tracking number in it) can be **dismissed**
-  instead, one at a time or in bulk: see [Clearing the attention queue](#clearing-the-attention-queue).
+- Mail that cannot be parsed, or that names several different numbers, is never dropped. If anything
+  in it says it is about a parcel it lands on the **Needs attention** page (`/attention`), where one
+  click assigns a carrier and number; if nothing does, it is stored and ignored. See
+  [What reaches the attention page](#what-reaches-the-attention-page). Mail on the page that is
+  simply junk (a verification notice with no tracking number in it) can be **dismissed**, one at a
+  time or in bulk: see [Clearing the attention queue](#clearing-the-attention-queue).
 - Deleting a parcel (`/parcel/:id`) removes it with its events, stored carrier responses and pickup
   reminder, but **not** the emails it came from: those are unlinked and marked parsed. The ingest
   dedupes by Message-ID, so deleting the message rows would let the next poll recreate the parcel.
@@ -301,6 +303,81 @@ To force a full re-read (there is no command for it; this is not something that 
 sqlite3 data/parcels.db "DELETE FROM imap_state"
 ```
 
+### What reaches the attention page
+
+A message reaches `/attention` only when there is **evidence that it is about a parcel**. Everything
+else is stored and ignored: no row is deleted, nothing is dropped, only the *visibility* changes.
+
+This is not a nicety. **Gmail labels conversations, not messages.** A shop sends one thread per
+order and only one message in it is about shipping, so one match drags the whole thread onto the
+label:
+
+```
+Alza order 562638869                 MTBIKER order 1410452
+  "Už to chystáme"                     "Objednávka ... pripravená na prevzatie"   <- real
+  "Pripravené v AlzaBoxe"   <- real    "Objednávka č. 1410452"
+  "Ďakujeme za objednávku"             "Daňový doklad k platbe"
+  "Informácie o objednávke"            "Faktúra k objednávke"
+```
+
+No Gmail query can prevent that — it is a property of how labels work — and three rounds of
+tightening the filter did not: the last one still delivered 56 of 58 new messages to the attention
+page. An invoice on a page that exists to surface real problems is not a problem to solve, it is a
+question the user cannot answer.
+
+Any **one** of these is enough to make a message a question (`parcelEvidence` in
+`src/ingest/extract.ts` is the single definition; the page, the poll summary and the tests all read
+it):
+
+| Signal | Example |
+| --- | --- |
+| A known **carrier sender** | anything from `packeta.sk`, `dpd.sk`, `gls-group.eu`, ... |
+| A **carrier named** in the subject or body | "Doručí GLS", "Odoslané cez Packeta" |
+| A **distinctive tracking-number shape**, or a bare-digit number *labelled* as a parcel number | `Z 000 0000 001`, `EB629066058SK`, `JJD...`, `Číslo zásielky: 1930144672` |
+| **Shipping wording in the SUBJECT** | "Objednávka ... odoslaná", "Pripravené v AlzaBoxe", "Your parcel is on its way" |
+| The message **could not be read at all** | empty or malformed bytes |
+
+Two deliberate exclusions, each of which would otherwise undo the whole thing:
+
+- **Bare digits alone are not a tracking number.** `\d{10,12}` is also the shape of Alza's own order
+  numbers (`1052281846`), of a variable symbol and of a phone number. A bare-digit number counts
+  only when a "parcel number" style label introduces it, or when the mail also names the carrier.
+- **Shipping wording counts in the subject only, never in the body.** Alza prints "Doprava -
+  AlzaBox" and "môžete vyzdvihnúť" in the footer of every mail it sends, invoices included.
+
+The bias is one-sided on purpose: a false ignore hides a real parcel, a false show costs one dismiss
+click. So anything unreadable is shown, an over-size message (which has no body to judge) is shown,
+and all of the signals are ORs with no veto anywhere.
+
+**Why a message was ignored is recorded**, so "where did my email go" is answerable without the
+mailbox:
+
+```sh
+sqlite3 -readonly data/parcels.db \
+  "SELECT received_at, from_addr, subject, ignored, parse_note FROM messages
+   WHERE subject LIKE '%faktúra%' ORDER BY id DESC LIMIT 20"
+```
+
+`ignored = 1` with `parse_note` "ignored: no sign of a parcel in this message" means it was never a
+question. `ignored = 0` with "no tracking number found in this message (**it names a carrier**)"
+means it was one, and says which signal made it so.
+
+An ignored message is **still reprocessed**. That is the difference between ignoring and dismissing:
+`reprocess` selects on `parsed_ok = 0 AND parcel_id IS NULL` and does not look at `ignored`, so an
+ignored message comes straight back as a parcel the first time a parser can read it, while a
+dismissed one (`parsed_ok = 1`) never does. Ignoring is a decision about what to *show*, taken with
+today's parser — not a decision about the message.
+
+The poll log says how many were ignored, so the number is visible rather than silently swallowed:
+
+```
+polled 3 parcel(s), 1 new event(s), mail: 58 new, 2 parcel(s) created, 1 need attention, 55 ignored (no sign of a parcel)
+```
+
+Upgrading an existing database leaves every stored message at `ignored = 0`, so nothing disappears
+from the page behind your back. Run `node dist/cli.js reprocess` once to apply the rule to the mail
+already on disk.
+
 ### Clearing the attention queue
 
 `/attention` holds the mail that yielded no parcel, and on a long-lived label that is mostly
@@ -318,7 +395,9 @@ page listed**: mail ingested between the page being drawn and the button being p
 row id and survives.
 
 Dismissing is `parsed_ok = 1` with no parcel, which takes a message off the page and out of every
-future `reprocess` run. The row itself is **never deleted** — it is the Message-ID dedupe key, and
+future `reprocess` run. (An *ignored* message is the other thing entirely: `parsed_ok = 0` with
+`ignored = 1`, off the page and out of both dismissals but still reprocessed. A bulk "Dismiss all N"
+clears exactly the N you were looking at and never touches mail you were never shown.) The row itself is **never deleted** — it is the Message-ID dedupe key, and
 without it the next mail check would ingest the same junk again — but the stored `data/mail/<id>.eml`
 **is** deleted and `raw_path` cleared, because nothing will ever read it again. That is where the
 disk goes: on the author's machine 132 MB of the 139 MB in `data/mail` belonged to mail waiting on
@@ -568,7 +647,7 @@ running server predates that change** — `npm run build`, then restart the web 
 | `/` | Parcels in flight, with a refresh-now button. |
 | `/parcel/:id` | Full event timeline, pickup location and deadline, editable label and postcode, and delete (behind a disclosure, at the bottom). |
 | `/history` | Archived and delivered parcels; filter by carrier, text, date. |
-| `/attention` | Unparsed mail awaiting a carrier and number, or a dismissal; dormant parcels. |
+| `/attention` | Unparsed mail that looks like a parcel, awaiting a carrier and number or a dismissal; dormant parcels. Mail with no sign of a parcel is stored but not listed — see [What reaches the attention page](#what-reaches-the-attention-page). |
 | `/health` | Per-carrier last-ok / last-error, ingest health, the recent-runs log, and the running version and commit. |
 | `/add` | Add a parcel by hand. |
 | `/settings` | The editable half of `config.json`, and the mail connection test. |
@@ -705,8 +784,9 @@ Everything lives under `data/` (gitignored):
   been read; see [Only the new mail is read](#only-the-new-mail-is-read)), and a few bookkeeping tables.
   Every parcel ever tracked stays there; archiving only hides it from the in-flight list.
 - `data/mail/` holds the raw `.eml` files, `0600` inside a `0700` directory. A dismissed message's
-  file is deleted, so this directory holds mail that became a parcel plus mail still waiting on
-  `/attention`.
+  file is deleted, so this directory holds mail that became a parcel, mail still waiting on
+  `/attention`, and ignored mail — whose copy is kept deliberately, because that is what lets
+  `reprocess` turn it into a parcel later.
 - `data/tiles/` holds cached OpenStreetMap map tiles, same `0600`/`0700` posture. Fetched during a
   poll, never when a page is viewed; see [Pickup point maps](#pickup-point-maps) for what leaves this
   machine and how to turn it off.

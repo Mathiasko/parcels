@@ -379,3 +379,44 @@ test('migration 3 does nothing on a clean database, and running it again changes
 
 const rows = (db: Database, sql: string, ...args: unknown[]): number =>
   (db.prepare(`SELECT COUNT(*) n FROM ${sql}`).get(...args as never[]) as { n: number }).n
+
+// --- migration 4: messages.ignored --------------------------------------------------------------
+
+test('migration 4 gives an existing database the messages.ignored column, and is safe to re-run', () => {
+  const dir = tmp()
+  try {
+    const path = join(dir, 'parcels.db')
+    const db = openDb(path, [])                       // born at the baseline, before the column existed
+    // Simulate that database: the column is in today's schema.sql, so take it away again.
+    db.exec('ALTER TABLE messages DROP COLUMN ignored')
+    db.prepare("INSERT INTO messages (message_id, received_at, parsed_ok) VALUES ('<old@x>', '2026-01-01T00:00:00Z', 0)").run()
+    db.close()
+
+    const after = openDb(path, MIGRATIONS)
+    expect(columns(after, 'messages')).toContain('ignored')
+    // An existing row defaults to 0: nothing already on /attention silently disappears on upgrade.
+    expect(after.prepare("SELECT ignored FROM messages WHERE message_id = '<old@x>'").get()).toEqual({ ignored: 0 })
+    expect(userVersion(after)).toBe(latestVersion(MIGRATIONS))
+    after.close()
+
+    // The second open runs nothing; a third `ALTER TABLE ... ADD COLUMN` would be a hard error.
+    const again = openDb(path, MIGRATIONS)
+    expect(columns(again, 'messages')).toContain('ignored')
+    again.close()
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('migration 4 does not fail on a database that already has the column but an older stamp', () => {
+  // `schema.sql` is applied on every open, BEFORE the migrations, so this really happens: the tables
+  // come from a current schema while the stamp comes from an older migration list.
+  const dir = tmp()
+  try {
+    const path = join(dir, 'parcels.db')
+    const db = openDb(path, [])                       // stamped at the baseline, column already present
+    expect(columns(db, 'messages')).toContain('ignored')
+    db.close()
+    const after = openDb(path, MIGRATIONS)            // must not throw "duplicate column name"
+    expect(columns(after, 'messages')).toContain('ignored')
+    after.close()
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})

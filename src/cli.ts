@@ -139,6 +139,7 @@ async function reprocess(ctx: CliContext): Promise<void> {
   })
   ctx.out(`reprocessed ${r.read} unassigned message(s): ${r.created} parcel(s) created`
     + `${r.archivedOld ? ` (${r.archivedOld} archived as old)` : ''}, ${r.linked} linked, ${r.needsAttention} still need attention`
+    + `${r.ignored ? `, ${r.ignored} ignored (no sign of a parcel)` : ''}`
     + `${r.failed ? `, ${r.failed} failed` : ''}`)
 }
 

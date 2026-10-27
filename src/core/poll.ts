@@ -204,7 +204,7 @@ async function runIngest(
       ...ingest, now: deps.now, adapters: deps.adapters, defaultPostalCode: deps.config.defaultPostalCode,
     })
   } catch (err) {
-    report = { read: 0, created: 0, linked: 0, archivedOld: 0, needsAttention: 0, failed: 0, error: describe(err) }
+    report = { read: 0, created: 0, linked: 0, archivedOld: 0, needsAttention: 0, ignored: 0, failed: 0, error: describe(err) }
   }
   // Not recorded in carrier_health (keyed by carrier); the ingest has a row of its own. Never fatal.
   try {
@@ -456,7 +456,7 @@ export function summarize(report: PollReport): string {
   const mail = !i ? ''
     : i.error ? `, mail ingest failed: ${i.error}`
     : i.read === 0 ? ''
-    : `, mail: ${i.read} new, ${i.created} parcel(s) created${i.archivedOld ? ` (${i.archivedOld} archived as old)` : ''}${i.needsAttention ? `, ${i.needsAttention} need attention` : ''}${i.failed ? `, ${i.failed} failed (will retry)` : ''}`
+    : `, mail: ${i.read} new, ${i.created} parcel(s) created${i.archivedOld ? ` (${i.archivedOld} archived as old)` : ''}${i.needsAttention ? `, ${i.needsAttention} need attention` : ''}${i.ignored ? `, ${i.ignored} ignored (no sign of a parcel)` : ''}${i.failed ? `, ${i.failed} failed (will retry)` : ''}`
   const map = report.map ? summarizeMapPreview(report.map) : ''
   // The code itself is deliberately NOT logged: it opens a physical locker and this line lands in a file.
   // The pickup point is not logged either - it says where the reader lives, near enough.

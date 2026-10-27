@@ -98,6 +98,32 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 4,
+    name: 'messages.ignored: mail with no sign of a parcel is not a question',
+    /**
+     * `/attention` used to hold every message the ingest could not turn into a parcel. Gmail labels
+     * conversations rather than messages, so that came to mean every invoice and order confirmation
+     * in a thread whose shipping mail matched the filter. The new `ignored` flag takes those off the
+     * page while leaving the row (the Message-ID dedupe key) and `reprocess` exactly as they were.
+     *
+     * Existing rows all start at 0, which is the conservative direction: nothing silently disappears
+     * from the page on upgrade. `node dist/cli.js reprocess` re-runs extraction over them and sets
+     * the flag properly for every one whose `.eml` is still on disk.
+     *
+     * Checks for the column first, which every `ADD COLUMN` migration from here on should do.
+     * `schema.sql` is applied on EVERY open, before the migrations run, so a database can legitimately
+     * already have a column its `user_version` stamp says it has not reached - its tables were created
+     * from a current `schema.sql` while its stamp came from an older migration list. A second
+     * `ALTER TABLE ... ADD COLUMN` is a hard error that would block the open for good.
+     */
+    up: db => {
+      const columns = (db.pragma('table_info(messages)') as Array<{ name: string }>).map(c => c.name)
+      if (!columns.includes('ignored')) {
+        db.exec('ALTER TABLE messages ADD COLUMN ignored INTEGER NOT NULL DEFAULT 0')
+      }
+    },
+  },
 ]
 
 /** Tables with no uniqueness on `parcel_id`: every row moves, and none may be dropped. */

@@ -200,12 +200,13 @@ describe('extract: no sender hint', () => {
   // bogus parcel. Do not "fix" it to extract.
   test('real e-shop mail 1/2, the DISPATCH mail: names GLS and prints "Číslo zásielky je <number>" -> shape', async () => {
     const e = await extract(fx('mtbiker-dispatch-names-gls'))
-    expect(e).toEqual({ carrier: 'gls', number: '1234567890', merchant: 'MTBIKER shop', confidence: 'shape' })
+    expect(e).toEqual({ carrier: 'gls', number: '1234567890', merchant: 'MTBIKER shop', confidence: 'shape', evidence: 'carrier-named' })
   })
 
   test('real e-shop mail 2/2, the ORDER CONFIRMATION for the same order: names GLS, prints no tracking number -> none', async () => {
     const e = await extract(fx('mtbiker-order-confirmation-names-gls'))
-    expect(e).toEqual({ confidence: 'none' })
+    // Still a question, not junk: it names GLS, so it waits on /attention.
+    expect(e).toEqual({ confidence: 'none', evidence: 'carrier-named' })
   })
 
   describe('e-shop dispatch mail: a named carrier AND a labelled number of its shape, both required', () => {
@@ -246,17 +247,21 @@ describe('extract: no sender hint', () => {
       expect(await extract(eml(shop, 'Objednávka odoslaná', body))).toMatchObject({ carrier, number, confidence: 'shape' })
     })
 
+    // `evidence` is the second half of every one of these: no parcel, but the mail still names a
+    // carrier (or prints a parcel-shaped number), so it waits on /attention instead of being ignored.
     test('a carrier name alone (no number) -> none', async () => {
       expect(await extract(eml(shop, 'Objednávka odoslaná cez GLS', 'Balík vám doručí GLS ParcelShop. Ďakujeme.')))
-        .toEqual({ confidence: 'none' })
+        .toEqual({ confidence: 'none', evidence: 'carrier-named' })
     })
 
     test('a labelled number alone (no carrier named) -> none', async () => {
-      expect(await extract(eml(shop, 'Objednávka odoslaná', 'Číslo balíka: 1234567890'))).toEqual({ confidence: 'none' })
+      expect(await extract(eml(shop, 'Objednávka odoslaná', 'Číslo balíka: 1234567890')))
+        .toEqual({ confidence: 'none', evidence: 'tracking-shape' })
     })
 
     test('a carrier named and a bare number with NO tracking label -> none', async () => {
-      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Ďakujeme, 1234567890 je kód pre kupón.'))).toEqual({ confidence: 'none' })
+      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Ďakujeme, 1234567890 je kód pre kupón.')))
+        .toEqual({ confidence: 'none', evidence: 'carrier-named' })
     })
 
     test.each([
@@ -267,30 +272,35 @@ describe('extract: no sender hint', () => {
       ['a national-format phone number', 'Číslo balíka: 0900123456'],
       ['a +421 phone number', 'Phone number: 421900123456'],
     ])('a GLS-named mail whose only labelled number is %s -> none', async (_, line) => {
-      expect(await extract(eml(shop, 'Odoslané cez GLS', line))).toEqual({ confidence: 'none' })
+      expect(await extract(eml(shop, 'Odoslané cez GLS', line))).toEqual({ confidence: 'none', evidence: 'carrier-named' })
     })
 
     test('a number cut out of a longer alphanumeric token is not taken', async () => {
-      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Číslo balíka: 5523b1793017928'))).toEqual({ confidence: 'none' })
+      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Číslo balíka: 5523b1793017928')))
+        .toEqual({ confidence: 'none', evidence: 'carrier-named' })
     })
 
     test('9 and 13 digits are not a GLS number', async () => {
-      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Číslo balíka: 123456789'))).toEqual({ confidence: 'none' })
-      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Číslo balíka: 1234567890123'))).toEqual({ confidence: 'none' })
+      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Číslo balíka: 123456789')))
+        .toEqual({ confidence: 'none', evidence: 'carrier-named' })
+      expect(await extract(eml(shop, 'Odoslané cez GLS', 'Číslo balíka: 1234567890123')))
+        .toEqual({ confidence: 'none', evidence: 'carrier-named' })
     })
 
     test('two different labelled numbers are ambiguous, not a guess', async () => {
       expect(await extract(eml(shop, 'Odoslané cez GLS', 'Číslo balíka: 1234567890\r\nČíslo balíka: 1234567891')))
-        .toEqual({ confidence: 'none' })
+        .toEqual({ confidence: 'none', evidence: 'carrier-named' })
     })
 
     test('two carriers each named with their own labelled number are ambiguous -> none', async () => {
       expect(await extract(eml(shop, 'Odoslané', 'Balík 1 cez GLS, číslo balíka: 1234567890\r\nBalík 2 cez DPD, číslo balíka: 00000000000001')))
-        .toEqual({ confidence: 'none' })
+        .toEqual({ confidence: 'none', evidence: 'carrier-named' })
     })
 
     test('"GLS" inside another word is not the carrier', async () => {
-      expect(await extract(eml(shop, 'Odoslané', 'Angels and OGLS. Číslo balíka: 1234567890'))).toEqual({ confidence: 'none' })
+      // "OGLS" is not GLS, so the carrier-name signal does not fire; the labelled number does.
+      expect(await extract(eml(shop, 'Odoslané', 'Angels and OGLS. Číslo balíka: 1234567890')))
+        .toEqual({ confidence: 'none', evidence: 'tracking-shape' })
     })
 
     test('a known carrier sender is unaffected: it still goes through the sender path', async () => {
@@ -455,7 +465,10 @@ describe('ingestMessages', () => {
       mail(1, 'synthetic-newsletter-number-like', 1), mail(2, 'synthetic-no-number', 1), mail(3, 'mtbiker-order-confirmation-names-gls', 1),
     ])
     const r = await ingestMessages(db, deps)
-    expect(r).toMatchObject({ read: 3, created: 0, needsAttention: 3 })
+    // Only the one that names a carrier is a question. The sale newsletter (whose numbers are a
+    // discount code and a reference) and "Lunch on Friday?" say nothing about a parcel, so they are
+    // stored and ignored - see test/ingest-evidence.test.ts for that rule.
+    expect(r).toMatchObject({ read: 3, created: 0, needsAttention: 1, ignored: 2 })
     expect(db.prepare('SELECT COUNT(*) n FROM messages WHERE parsed_ok = 0 AND parcel_id IS NULL').get()).toEqual({ n: 3 })
     expect(counts(db).parcels).toBe(0)
   })

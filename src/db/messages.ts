@@ -42,10 +42,22 @@ export function storeMessage(db: Database, m: RawMessage, dir: string): number {
 }
 
 /**
- * What "still waiting on /attention" means, in SQL. The attention list and `reprocess` both select on
- * it, so a message that no longer matches it is off the page and out of every future reprocess run.
+ * What "still waiting on /attention" means, in SQL, in ONE place: the page, `getUnparsedMessage` (the
+ * assign route) and both dismissals all select on this, so none of them can disagree about what the
+ * queue is.
+ *
+ * The three states a stored message can be in, and what each is matched by:
+ *
+ *   - WAITING: `parsed_ok = 0`, no parcel, `ignored = 0`. On the page; reprocessed; dismissable.
+ *   - IGNORED: `parsed_ok = 0`, no parcel, `ignored = 1`. Nothing in it said it was about a parcel
+ *     (see `parcelEvidence`). OFF the page and out of both dismissals - a bulk "Dismiss all N" must
+ *     clear exactly the N the person was looking at, and must not delete the stored `.eml` of mail
+ *     they were never shown - but STILL reprocessed, because `reprocessMessages` selects on
+ *     `parsed_ok = 0 AND parcel_id IS NULL` without this flag. That difference is the point: an
+ *     ignored message comes back the moment a parser can read it, where a dismissed one never does.
+ *   - DISMISSED or ASSIGNED: `parsed_ok = 1`. Off the page and out of every reprocess run.
  */
-const PENDING = 'parsed_ok = 0 AND parcel_id IS NULL'
+export const PENDING = 'parsed_ok = 0 AND parcel_id IS NULL AND ignored = 0'
 
 /**
  * Throws away the stored copy of a message that will never be read again.

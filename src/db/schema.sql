@@ -60,6 +60,10 @@ CREATE TABLE IF NOT EXISTS messages (
   raw_path     TEXT,                 -- data/mail/<id>.eml
   parsed_ok    INTEGER NOT NULL,
   parse_note   TEXT,
+  ignored      INTEGER NOT NULL DEFAULT 0,
+                                     -- 1 when nothing in the message said it was about a parcel, so
+                                     -- it is off /attention but still stored (dedupe key) and still
+                                     -- reprocessable. `parse_note` says why. See ingest/extract.ts.
   parcel_id    INTEGER REFERENCES parcels(id)
 );
 

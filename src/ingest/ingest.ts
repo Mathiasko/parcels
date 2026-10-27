@@ -6,7 +6,7 @@ import { findParcel, insertParcel, setArchived } from '../db/parcels.js'
 import { appendEvents } from '../db/events.js'
 import { storeMessage } from '../db/messages.js'
 import { accountKey, getImapState, saveImapState, type ImapState } from '../db/imap-state.js'
-import { extract, type Extraction } from './extract.js'
+import { extract, type Extraction, type ParcelEvidence } from './extract.js'
 import { fetchMessages, type FetchDeps, type ImapConfig, type RawMessage } from './imap.js'
 
 /** Mail older than this creates its parcel already archived: in the database, never polled. */
@@ -38,13 +38,19 @@ export interface IngestReport {
   archivedOld: number
   /** Messages that yielded no parcel and now wait in the web UI's needs-attention list. */
   needsAttention: number
+  /**
+   * Messages stored and then left alone, because nothing in them said they were about a parcel (see
+   * `parcelEvidence`). Reported rather than silently swallowed: this is the count that says how much
+   * of the Gmail label is not parcel mail at all.
+   */
+  ignored: number
   /** Messages that threw while being stored or placed; rolled back whole, so the next run fetches them again. */
   failed: number
   /** Set (with every count at zero) when the mailbox could not be read at all. */
   error?: string
 }
 
-const emptyReport = (): IngestReport => ({ read: 0, created: 0, linked: 0, archivedOld: 0, needsAttention: 0, failed: 0 })
+const emptyReport = (): IngestReport => ({ read: 0, created: 0, linked: 0, archivedOld: 0, needsAttention: 0, ignored: 0, failed: 0 })
 
 interface Item {
   /** `messages.id`; 0 until `place`'s `store` step has run for a message that is not stored yet. */
@@ -59,8 +65,9 @@ const keyOf = (e: Extraction) => `${e.carrier}:${e.number}`
 /**
  * Reads the mailbox label (read-only and incrementally: see `fetchMessages`), stores each new message
  * and its raw .eml, and turns the ones that name a parcel into parcels. Mail that does not yield a
- * tracking number is kept, unassigned, for the needs-attention page; nothing is dropped and nothing
- * is guessed.
+ * tracking number is kept, unassigned: on the needs-attention page when something in it says it is
+ * about a parcel, and silently otherwise (`ignored`, see `parcelEvidence`). Either way the row is
+ * stored - nothing is dropped and nothing is guessed - because the row is the Message-ID dedupe key.
  *
  * A failure to reach the mailbox rejects; a failure on one message does not stop the others.
  *
@@ -94,6 +101,12 @@ export async function ingestMessages(db: Database, deps: IngestDeps): Promise<In
 /**
  * Re-runs extraction over messages that are stored but still unassigned, from the .eml on disk: after
  * a parser fix the mail does not need to still exist upstream, and IMAP is not touched.
+ *
+ * `ignored` is deliberately NOT in the WHERE clause, which is the difference between an ignored
+ * message and a dismissed one: a dismissed message is `parsed_ok = 1` and is gone from here for good
+ * (the user said so), while an ignored one is still `parsed_ok = 0` and comes straight back the first
+ * time a parser can read it. That is why ignoring is safe at all - it is a decision about what to
+ * SHOW, taken with today's parser, not a decision about the message.
  */
 export async function reprocessMessages(db: Database, deps: ReprocessDeps): Promise<IngestReport> {
   const rows = db.prepare(`
@@ -149,6 +162,7 @@ function place<T extends Item>(
     report.linked += counts.linked
     report.archivedOld += counts.archivedOld
     report.needsAttention += counts.needsAttention
+    report.ignored += counts.ignored
   }
 }
 
@@ -174,15 +188,46 @@ function mailEvent(it: Item): ParcelEvent | undefined {
   }
 }
 
-function placeOne(db: Database, it: Item, deps: ReprocessDeps, report: IngestReport, newest: Map<string, number>): void {
-  const { carrier, number, merchant } = it.extraction
-  const note = (text: string) => db.prepare('UPDATE messages SET parse_note = ? WHERE id = ?').run(text, it.id)
-  const link = (parcelId: number, text: string | null) =>
-    db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = ?, parse_note = ? WHERE id = ?').run(parcelId, text, it.id)
+/**
+ * What `parse_note` says about a message that reached the attention page, one phrase per signal. The
+ * page prints it and so does `sqlite3 data/parcels.db`, which is how "where did my email go" is
+ * answered: a note that names the signal says the message was a real question, and `IGNORED_NOTE`
+ * says it was never one.
+ */
+const SHOWN_BECAUSE: Record<ParcelEvidence, string> = {
+  'carrier-sender': 'a carrier sent it',
+  'carrier-named': 'it names a carrier',
+  'tracking-shape': 'it contains something shaped like a tracking number',
+  'shipping-subject': 'its subject is about a shipment',
+  unreadable: 'it could not be read at all',
+}
 
-  if (it.oversize) { report.needsAttention++; return }   // storeMessage already noted it
+/**
+ * The note on a message that was stored and then left alone. Deliberately a sentence a person can
+ * read, and deliberately distinct from the "no tracking number found" one: the two answer different
+ * questions ("this was never parcel mail" against "this was, and the parser failed on it").
+ */
+const IGNORED_NOTE = 'ignored: no sign of a parcel in this message (stored, not shown on /attention)'
+
+function placeOne(db: Database, it: Item, deps: ReprocessDeps, report: IngestReport, newest: Map<string, number>): void {
+  const { carrier, number, merchant, evidence } = it.extraction
+  // `ignored` is always written, never only set: a reprocess over a message that now DOES look like a
+  // parcel has to be able to clear the flag again, not just raise it.
+  const note = (text: string, ignored = false) =>
+    db.prepare('UPDATE messages SET parse_note = ?, ignored = ? WHERE id = ?').run(text, ignored ? 1 : 0, it.id)
+  const link = (parcelId: number, text: string | null) =>
+    db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = ?, parse_note = ?, ignored = 0 WHERE id = ?').run(parcelId, text, it.id)
+
+  // Oversize mail has no body to judge, so it is shown; `storeMessage` already noted why.
+  if (it.oversize) { report.needsAttention++; return }
   if (!carrier || !number) {
-    note('no tracking number found in this message')
+    // Nothing in the message says it is about a parcel: store it, say so, and ask nobody.
+    if (!evidence) {
+      note(IGNORED_NOTE, true)
+      report.ignored++
+      return
+    }
+    note(`no tracking number found in this message (${SHOWN_BECAUSE[evidence]})`)
     report.needsAttention++
     return
   }

@@ -74,7 +74,10 @@ describe('a DHL mail is what tracks a DHL parcel', () => {
   test.each(['evildhl.com', 'dhl.com.evil.example', 'dhl.evil.example'])(
     '%s is not DHL: a look-alike domain never gets a parcel', async host => {
       const raw = Buffer.from(`From: Parcel <noreply@${host}>\r\nSubject: Zasielka 0001234567890123 je na ceste\r\n\r\nCislo zasielky: 0001234567890123.\r\n`)
-      expect(await extract(raw)).toEqual({ confidence: 'none' })
+      // No parcel, but still a QUESTION: the mail prints a labelled parcel-shaped number, so it waits
+      // on /attention rather than being ignored. A look-alike domain must not hand out a parcel; it
+      // also must not be able to make a real parcel invisible.
+      expect(await extract(raw)).toEqual({ confidence: 'none', evidence: 'tracking-shape' })
     },
   )
 

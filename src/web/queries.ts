@@ -1,5 +1,6 @@
 import type { Database } from '../db/index.js'
 import type { CarrierId } from '../core/types.js'
+import { PENDING } from '../db/messages.js'
 
 export interface RawResponse {
   fetchedAt: Date
@@ -90,16 +91,20 @@ const toMessage = (r: MessageRow): UnparsedMessage => ({
   note: r.parse_note ?? undefined,
 })
 
-/** Messages the ingest could not turn into a parcel and nobody has assigned yet, newest first. */
+/**
+ * Messages the ingest could not turn into a parcel and nobody has assigned yet, newest first - minus
+ * the ones nothing in which said they were about a parcel at all. `PENDING` is the single definition
+ * of that; see `src/db/messages.ts` for the three states and `parcelEvidence` for the rule.
+ */
 export function listUnparsedMessages(db: Database): UnparsedMessage[] {
   const rows = db.prepare(
-    'SELECT * FROM messages WHERE parsed_ok = 0 AND parcel_id IS NULL ORDER BY received_at DESC, id DESC',
+    `SELECT * FROM messages WHERE ${PENDING} ORDER BY received_at DESC, id DESC`,
   ).all() as MessageRow[]
   return rows.map(toMessage)
 }
 
 /** The message plus its RFC message-id (stored on the parcel it becomes), when it is still unassigned. */
 export function getUnparsedMessage(db: Database, id: number): (UnparsedMessage & { messageId?: string }) | undefined {
-  const r = db.prepare('SELECT * FROM messages WHERE id = ? AND parsed_ok = 0 AND parcel_id IS NULL').get(id) as MessageRow | undefined
+  const r = db.prepare(`SELECT * FROM messages WHERE id = ? AND ${PENDING}`).get(id) as MessageRow | undefined
   return r && { ...toMessage(r), messageId: r.message_id ?? undefined }
 }

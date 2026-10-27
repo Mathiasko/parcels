@@ -20,10 +20,30 @@ export interface Extraction {
    * `sender`: the carrier came from the sender's domain. `shape`: no known sender, but the carrier
    * and number agree: either the number has a distinctive carrier-specific shape, or (an e-shop's
    * dispatch mail) the text names the carrier AND a labelled number of that carrier's shape sits beside
-   * it. `none`: nothing usable; the message goes to needs-attention.
+   * it. `none`: nothing usable; see `evidence` for whether the message is nevertheless worth asking about.
    */
   confidence: 'sender' | 'shape' | 'none'
+  /**
+   * Why this message looks like it is about a parcel AT ALL, or `undefined` when nothing in it does.
+   * Independent of `confidence`: `confidence` answers "can this become a parcel", `evidence` answers
+   * "is this even about one". See `parcelEvidence` for the rule and for why the two are separate.
+   */
+  evidence?: ParcelEvidence
 }
+
+/**
+ * The signals that make a message worth a human's attention when it yields no parcel, in the order
+ * `parcelEvidence` tries them. Recorded in `messages.parse_note` by `ingest.ts`, so why a message was
+ * shown - or was not - is answerable from the database months later.
+ *
+ * - `carrier-sender`: the mail came from a carrier's own domain.
+ * - `carrier-named`: a carrier is named in the subject or the body.
+ * - `tracking-shape`: a token of some carrier's tracking-number shape is in it.
+ * - `shipping-subject`: the SUBJECT is about a shipment.
+ * - `unreadable`: nothing could be read out of the message, so nothing can be concluded either.
+ */
+export type ParcelEvidence =
+  | 'carrier-sender' | 'carrier-named' | 'tracking-shape' | 'shipping-subject' | 'unreadable'
 
 /**
  * Registrable sender domains, measured from the live mailbox (packeta.sk, dpd.sk, sps-sro.sk,
@@ -156,11 +176,108 @@ function labelledNumber(carrier: keyof typeof STANDALONE, haystack: string): str
   return found.size === 1 ? [...found][0] : undefined
 }
 
+/** The carriers whose numbers are bare digits, so a label or a carrier name has to vouch for them. */
+const BARE_DIGIT_CARRIERS = ['gls', 'dpd', 'dhl'] as const
+
 /** Carriers the text names that also have a labelled number of their bare-digit shape beside it. */
 function namedBareNumbers(haystack: string): { c: CarrierId; n: string }[] {
-  return (['gls', 'dpd', 'dhl'] as const)
+  return BARE_DIGIT_CARRIERS
     .filter(c => CARRIER_NAME[c].test(haystack))
     .flatMap(c => { const n = labelledNumber(c, haystack); return n ? [{ c, n }] : [] })
+}
+
+/**
+ * Every way a carrier can be NAMED in prose. The three whose numbers are bare digits come straight
+ * from `CARRIER_NAME` - one definition of "this mail says GLS", shared with the e-shop parsing rule
+ * above, so the two can never drift apart. The rest are added only for the evidence test, because
+ * parsing never needed them: their number shapes speak for themselves.
+ *
+ * The additions are deliberately NOT the bare carrier word. `pošta` is the Slovak word for "mail"
+ * and appears in the footer of half the mail anyone receives ("táto pošta bola odoslaná
+ * automaticky"), so `Slovenská pošta` is required whole; `SPS` is a three-letter abbreviation shared
+ * with schools and electronics, so it has to stand alone as a token. `Packeta` and `Zásielkovňa` are
+ * brand names nothing else uses, so they stand on their own.
+ */
+const CARRIER_MENTION: readonly RegExp[] = [
+  ...Object.values(CARRIER_NAME),
+  /(?<![\p{L}\d])(?:packeta|z[áa]sielkovn\w*|z[áa]silkovn\w*)(?![\p{L}])/iu,
+  /slovensk\w*[  ]+po[šs]t\w*/iu,
+  /(?<![\p{L}\d])(?:SPS|slovak parcel service)(?![\p{L}\d])/iu,
+]
+
+/**
+ * Shipping wording in a SUBJECT line. Subject only, and that is the whole point of it: an e-shop puts
+ * the shipping event in the subject ("Objednávka ... odoslaná", "Pripravené v AlzaBoxe"), while the
+ * BODY of every order confirmation and every invoice from the same shop also talks about delivery -
+ * Alza's invoices print "Doprava - AlzaBox" and "môžete vyzdvihnúť" in their footers. Reading the body
+ * for these words would show the whole thread again, which is exactly the problem this rule exists to
+ * solve.
+ *
+ * Word stems rather than whole words, because Slovak declines everything (zásielka / zásielky /
+ * zásielku / zásielok), and with and without diacritics, because plenty of senders strip them.
+ * `odber` on its own is absent on purpose: it is also how a newsletter subscription is named
+ * ("odhlásenie z odberu"); the pickup sense only counts as `osobný odber` or `odberné miesto`.
+ */
+const SHIPPING_SUBJECT = new RegExp([
+  'z[áa]sielk\\w*', 'z[áa]silk\\w*',                        // zásielka (sk), zásilka (cz)
+  'bal[ií]k(?![\\p{L}]*ek)\\w*',                            // balík, balíka; not "balíček" (a bundle)
+  'doru[čc]\\w*', 'odoslan\\w*', 'expedovan\\w*', 'expedi[cč]\\w*',
+  'preprav\\w*', 'prepravc\\w*', 'kuri[eé]r\\w*',
+  'vyzdvih\\w*', 'prevzat\\w*', 'prevzet\\w*', 'osobn\\w*[ \\u00a0]+odber\\w*',
+  'sledovan\\w*[ \\u00a0]+(?:z[áa]sielk|balík)\\w*', 'podac\\w*[ \\u00a0]+[čc][ií]sl\\w*',
+  // The pickup places, named one brand at a time rather than as a `*box` pattern: "inbox" and
+  // "mailbox" are subject-line words, and an AlzaBox is not a mailbox.
+  'alzabox\\w*', 'z-?box\\w*', 'bal[ií]ko(?:box|mat)\\w*', 'packomat\\w*', 'packstation\\w*',
+  'parcel ?shop\\w*', 'parcel ?locker\\w*', 'pickup station', 'odbern\\w*[ \\u00a0]+miest\\w*',
+  'v[yý]dajn\\w*[ \\u00a0]+miest\\w*',
+  // English, for the shops that write in it.
+  '\\btrack\\w*', 'shipment\\w*', 'shipp(?:ed|ing)', 'dispatch\\w*', 'deliver\\w*',
+  'parcel\\w*', 'package\\w*', 'on its way', 'out for delivery', 'courier\\w*',
+].join('|'), 'iu')
+
+/**
+ * Whether anything in this message says it is about a parcel, and which signal said so.
+ *
+ * This is the whole rule, in one place, because the attention page, the poll summary and the tests all
+ * have to agree about it. A message with no evidence is STORED and then left alone: the row is the
+ * Message-ID dedupe key and the ingest watermark depends on it, but it never becomes a question for
+ * the user. Gmail labels CONVERSATIONS, not messages, so one shipping mail in an order thread drags
+ * its invoices, its tax documents and its order confirmations onto the label with it; no Gmail query
+ * can prevent that, and treating each of them as "no tracking number found" turned a page for real
+ * problems into a page of 56 non-problems.
+ *
+ * The four signals, and why each is allowed to be enough on its own:
+ *
+ *   1. A KNOWN CARRIER SENDER. A carrier only writes about parcels. If one wrote and nothing parsed,
+ *      that is a parser gap, which is precisely what the page is for. Strongest signal, and the one
+ *      that must never be overridden - hence first.
+ *   2. A CARRIER NAMED in the subject or the body. Weaker than the sender (an order confirmation
+ *      names the delivery method), but a stranger's mail that says "GLS" is about a shipment far more
+ *      often than not, and the cost of being wrong is one dismiss click.
+ *   3. A TOKEN OF SOME CARRIER'S TRACKING-NUMBER SHAPE - but only the DISTINCTIVE shapes (`Z 000 0000
+ *      000`, `EB629066058SK`, `SK0...`, `JJD.../3S...`), plus a bare-digit number that is LABELLED as
+ *      a parcel number. The bare-digit shapes alone are deliberately not evidence: `\d{10,12}` is
+ *      also the shape of Alza's own order numbers (1052281846, 1062794763), of a variable symbol and
+ *      of a phone number, so accepting them would show the entire order thread all over again and
+ *      give back nothing. This reuses `DISTINCTIVE` and `labelledNumber`, the same tests the parser
+ *      itself trusts, rather than a second opinion about what a number looks like.
+ *   4. SHIPPING WORDING IN THE SUBJECT (see `SHIPPING_SUBJECT`). This is what catches a real pickup
+ *      notice from a shop that names no carrier and prints no number at all - "Pripravené v
+ *      AlzaBoxe", "Objednávka č. 1410452 pripravená na prevzatie" - which the app cannot track but
+ *      the user may still want to see.
+ *
+ * The bias is deliberate and one-sided: a false ignore hides a real parcel, a false show costs one
+ * click. So anything unreadable counts as evidence too (`extract`'s caller decides that), and all
+ * four tests are ORs with no veto anywhere.
+ */
+function parcelEvidence(subject: string, haystack: string): ParcelEvidence | undefined {
+  if (CARRIER_MENTION.some(re => re.test(haystack))) return 'carrier-named'
+  // `.match` rather than `.test`: these are global regexes, and `.test` would advance their lastIndex
+  // and make the next call on the same pattern start half-way through a different message.
+  if (Object.values(DISTINCTIVE).some(re => haystack.match(re) !== null)) return 'tracking-shape'
+  if (BARE_DIGIT_CARRIERS.some(c => labelledNumber(c, haystack) !== undefined)) return 'tracking-shape'
+  if (SHIPPING_SUBJECT.test(subject)) return 'shipping-subject'
+  return undefined
 }
 
 /**
@@ -232,18 +349,24 @@ export async function extract(raw: Buffer): Promise<Extraction> {
     const mail = await simpleParser(raw)
     const subject = mail.subject ?? ''
     const text = (mail.text || (typeof mail.html === 'string' ? htmlToText(mail.html.slice(0, MAX_HTML)) : '')).slice(0, MAX_TEXT)
+    // Not a single readable byte: no subject AND no body. mailparser does not throw on arbitrary
+    // bytes, it just yields nothing, so this is the same case as the catch below - and a message
+    // nobody could read is no grounds for deciding it is not a parcel.
+    if (subject === '' && text === '') return { confidence: 'none', evidence: 'unreadable' }
     const haystack = `${subject}\n${text}`.normalize('NFC')
 
     const envelope = mail.from?.value[0]
     const wrapper = forwardedHeader(text)
     // The envelope sender first; a hand-forward's wrapper is the fallback.
     const carrier = carrierForAddress(envelope?.address ?? '') ?? carrierForAddress(wrapper?.from ?? '')
+    // A carrier's own domain outranks everything the prose could say; otherwise ask the prose.
+    const evidence = carrier ? 'carrier-sender' : parcelEvidence(subject, haystack)
 
     if (carrier) {
       const number = firstNumber(carrier, haystack)
-      if (!number) return { carrier, confidence: 'none' }
+      if (!number) return { carrier, confidence: 'none', evidence }
       return {
-        carrier, number, merchant: carrierMerchant(carrier, haystack), confidence: 'sender',
+        carrier, number, merchant: carrierMerchant(carrier, haystack), confidence: 'sender', evidence,
         ...(isEmailOnlyCarrier(carrier) && { eventText: clean(subject, EVENT_TEXT_MAX) }),
       }
     }
@@ -254,15 +377,16 @@ export async function extract(raw: Buffer): Promise<Extraction> {
     // An e-shop's dispatch mail has no distinctive shape to go on, but it names the carrier and prints
     // a labelled number of that carrier's bare-digit shape. Both signals, or nothing.
     if (found.length === 0) found = namedBareNumbers(haystack)
-    if (found.length !== 1) return { confidence: 'none' }
+    if (found.length !== 1) return { confidence: 'none', ...(evidence && { evidence }) }
     const origin = wrapper ?? { from: envelope?.address, name: envelope?.name }
     return {
-      carrier: found[0]!.c, number: found[0]!.n, confidence: 'shape',
+      carrier: found[0]!.c, number: found[0]!.n, confidence: 'shape', ...(evidence && { evidence }),
       merchant: clean(origin.name) ?? clean(origin.from?.split('@')[1]),
       ...(isEmailOnlyCarrier(found[0]!.c) && { eventText: clean(subject, EVENT_TEXT_MAX) }),
     }
   } catch {
-    return { confidence: 'none' }
+    // Unparseable bytes. Not "no parcel": nothing is known either way, so it is a question, not junk.
+    return { confidence: 'none', evidence: 'unreadable' }
   }
 }
 
