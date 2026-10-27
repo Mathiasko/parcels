@@ -1,38 +1,47 @@
 #!/bin/bash
-# Serves the dashboard at http://parcels.local instead of http://127.0.0.1:8787.
+# Serves the dashboard at http://parcels.local:8787 instead of http://127.0.0.1:8787.
 #
-# Three pieces are needed, and all three are root-owned, which is why this is a script you read before
-# running rather than a line in the README:
+#   sudo scripts/install-hostname.sh              add the name
+#   sudo scripts/install-hostname.sh --uninstall  remove it, and any older pf setup this script left
 #
-#   1. /etc/hosts            resolves parcels.local to this machine, and nowhere else.
-#   2. /etc/pf.anchors/...   redirects loopback port 80 to the port the app actually listens on. A process
-#                            without root cannot bind a port below 1024, so the app keeps its own port and
-#                            the kernel moves the packets. The app is NOT run as root.
-#   3. a LaunchDaemon        re-applies the pf rule at boot; pf is disabled by default on macOS and does
-#                            not remember being enabled.
+# One root-owned edit, to /etc/hosts. It is backed up first, every line is inside the sentinels below,
+# and --uninstall takes them out again.
 #
-# The matching code change is the Host allow-list in src/web/server.ts: the server refuses a Host header it
-# does not know, so without that, parcels.local would get a 403 rather than the dashboard.
+# BOTH address families are written, and that is not decoration. macOS resolves a `.local` name through
+# mDNS as well as /etc/hosts, and with only an A record it waits about five seconds for an AAAA answer
+# that never comes before falling back - five seconds on every single connection. With `::1` present the
+# v6 attempt is refused immediately (nothing listens there; the server binds 127.0.0.1 only) and the
+# client falls straight back to v4. Measured on this machine: v4-only 5.01s to connect, both families
+# 0.005s.
 #
-# Every edit is marked with the sentinels below, is skipped if already present, and is undone by --uninstall.
-# /etc/hosts and /etc/pf.conf are backed up next to themselves before the first change.
+# WHAT THIS NO LONGER DOES, and why. It used to redirect loopback port 80 to 8787 with a pf rule, so the
+# URL could omit the port. A process without root cannot bind a port below 1024, so that was the only way
+# - but `rdr pass on lo0 ... -> 127.0.0.1 port 8787` makes pf swallow DIRECT connections to 8787 as well.
+# The documented fallback URL, the one setup.sh prints, silently stopped accepting connections at all:
+# not refused, dropped, so every client sat there until it timed out. A trivial server put on 8787 with
+# the app stopped behaved identically, which is what proved it was the packet filter rather than the app.
+# Four characters of URL are not worth a root-level packet filter that can blackhole the application, on
+# someone else's Mac, with no error anywhere to explain it.
+#
+# The matching code change is the Host allow-list in src/web/server.ts: the server refuses a Host header
+# it does not know, so without that, parcels.local would get a 403 rather than the dashboard.
 
 set -euo pipefail
 
 HOST_NAME="parcels.local"
-LABEL="local.parcels.pf"
-ANCHOR="/etc/pf.anchors/parcels"
-PLIST="/Library/LaunchDaemons/${LABEL}.plist"
 BEGIN="# >>> parcels tracker"
 END="# <<< parcels tracker"
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Everything the pf era left behind, removed by --uninstall whichever label installed it.
+OLD_LABELS=(local.parcels.pf sk.matuslaco.parcels.pf)
+ANCHOR="/etc/pf.anchors/parcels"
 
 die() { echo "error: $*" >&2; exit 1; }
 note() { echo "  $*"; }
 
 [ "$(id -u)" -eq 0 ] || die "must run as root:  sudo $0 ${1:-}"
 
-# The redirect has to point at the port the app is really on, so read it rather than assume 8787.
 PORT=8787
 if [ -f "$PROJECT/config.json" ]; then
   FOUND=$(sed -n 's/.*"port"[[:space:]]*:[[:space:]]*\([0-9]\{1,5\}\).*/\1/p' "$PROJECT/config.json" | head -1 || true)
@@ -45,112 +54,71 @@ strip_block() {   # strip_block <file> - removes our sentinel block, leaving eve
   /usr/bin/sed -i '' "/^${BEGIN}\$/,/^${END}\$/d" "$f"
 }
 
+# The pf redirect is gone for good; this takes out whatever an older version of this script installed,
+# including the daemon under the label the project used before it was renamed.
+remove_pf() {
+  local label removed=0
+  for label in "${OLD_LABELS[@]}"; do
+    if [ -f "/Library/LaunchDaemons/${label}.plist" ]; then
+      launchctl bootout "system/${label}" 2>/dev/null || true
+      rm -f "/Library/LaunchDaemons/${label}.plist"
+      note "removed the boot job ${label}"
+      removed=1
+    fi
+  done
+  if [ -f /etc/pf.conf ] && grep -q "^${BEGIN}\$" /etc/pf.conf; then
+    cp -p /etc/pf.conf "/etc/pf.conf.parcels-backup-$(date +%s)"
+    strip_block /etc/pf.conf
+    note "took our anchor out of /etc/pf.conf"
+    removed=1
+  fi
+  [ -f "$ANCHOR" ] && { rm -f "$ANCHOR"; note "removed $ANCHOR"; removed=1; }
+  if [ "$removed" = 1 ] && pfctl -n -f /etc/pf.conf 2>/dev/null; then
+    pfctl -f /etc/pf.conf 2>/dev/null || true
+    note "reloaded pf without it"
+  fi
+  # pf is left exactly as enabled or disabled as it was found: other software may rely on it, and this
+  # script has no way to know whether it was the one that turned it on.
+}
+
 uninstall() {
   echo "Removing ${HOST_NAME}..."
-  if [ -f "$PLIST" ]; then
-    launchctl bootout "system/${LABEL}" 2>/dev/null || true
-    rm -f "$PLIST"; note "removed ${PLIST}"
-  fi
-  strip_block /etc/hosts;   note "cleaned /etc/hosts"
-  strip_block /etc/pf.conf; note "cleaned /etc/pf.conf"
-  rm -f "$ANCHOR";          note "removed ${ANCHOR}"
-  if pfctl -n -f /etc/pf.conf 2>/dev/null; then
-    pfctl -f /etc/pf.conf 2>/dev/null || true
-    note "reloaded pf (left enabled; it is harmless and other software may rely on it)"
-  fi
-  echo "Done. The dashboard is still at http://127.0.0.1:${PORT}"
+  remove_pf
+  strip_block /etc/hosts; note "cleaned /etc/hosts"
+  echo "Done. The dashboard is at http://127.0.0.1:${PORT}"
   exit 0
 }
 
 [ "${1:-}" = "--uninstall" ] && uninstall
 [ -z "${1:-}" ] || die "usage: $0 [--uninstall]"
 
-echo "Installing ${HOST_NAME} -> 127.0.0.1:${PORT}"
+echo "Installing ${HOST_NAME} -> 127.0.0.1 (port ${PORT})"
+remove_pf   # idempotent, and repairs a machine that ran the pf version of this script
 
-# --- 1. /etc/hosts ---------------------------------------------------------------------------------
 if grep -q "^${BEGIN}\$" /etc/hosts; then
-  # Our own block: rewrite it rather than leave it, so a correction here reaches a machine that
-  # already ran an older version of this script.
+  # Our own block: rewrite it, so a correction here reaches a machine that ran an older version.
   cp -p /etc/hosts "/etc/hosts.parcels-backup-$(date +%s)"
   strip_block /etc/hosts
-  printf '%s\n127.0.0.1\t%s\n%s\n' "$BEGIN" "$HOST_NAME" "$END" >> /etc/hosts
-  note "refreshed ${HOST_NAME} in /etc/hosts"
+  printf '%s\n127.0.0.1\t%s\n::1\t%s\n%s\n' "$BEGIN" "$HOST_NAME" "$HOST_NAME" "$END" >> /etc/hosts
+  note "refreshed ${HOST_NAME} in /etc/hosts (both address families)"
 elif grep -qE "^[^#]*[[:space:]]${HOST_NAME}([[:space:]]|$)" /etc/hosts; then
   note "/etc/hosts already resolves ${HOST_NAME} by some other means, left alone"
 else
   cp -p /etc/hosts "/etc/hosts.parcels-backup-$(date +%s)"
-  # IPv4 only, deliberately. The pf rule below redirects port 80 for 127.0.0.1, and a redirect cannot
-  # send IPv6 traffic to an IPv4 listener - the server binds 127.0.0.1 and nothing else. Publishing a
-  # ::1 answer as well would hand browsers an address with no listener on it, which costs a Happy
-  # Eyeballs timeout before they fall back: the opposite of the stall it looks like it prevents.
-  printf '%s\n127.0.0.1\t%s\n%s\n' "$BEGIN" "$HOST_NAME" "$END" >> /etc/hosts
-  note "added ${HOST_NAME} to /etc/hosts"
+  printf '%s\n127.0.0.1\t%s\n::1\t%s\n%s\n' "$BEGIN" "$HOST_NAME" "$HOST_NAME" "$END" >> /etc/hosts
+  note "added ${HOST_NAME} to /etc/hosts (both address families)"
 fi
 
-# --- 2. the pf anchor ------------------------------------------------------------------------------
-# `rdr pass on lo0` is the part that matters: the redirect has to be applied on the loopback interface,
-# because a request from this Mac to 127.0.0.1 never touches a physical one.
-cat > "$ANCHOR" <<EOF
-# Written by ${PROJECT}/scripts/install-hostname.sh - edits here are overwritten on re-run.
-rdr pass on lo0 inet proto tcp from any to 127.0.0.1 port 80 -> 127.0.0.1 port ${PORT}
-EOF
-chmod 644 "$ANCHOR"; chown root:wheel "$ANCHOR"
-note "wrote ${ANCHOR}"
+dscacheutil -flushcache 2>/dev/null || true
 
-# --- 3. /etc/pf.conf -------------------------------------------------------------------------------
-# Order is load-bearing in pf.conf: every rdr-anchor must precede the filter anchors, so this goes
-# directly after Apple's rdr-anchor rather than at the end of the file.
-if grep -q "^${BEGIN}\$" /etc/pf.conf; then
-  note "/etc/pf.conf already references our anchor, left alone"
-else
-  cp -p /etc/pf.conf "/etc/pf.conf.parcels-backup-$(date +%s)"
-  /usr/bin/awk -v b="$BEGIN" -v e="$END" '
-    { print }
-    /^rdr-anchor "com\.apple\/\*"$/ && !done {
-      print b; print "rdr-anchor \"parcels\""; print "load anchor \"parcels\" from \"/etc/pf.anchors/parcels\""; print e
-      done = 1
-    }
-  ' /etc/pf.conf > /tmp/pf.conf.parcels && mv /tmp/pf.conf.parcels /etc/pf.conf
-  chmod 644 /etc/pf.conf; chown root:wheel /etc/pf.conf
-  grep -q "^${BEGIN}\$" /etc/pf.conf || die "could not find Apple's rdr-anchor line to insert after; /etc/pf.conf is not stock"
-  note "added the anchor to /etc/pf.conf"
-fi
-
-# Validate BEFORE loading: a syntax error here would otherwise leave pf with no ruleset at all.
-pfctl -n -f /etc/pf.conf || die "/etc/pf.conf failed validation and was NOT loaded; restore a .parcels-backup-* file"
-note "pf.conf validates"
-
-# --- 4. load it now, and at every boot --------------------------------------------------------------
-pfctl -E -f /etc/pf.conf 2>&1 | sed 's/^/  pf: /' || die "pfctl could not enable pf"
-
-cat > "$PLIST" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- pf is disabled by default on macOS and does not persist across a reboot, so the redirect that makes
-     http://${HOST_NAME} work has to be re-applied at every boot. -->
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>${LABEL}</string>
-  <key>ProgramArguments</key>
-  <array><string>/sbin/pfctl</string><string>-E</string><string>-f</string><string>/etc/pf.conf</string></array>
-  <key>RunAtLoad</key><true/>
-</dict>
-</plist>
-EOF
-chmod 644 "$PLIST"; chown root:wheel "$PLIST"
-launchctl bootout "system/${LABEL}" 2>/dev/null || true
-launchctl bootstrap system "$PLIST"
-note "installed ${PLIST}"
-
-# --- 5. prove it ------------------------------------------------------------------------------------
 echo
-CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://${HOST_NAME}/" || echo 000)
+CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://${HOST_NAME}:${PORT}/" || echo 000)
 if [ "$CODE" = "200" ]; then
-  echo "http://${HOST_NAME} -> HTTP ${CODE}. Done."
+  echo "http://${HOST_NAME}:${PORT} -> HTTP ${CODE}. Done."
 else
-  echo "http://${HOST_NAME} -> HTTP ${CODE} (expected 200)."
-  echo "The web agent may not be running. Check:  launchctl print gui/\$(id -u)/local.parcels.web"
-  echo "A 403 means the server is up but does not know the hostname: rebuild with 'npm run build' and"
-  echo "restart it, so the Host allow-list change in src/web/server.ts is live."
+  echo "http://${HOST_NAME}:${PORT} -> HTTP ${CODE} (expected 200)."
+  echo "  The web agent may not be running:  launchctl print gui/\$(id -u)/local.parcels.web"
+  echo "  A 403 means the server is up but does not know the hostname: rebuild with 'npm run build'"
+  echo "  and restart it, so the Host allow-list in src/web/server.ts is live."
   exit 1
 fi

@@ -227,7 +227,7 @@ cat <<EOF
 
 3. Optional, needs a password prompt in a real Terminal:
      sudo scripts/install-hostname.sh
-   That gives you http://parcels.local instead of a port number.
+   That gives you http://parcels.local:8787 instead of an IP address.
 
 4. Optional, one-time macOS approval for nicer notifications: in a real Terminal window run
      terminal-notifier -title x -message y

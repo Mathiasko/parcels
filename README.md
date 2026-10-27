@@ -64,7 +64,7 @@ These need a browser, a GUI prompt or a password, and the script lists them when
    sudo scripts/install-hostname.sh
    ```
 
-   That gives you <http://parcels.local> instead of a port number.
+   That gives you <http://parcels.local:8787> instead of a port number.
 4. **Notification approval** (optional, one-time). From a real Terminal window run
    `terminal-notifier -title x -message y` and approve the macOS prompt. Check which mechanism is
    live with `node dist/cli.js notify-test`.
@@ -434,26 +434,34 @@ Things worth knowing:
 
 ## The dashboard
 
-<http://127.0.0.1:8787> (or your `port`), and <http://parcels.local> once the hostname is installed
+<http://127.0.0.1:8787> (or your `port`), and <http://parcels.local:8787> once the hostname is installed
 (below). It binds loopback only and has **no authentication, by design**: anything on this Mac can
 reach it, and nothing else can.
 
 ### The parcels.local hostname
 
 ```sh
-sudo scripts/install-hostname.sh              # sudo scripts/install-hostname.sh --uninstall to reverse
+sudo scripts/install-hostname.sh              # --uninstall to reverse
 ```
 
-Must be run from a real Terminal, because it needs a password prompt. It is idempotent, backs up
-`/etc/hosts` and `/etc/pf.conf` before its first change, marks every edit with `# >>> parcels tracker`
-sentinels, validates `pf.conf` before loading it, and finishes by curling the dashboard to prove the
-result. It does three root-owned things, none of which run the app itself as root:
+Must be run from a real Terminal, because it needs a password prompt. It edits **`/etc/hosts` and
+nothing else**, backing it up first, marking its lines with `# >>> parcels tracker` sentinels, and
+finishing by curling the dashboard to prove the result. The URL becomes
+<http://parcels.local:8787>.
 
-| Piece | Why |
-|---|---|
-| `/etc/hosts` | Resolves `parcels.local` here, and nowhere else. Both A and AAAA, so a browser trying `::1` first does not stall. |
-| `/etc/pf.anchors/parcels` | `rdr pass on lo0 ... port 80 -> port 8787`. A non-root process cannot bind a port below 1024, so the app keeps its own port and the kernel moves the packets. The redirect reads the port out of `config.json`. |
-| `/Library/LaunchDaemons/local.parcels.pf.plist` | pf is off by default on macOS and does not persist across a reboot, so the rule is re-applied at boot. |
+Both address families are written, and that matters more than it looks. macOS resolves a `.local`
+name through mDNS as well as `/etc/hosts`, and with only an A record it waits about five seconds for
+an AAAA answer that never comes — on every connection. With `::1` present the v6 attempt is refused
+instantly (nothing listens there; the server binds `127.0.0.1` only) and the client falls straight
+back to v4. Measured here: **5.01s to connect v4-only, 0.005s with both**.
+
+**It no longer redirects port 80.** An earlier version used a `pf` rule so the URL could omit the
+port, since a process without root cannot bind a port below 1024. That rule
+(`rdr pass on lo0 ... -> 127.0.0.1 port 8787`) also made pf swallow **direct** connections to 8787:
+the documented fallback URL stopped accepting connections at all — not refused, dropped, so clients
+hung until they timed out. Putting a trivial server on 8787 with the app stopped reproduced it
+exactly, which is what proved the packet filter was at fault rather than the application. Re-running
+the script removes that setup, including the boot job, wherever an older version installed it.
 
 **The hostname is also an allow-list entry in the code**, in `LOCAL_HOST` (`src/web/server.ts`). The
 server refuses a `Host` header it does not recognise, because with no authentication that header is
