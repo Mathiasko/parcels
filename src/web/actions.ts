@@ -1,6 +1,6 @@
 import type { Config } from '../core/config.js'
 import type { CarrierId } from '../core/types.js'
-import { detectCarrier, getAdapter, normalizeNumber } from '../carriers/registry.js'
+import { normalizeNumber, resolveCarrier } from '../carriers/registry.js'
 import type { Database } from '../db/index.js'
 import { findParcel, insertParcel } from '../db/parcels.js'
 import { CARRIER_NAME } from './views/format.js'
@@ -41,24 +41,21 @@ export function addParcel(db: Database, config: Config, req: AddRequest): AddRes
   if (number === '') return { ok: false, status: 400, message: 'Enter a tracking number.' }
   if (number.length > MAX_NUMBER) return { ok: false, status: 400, message: 'That tracking number is too long.' }
 
-  let carrier: CarrierId
+  let chosen: CarrierId | undefined
   if (req.carrier) {
     if (!isCarrierId(req.carrier)) return { ok: false, status: 400, message: 'Unknown carrier. Choose one from the list.' }
-    carrier = req.carrier
-    // A chosen carrier still has to be one the number could belong to; otherwise garbage is stored and then polled.
-    if (!getAdapter(carrier).matches(number)) {
-      return { ok: false, status: 400, message: `${number} does not look like a ${CARRIER_NAME[carrier]} tracking number.` }
-    }
-  } else {
-    const candidates = detectCarrier(number)
-    if (candidates.length === 0) {
-      return { ok: false, status: 400, message: `Could not tell which carrier ${number} belongs to. Choose one from the list.` }
-    }
-    if (candidates.length > 1) {
-      return { ok: false, status: 400, message: `${number} could be ${candidates.map(c => CARRIER_NAME[c]).join(' or ')}. Choose one from the list.` }
-    }
-    carrier = candidates[0]!
+    chosen = req.carrier
   }
+  // An explicit carrier overrides the shape check (as in `cli add --carrier`); only auto-detect is validated.
+  const resolved = resolveCarrier(number, chosen)
+  if (!resolved.ok) {
+    const { candidates } = resolved
+    const message = candidates.length === 0
+      ? `Could not tell which carrier ${number} belongs to. Choose one from the list.`
+      : `${number} could be ${candidates.map(c => CARRIER_NAME[c]).join(' or ')}. Choose one from the list.`
+    return { ok: false, status: 400, message }
+  }
+  const carrier = resolved.carrier
 
   const existing = findParcel(db, carrier, number)
   if (existing) {

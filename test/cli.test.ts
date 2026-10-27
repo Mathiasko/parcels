@@ -47,6 +47,13 @@ test('add requires --carrier when detection is ambiguous and exits with a clear 
   expect(findParcel(db, 'dpd', '01234567890123')).toBeDefined()
 })
 
+test('add --carrier overrides the shape check', async () => {
+  const db = memDb()
+  const r = await cli(db, 'add', 'hello', '--carrier', 'posta')
+  expect(r.code).toBe(0)
+  expect(findParcel(db, 'posta', 'HELLO')).toBeDefined()
+})
+
 test('add rejects a duplicate carrier+number with a friendly message, not a stack trace', async () => {
   const db = memDb()
   await cli(db, 'add', 'RA123456785SK')

@@ -8,6 +8,7 @@ import { findParcel, getParcel, insertParcel, setArchived, setNeedsPostcode, upd
 import type { Database } from '../src/db/index.js'
 import type { CarrierId } from '../src/core/types.js'
 import type { Notification } from '../src/notify/types.js'
+import { getAdapter } from '../src/carriers/registry.js'
 import { formatDuration } from '../src/web/views/format.js'
 import { bodyHttp, config, ev, memDb, NOW, okResult, stubAdapter } from './poll-helpers.js'
 
@@ -369,11 +370,12 @@ describe('web pages: fix round 1', () => {
     expect((await get(db, '/?refreshed=1&refreshed=2&failures=3&failures=4')).statusCode).toBe(200)
   })
 
-  test('POST /add validates a chosen carrier against the number and caps field lengths', async () => {
+  test('POST /add validates auto-detection, and caps field lengths', async () => {
     const db = memDb()
-    const mismatch = await post(db, '/add', { number: 'garbage 123', carrier: 'posta' })
-    expect(mismatch.statusCode).toBe(400)
-    expect(mismatch.body).toMatch(/does not look like a Slovenská pošta tracking number/)
+    const undetected = await post(db, '/add', { number: 'garbage 123' })
+    expect(undetected.statusCode).toBe(400)
+    expect(undetected.body).toMatch(/Could not tell which carrier GARBAGE123 belongs to/)
+    expect((await post(db, '/add', { number: 'RA123456785SK', carrier: 'nope' })).statusCode).toBe(400)
     expect((await post(db, '/add', { number: 'A'.repeat(500), carrier: 'packeta' })).statusCode).toBe(400)
     expect((await post(db, '/add', { number: 'A'.repeat(45) })).statusCode).toBe(400)
     const ok = await post(db, '/add', { number: 'RA123456785SK', carrier: 'posta', label: 'L'.repeat(500), postcode: '1'.repeat(50) })
@@ -383,13 +385,23 @@ describe('web pages: fix round 1', () => {
     expect(p.postalCode).toHaveLength(12)
   })
 
-  test('/assign applies the same carrier check', async () => {
+  test('an explicit carrier overrides the shape check, as in cli add --carrier', async () => {
+    const db = memDb()
+    expect(getAdapter('posta').matches('GARBAGE123')).toBe(false)   // precondition: it really fails the shape check
+    const res = await post(db, '/add', { number: 'garbage 123', carrier: 'posta' })
+    expect(res.statusCode).toBe(303)
+    expect(findParcel(db, 'posta', 'GARBAGE123')).toBeDefined()
+  })
+
+  test('/assign applies the same rules: undetectable is rejected, an explicit carrier overrides', async () => {
     const db = memDb()
     const id = Number(db.prepare('INSERT INTO messages (message_id, subject, parsed_ok) VALUES (?, ?, 0)').run('<z@x>', 'Hi').lastInsertRowid)
-    const res = await post(db, `/attention/${id}/assign`, { number: 'garbage 123', carrier: 'posta' })
+    const res = await post(db, `/attention/${id}/assign`, { number: 'garbage 123' })
     expect(res.statusCode).toBe(400)
-    expect(res.body).toContain('does not look like')
+    expect(res.body).toContain('Could not tell which carrier')
     expect(db.prepare('SELECT parcel_id FROM messages WHERE id = ?').get(id)).toEqual({ parcel_id: null })
+    expect((await post(db, `/attention/${id}/assign`, { number: 'garbage 123', carrier: 'sps' })).statusCode).toBe(303)
+    expect(findParcel(db, 'sps', 'GARBAGE123')).toBeDefined()
   })
 
   test('a 5xx is logged to stderr, not swallowed, and the page stays generic', async () => {

@@ -6,7 +6,7 @@ import { captureBodies, createHttpClient } from './core/http.js'
 import { runPoll, summarize } from './core/poll.js'
 import type { CarrierAdapter, CarrierId, HttpClient } from './core/types.js'
 import { initRuntime } from './core/runtime.js'
-import { allAdapters, detectCarrier, getAdapter, normalizeNumber } from './carriers/registry.js'
+import { allAdapters, getAdapter, normalizeNumber, resolveCarrier } from './carriers/registry.js'
 import { openDb, type Database } from './db/index.js'
 import { createNotifier, type SpawnFn } from './notify/send.js'
 import type { Notifier } from './notify/types.js'
@@ -61,19 +61,14 @@ function add(argv: string[], ctx: CliContext): void {
   const number = normalizeNumber(positionals[0]!)
   if (number === '') throw new CliError(`"${positionals[0]}" is not a tracking number`)
 
-  let carrier: CarrierId
-  if (values.carrier !== undefined) {
-    carrier = requireCarrier(values.carrier)
-  } else {
-    const candidates = detectCarrier(number)
-    if (candidates.length === 0) {
+  const resolved = resolveCarrier(number, values.carrier === undefined ? undefined : requireCarrier(values.carrier))
+  if (!resolved.ok) {
+    if (resolved.candidates.length === 0) {
       throw new CliError(`could not tell which carrier ${number} belongs to; pass --carrier <${CARRIER_IDS.join('|')}>`)
     }
-    if (candidates.length > 1) {
-      throw new CliError(`${number} could be ${candidates.join(' or ')}; pass --carrier to choose`)
-    }
-    carrier = candidates[0]!
+    throw new CliError(`${number} could be ${resolved.candidates.join(' or ')}; pass --carrier to choose`)
   }
+  const carrier = resolved.carrier
 
   const existing = findParcel(ctx.db, carrier, number)
   if (existing) throw new CliError(`already tracking ${number} (${carrier}) as #${existing.id}`)

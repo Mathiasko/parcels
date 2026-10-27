@@ -34,6 +34,24 @@ export function detectCarrier(number: string): CarrierId[] {
   return DETECT_ORDER.filter(id => adapters.get(id)?.matches(number) === true)
 }
 
+export type CarrierResolution =
+  | { ok: true; carrier: CarrierId }
+  /** Auto-detection failed: `candidates` is empty (nothing matched) or has several entries (ambiguous). */
+  | { ok: false; candidates: CarrierId[] }
+
+/**
+ * The one place a parcel's carrier is decided, shared by `cli add` and the web UI so they cannot drift.
+ * An explicit choice always wins and is NOT checked against `matches()`: it is the user's escape hatch
+ * when detection fails, and a real number can fail the shape check. A bad number only ever yields a
+ * `not_found` that goes dormant. Only the auto-detect path is validated: exactly one carrier must match.
+ */
+export function resolveCarrier(number: string, explicit?: CarrierId): CarrierResolution {
+  if (explicit !== undefined) return { ok: true, carrier: explicit }
+  const candidates = detectCarrier(number)
+  if (candidates.length === 1) return { ok: true, carrier: candidates[0]! }
+  return { ok: false, candidates }
+}
+
 // Adapters do not register themselves; this is the one place that does. Order here is irrelevant:
 // detectCarrier applies DETECT_ORDER.
 for (const adapter of [postaAdapter, packetaAdapter, glsAdapter, spsAdapter, dpdAdapter]) register(adapter)

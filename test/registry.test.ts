@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest'
 import {
-  normalizeNumber, detectCarrier, register, getAdapter, allAdapters,
+  normalizeNumber, detectCarrier, register, getAdapter, allAdapters, resolveCarrier,
 } from '../src/carriers/registry.js'
 import type { CarrierAdapter, CarrierId } from '../src/core/types.js'
 
@@ -61,6 +61,16 @@ describe('with stand-in adapters', () => {
     register(stub('gls', /^\d+$/))
     expect(detectCarrier('7031234567890123')).toEqual(['sps', 'gls'])
   })
+  test('resolveCarrier: an explicit carrier wins without a shape check; auto-detect needs exactly one match', () => {
+    expect(resolveCarrier('GARBAGE', 'posta')).toEqual({ ok: true, carrier: 'posta' })
+    expect(resolveCarrier('RA123456785SK')).toEqual({ ok: true, carrier: 'posta' })
+    expect(resolveCarrier('GARBAGE')).toEqual({ ok: false, candidates: [] })
+    register(stub('gls', /^\d{11,14}$/))   // make a bare 14-digit number ambiguous
+    const r = resolveCarrier('01234567890123')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.candidates.length).toBeGreaterThan(1)
+  })
+
   test('getAdapter returns a registered adapter and throws for an unregistered one', () => {
     expect(getAdapter('posta').id).toBe('posta')
     expect(() => getAdapter('nope' as CarrierId)).toThrow(/nope/)
