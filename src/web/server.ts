@@ -17,6 +17,7 @@ import type { Notifier } from '../notify/types.js'
 import { listDelivered, setLabel, setPostalCode } from '../db/parcels.js'
 import { carrierHealth } from '../db/health.js'
 import { getIngestStatus } from '../db/ingest-status.js'
+import { getPickupCode, pickupCodesFor } from '../db/pickup-codes.js'
 import { dismissMessage } from '../db/messages.js'
 import { addParcel, cleanPostcode, MAX_LABEL } from './actions.js'
 import { CARRIER_NAME } from './views/format.js'
@@ -128,7 +129,10 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   })
 
   app.get('/', async (req, reply) => {
-    const entries = listActive(db).map(parcel => ({ parcel, last: latestEvent(db, parcel.id) }))
+    const active = listActive(db)
+    // One query for every code on the page, rather than one per parcel inside the card renderer.
+    const codes = pickupCodesFor(db, active.filter(p => p.status === 'ready_for_pickup').map(p => p.id))
+    const entries = active.map(parcel => ({ parcel, last: latestEvent(db, parcel.id), code: codes.get(parcel.id) }))
     return send(reply, indexPage(entries, ctx(), refreshNote(req.query as Record<string, unknown>)))
   })
 
@@ -150,6 +154,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     return send(reply, parcelPage(
       parcel, listEvents(db, parcel.id), rawResponsesFor(db, parcel.id, parcel.carrier), ctx(),
       refreshNote(req.query as Record<string, unknown>), mapFor(parcel),
+      parcel.status === 'ready_for_pickup' ? getPickupCode(db, parcel.id) : undefined,
     ))
   })
 

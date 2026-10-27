@@ -235,3 +235,27 @@ function carrierMerchant(carrier: CarrierId, haystack: string): string | undefin
   }
   return undefined
 }
+
+/**
+ * The code that opens a Z-BOX. Packeta puts it in the pickup email only - the tracking API never
+ * carries it - laid out one digit per cell, so the digits arrive separated:
+ *
+ *     Kód pre otvorenie schránky 7 9 9 8 7 4 Miesto, kde je vaša zásielka uložená ...
+ *
+ * The same phrase appears a second time further down, inside the instructions ("...otvorenie
+ * schránky ALEBO stiahnutá aktuálna verzia aplikácie Packeta"), with no digits after it. That is why
+ * the digits must follow immediately: anchoring on the phrase alone matches the wrong occurrence.
+ *
+ * Returned as a string because real codes carry leading zeros (004467, 007018); a number would drop
+ * them silently and send the reader to the locker with a code one digit short.
+ */
+const PICKUP_CODE = /k[oó]d p(?:re|ro) ot(?:vorenie|evřen[ieí]|evren[ieí]) schr[aá]nky[\s:]*((?:\d[ \t ]*){4,10})(?![ \t ]*\d)/i
+
+export function extractPickupCode(text: string): string | undefined {
+  // Collapse whitespace first. The digits sit one per table cell, so in the plain-text rendering they
+  // are separated by NEWLINES as often as by spaces, and the phrase itself can wrap mid-sentence.
+  const m = PICKUP_CODE.exec(text.replace(/\s+/g, ' '))
+  if (!m) return undefined
+  const digits = m[1]!.replace(/\D/g, '')
+  return digits.length >= 4 && digits.length <= 10 ? digits : undefined
+}

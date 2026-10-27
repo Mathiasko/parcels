@@ -54,7 +54,20 @@ export function refreshBanner(n: RefreshNote | undefined): Html {
   return notice('warn', html`<p><strong>${plural(n.failures, 'carrier failure')}.</strong> See <a href="/health">Health</a>.</p><p>${note}</p>`, true)
 }
 
-export interface Entry { parcel: Parcel; last: StoredEvent | undefined }
+export interface Entry { parcel: Parcel; last: StoredEvent | undefined; /** The Z-BOX opening code, when its mail carried one. */ code?: string }
+
+/**
+ * The code that opens the locker, shown only when the mail actually carried one.
+ *
+ * There is deliberately no empty state: a staffed pickup point never has a code, because a person
+ * hands the parcel over, so "no code" is the normal and permanent answer for those and saying so
+ * would invent a problem. Rendered big, monospaced and selectable - it is read off the screen while
+ * standing at the box, or copied, and a mis-read digit is a wasted trip.
+ */
+export function pickupCodeLine(code: string | undefined): Html {
+  if (!code) return html``
+  return html`<p class="code"><span class="code-l">Open the box with</span> <b class="mono sel">${code}</b></p>`
+}
 
 /** The time that put a parcel where it is: the status change, else the newest event. */
 export const sinceOf = (e: Entry): Date | undefined => e.parcel.lastChangedAt ?? e.last?.occurredAt
@@ -115,7 +128,7 @@ function pickupCard(where: string, members: Entry[], ctx: PageCtx): Html {
 <div class="pk-h${dueNow ? raw(' due-now') : ''}"><h2>${where}</h2>${statusIndicator('ready_for_pickup')}</div>
 <ul class="pk-l">${members.map((m, i) => html`<li><h3><a href="/parcel/${m.parcel.id}">${parcelName(m.parcel)}</a></h3>
 <span class="meta">${CARRIER_NAME[m.parcel.carrier]} · <span class="mono sel">${m.parcel.trackingNumber}</span></span>
-${clocks[i]!.out}${postcodeRejected(m.parcel) ? html`<p class="meta t-warn">${glyph('problem')} Postcode needed: <a class="sel" href="/parcel/${m.parcel.id}">set one</a> to resume full tracking.</p>` : ''}</li>`)}</ul>
+${clocks[i]!.out}${pickupCodeLine(m.code)}${postcodeRejected(m.parcel) ? html`<p class="meta t-warn">${glyph('problem')} Postcode needed: <a class="sel" href="/parcel/${m.parcel.id}">set one</a> to resume full tracking.</p>` : ''}</li>`)}</ul>
 ${note || maps ? html`<p class="pk-f meta">${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps ↗</a>` : ''}</p>` : ''}
 </article>`
 }

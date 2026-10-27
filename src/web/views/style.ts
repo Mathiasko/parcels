@@ -208,6 +208,13 @@ td .st{line-height:1.375rem}
 .acts form{margin:0}
 .acts p{margin:1rem 0 0}
 
+/* The locker code: the one thing on the page that gets read off a screen at arm's length while
+   standing at the box, so it is the largest text in the panel. Not blue - the pickup panel already
+   carries the signal colour, and a second use would dilute what it means. */
+.code{margin:.5rem 0 0;display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap}
+.code-l{font-size:.8125rem;color:var(--ink-2)}
+.code b{font-size:1.5rem;font-weight:600;letter-spacing:.14em;line-height:1.2}
+
 /* raw responses */
 details{margin:.25rem 0}
 summary{font-size:.8125rem;color:var(--ink-3);cursor:pointer;padding:.25rem 0}

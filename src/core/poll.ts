@@ -8,6 +8,7 @@ import { buildNotifications } from '../notify/rules.js'
 import { ingestMessages, type IngestDeps, type IngestReport } from '../ingest/ingest.js'
 import { HttpTransportError, captureBodies } from './http.js'
 import { runMapPreview, summarizeMapPreview, type MapPreviewDeps, type MapPreviewReport } from './map-preview.js'
+import { runPickupCodes, type PickupCodeReport } from './pickup-code.js'
 import { isDormant, isDue, slotFor } from './backoff.js'
 import { dedupHash } from './dedup.js'
 import { appendEvents, markNotified, recomputeParcelStatus } from '../db/events.js'
@@ -54,6 +55,8 @@ export interface PollReport {
   ingest?: IngestReport
   /** What the map preview did this run; absent when it is turned off or not configured. */
   map?: MapPreviewReport
+  /** Z-BOX codes read out of stored mail this run; absent when nothing needed scanning. */
+  codes?: PickupCodeReport
 }
 
 const RAW_RESPONSES_KEPT = 5
@@ -138,8 +141,24 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   if (deps.notifier) await notify(deps.notifier, db, report, now, deps.config.port)
   // Last, and after the notifications: this is the only step that deliberately sleeps (both services
   // it uses are free and rate-limited), and nothing else in the run depends on it.
+  report.codes = await pickupCodes(deps)
   report.map = await mapPreview(deps)
   return report
+}
+
+/**
+ * Reading Z-BOX codes out of the parcel's own stored mail. Local file reads only, so unlike the map
+ * step this costs nothing external - but it is still wrapped, because a malformed .eml must not be
+ * able to turn a successful poll into a failed one.
+ */
+async function pickupCodes(deps: PollDeps): Promise<PickupCodeReport | undefined> {
+  try {
+    const r = await runPickupCodes({ db: deps.db, now: deps.now })
+    return r.scanned === 0 ? undefined : r
+  } catch (err) {
+    console.error(`pickup codes: ${describe(err)}`)
+    return undefined
+  }
 }
 
 /**
@@ -387,5 +406,7 @@ export function summarize(report: PollReport): string {
     : i.read === 0 ? ''
     : `, mail: ${i.read} new, ${i.created} parcel(s) created${i.archivedOld ? ` (${i.archivedOld} archived as old)` : ''}${i.needsAttention ? `, ${i.needsAttention} need attention` : ''}${i.failed ? `, ${i.failed} failed (will retry)` : ''}`
   const map = report.map ? summarizeMapPreview(report.map) : ''
-  return `polled ${report.polled} parcel(s), ${report.newEvents.length} new event(s)${mail}${map}${failed}`
+  // The code itself is deliberately NOT logged: it opens a physical locker and this line lands in a file.
+  const codes = report.codes ? `, ${report.codes.found} pickup code(s) found` : ''
+  return `polled ${report.polled} parcel(s), ${report.newEvents.length} new event(s)${mail}${codes}${map}${failed}`
 }

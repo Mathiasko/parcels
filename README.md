@@ -283,6 +283,22 @@ running server predates that change** — `npm run build`, then restart the web 
 | `/health` | Per-carrier last-ok / last-error, and ingest health. |
 | `/add` | Add a parcel by hand. |
 
+### The Z-BOX opening code
+
+A parcel waiting in a Packeta Z-BOX shows the code that opens the box. **The code is never in the
+tracking API** - it arrives only in the pickup email - so it is read back out of the stored `.eml`
+during a poll, from local files, with no network call. That is also why historical mail works: a
+parcel whose pickup email arrived before this existed gets its code on the next poll, with no
+backfill command.
+
+- Stored as **text**: real codes carry leading zeros (`004467`), and a number would drop them.
+- A **staffed** pickup point ("pripravená na výdaj") has no code, because a person hands the parcel
+  over. Nothing is shown in that case - no empty state, because there is no problem to report.
+- A parcel whose mail yielded no code is only rescanned when new mail arrives for it, so a codeless
+  parcel is not re-read from disk every hour.
+- **The code is deliberately kept out of notifications and out of `data/poll.log`.** It opens a
+  physical locker, and notification banners render on the lock screen.
+
 Adding by hand: with the carrier left on auto-detect the number must match exactly one carrier's
 shape. **Choosing a carrier explicitly overrides that check**, in the web page and in the CLI alike.
 It is the escape hatch for when detection fails, and real numbers can fail the shape check (an SPS

@@ -9,7 +9,7 @@ import { STATUS_TITLE } from '../../notify/rules.js'
 import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
-import { mapsUrl, noDeadlineNote, parcelName, pickupSummary, refreshBanner, sinceOf, type RefreshNote } from './index.js'
+import { mapsUrl, noDeadlineNote, parcelName, pickupCodeLine, pickupSummary, refreshBanner, sinceOf, type RefreshNote } from './index.js'
 import type { TileGrid } from '../../core/slippy.js'
 
 const RAW_SHOWN_CHARS = 20_000
@@ -89,7 +89,7 @@ function mapPanel(grid: TileGrid, where: string): Html {
 }
 
 /** The place, how long it has been waiting (or the deadline), and a Maps link only if the carrier gave coordinates. */
-function pickupPanel(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx, map?: TileGrid): Html {
+function pickupPanel(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx, map?: TileGrid, code?: string): Html {
   const where = pickupSummary(p)
   if (!where) return html``
   const maps = mapsUrl(p)
@@ -103,7 +103,7 @@ function pickupPanel(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx, map
       ? html`<p class="clock">Since ${formatDateTime(since, ctx.now)}${days >= 1 ? html` · <b>${plural(days, 'day')}</b>` : ''}</p>` : ''
   const note = ready ? noDeadlineNote([{ parcel: p, last }]) : ''
   return html`<section class="pk" aria-label="Pickup point"><div class="pk-h${ready ? '' : raw(' plain')}${ready && left !== undefined && left <= 0 ? raw(' due-now') : ''}"><div class="where">${where}</div>${ready ? statusIndicator('ready_for_pickup') : html`<span class="meta">Pickup point</span>`}</div>
-<div class="pk-b">${clock}${ready && map ? mapPanel(map, where) : ''}${note || maps ? html`<p class="meta">${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps ↗</a>` : ''}</p>` : ''}</div></section>`
+<div class="pk-b">${clock}${ready ? pickupCodeLine(code) : ''}${ready && map ? mapPanel(map, where) : ''}${note || maps ? html`<p class="meta">${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps ↗</a>` : ''}</p>` : ''}</div></section>`
 }
 
 function rawSection(raws: RawResponse[], ctx: PageCtx): Html {
@@ -162,7 +162,7 @@ function timelineSection(p: Parcel, events: StoredEvent[], ctx: PageCtx): Html {
  * never looks at the disk itself: a page render reads the database and nothing else.
  */
 export function parcelPage(
-  p: Parcel, events: StoredEvent[], raws: RawResponse[], ctx: PageCtx, note?: RefreshNote, map?: TileGrid,
+  p: Parcel, events: StoredEvent[], raws: RawResponse[], ctx: PageCtx, note?: RefreshNote, map?: TileGrid, code?: string,
 ): Html {
   const last = events.at(-1)
   const plain = postcodeRejected(p) || p.needsPostcode !== undefined
@@ -172,7 +172,7 @@ export function parcelPage(
   ${isTracked(p) ? html`<form class="inline" method="post" action="/refresh"><input type="hidden" name="parcel" value="${p.id}"><button>Refresh this parcel</button></form>` : ''}</div>
 <div class="status">${statusLine(p, events)}</div>
 <p class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span>${p.merchant && p.merchant !== parcelName(p) ? html` · ${p.merchant}` : ''}${p.statusRaw ? html` · carrier says: ${p.statusRaw}` : ''}</p>
-${refreshBanner(note)}${postcodeNotice(p)}${pickupPanel(p, last, ctx, map)}
+${refreshBanner(note)}${postcodeNotice(p)}${pickupPanel(p, last, ctx, map, code)}
 ${timelineSection(p, events, ctx)}
 ${rawSection(raws, ctx)}
 ${deleteSection(p)}

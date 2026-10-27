@@ -132,3 +132,18 @@ CREATE TABLE IF NOT EXISTS geocode_cache (
   attempted_at TEXT NOT NULL,
   detail       TEXT                           -- why the last attempt failed; diagnostics only
 );
+
+-- The code that opens a Z-BOX arrives ONLY in the pickup email; the tracking API never carries it.
+-- It is therefore read back out of the stored .eml rather than from a carrier response.
+-- `code` is TEXT and nullable on purpose. Real codes carry leading zeros (004467, 007018), which an
+-- integer column would silently turn into a wrong code at the locker; NULL means "looked, there is
+-- none", which is the permanent and correct state for a staffed pickup point where a person hands
+-- the parcel over. `checked_messages` is how many of the parcel's emails had been scanned, so a
+-- rescan happens only when that count grows and a codeless parcel is not re-read from disk hourly
+-- for ever. A table of its own, so an existing database gains it from the idempotent schema exec.
+CREATE TABLE IF NOT EXISTS pickup_codes (
+  parcel_id        INTEGER PRIMARY KEY REFERENCES parcels(id),
+  code             TEXT,
+  checked_messages INTEGER NOT NULL,
+  checked_at       TEXT NOT NULL
+);

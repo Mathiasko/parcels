@@ -268,6 +268,7 @@ export function deleteParcel(db: Database, id: number): void {
     db.prepare('DELETE FROM events WHERE parcel_id = ?').run(id)
     db.prepare('DELETE FROM raw_responses WHERE parcel_id = ?').run(id)
     db.prepare('DELETE FROM deadline_reminders WHERE parcel_id = ?').run(id)
+    db.prepare('DELETE FROM pickup_codes WHERE parcel_id = ?').run(id)
     db.prepare("UPDATE messages SET parcel_id = NULL, parsed_ok = 1, parse_note = 'Parcel deleted; email kept' WHERE parcel_id = ?").run(id)
     db.prepare('DELETE FROM parcels WHERE id = ?').run(id)
   })()
