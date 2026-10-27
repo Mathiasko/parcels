@@ -1,4 +1,6 @@
 import type { Database } from './index.js'
+import { canonicalNumber } from '../carriers/registry.js'
+import type { CarrierId } from '../core/types.js'
 
 /**
  * A change to an existing table's shape. New TABLES do not need one: `schema.sql` is applied with
@@ -52,7 +54,127 @@ export const MIGRATIONS: Migration[] = [
       `).run()
     },
   },
+  {
+    version: 3,
+    name: 'merge parcels that are one shipment spelled two ways',
+    /**
+     * One GLS shipment, two parcels. Parcels 39 and 40 in the author's database were the same
+     * shipment, ingested from two different emails as `01928813352` and `1928813352`: the padded
+     * spelling did not match the bare one, `findParcel` missed, and a second parcel was created.
+     *
+     * `canonicalNumber` stops that happening again, but only for writes from now on. The pairs
+     * already in a database would stay two parcels for ever, because nothing re-reads a stored
+     * tracking number - and worse, a row still holding the padded spelling would be missed by every
+     * future lookup and duplicated all over again. Both are fixed here.
+     *
+     * Deliberately asks `canonicalNumber` rather than freezing a copy of the rule: a database that
+     * has not run this migration yet should be reconciled with the rule the app enforces on writes
+     * TODAY, or the migration would leave behind exactly the duplicates that rule now prevents.
+     * Written over every carrier, not just GLS, so widening `ZERO_PADDED` needs no new migration
+     * for databases that have yet to catch up.
+     */
+    up: db => {
+      interface Row { id: number; carrier: CarrierId; tracking_number: string }
+      // Ordered by id, so each group's first member is the parcel that was created first.
+      const rows = db.prepare('SELECT id, carrier, tracking_number FROM parcels ORDER BY id').all() as Row[]
+      const groups = new Map<string, { canonical: string; stored: string; ids: number[] }>()
+      for (const r of rows) {
+        const canonical = canonicalNumber(r.carrier, r.tracking_number)
+        const key = `${r.carrier} ${canonical}`
+        const group = groups.get(key) ?? { canonical, stored: r.tracking_number, ids: [] }
+        group.ids.push(r.id)
+        groups.set(key, group)
+      }
+
+      const rename = db.prepare('UPDATE parcels SET tracking_number = ? WHERE id = ?')
+      for (const { canonical, stored, ids } of groups.values()) {
+        const [keep, ...losers] = ids as [number, ...number[]]
+        // The losers go first: one of them may be holding the canonical spelling that the survivor is
+        // about to take, and `UNIQUE (carrier, tracking_number)` would refuse the overlap.
+        for (const loser of losers) mergeParcel(db, keep, loser)
+        // A lone parcel still gets here, because a row left holding the padded spelling would be
+        // missed by every future lookup and duplicated all over again.
+        if (stored !== canonical) rename.run(canonical, keep)
+      }
+    },
+  },
 ]
+
+/** Tables with no uniqueness on `parcel_id`: every row moves, and none may be dropped. */
+const MOVED_WHOLESALE = ['messages', 'raw_responses'] as const
+/**
+ * Tables keyed by `parcel_id` (plus something, for `events` and `pickup_nudges`). A row whose key the
+ * survivor already holds cannot move - and is a duplicate of it by definition, both rows having been
+ * polled from the same shipment - so it is dropped. `events` is the one that really collides: its
+ * `dedup_hash` is per parcel, so the same carrier event exists under both parcels with the same hash.
+ * `UPDATE OR IGNORE` skips such a row instead of throwing; the DELETE then clears what stayed behind.
+ */
+const MOVED_IF_FREE = ['events', 'deadline_reminders', 'pickup_codes', 'pickup_nudges'] as const
+
+/** The columns that are one coherent snapshot of what the carrier last said, and so move together. */
+const STATUS_SNAPSHOT = [
+  'status', 'status_raw', 'status_detail', 'retained_till', 'delivered_at', 'last_announced_status',
+  'pickup_kind', 'pickup_name', 'pickup_street', 'pickup_city', 'pickup_zip', 'pickup_lat', 'pickup_lon',
+] as const
+
+type Value = string | number | null
+/** The newest of two ISO timestamps, either of which may be NULL ("never"), which always loses. */
+const later = (a: Value, b: Value): Value => ((a ?? '') > (b ?? '') ? a : b)
+const earlier = (a: Value, b: Value): Value => (later(a, b) === a ? b : a)
+
+/**
+ * Folds `loser` into `keep` and deletes it. `keep` is the lower id, which is the parcel created
+ * first: it is the one whose `/parcel/<id>` link the user already has, and ids are only ever handed
+ * out in order, so the choice is deterministic. Nothing the loser knew is thrown away:
+ *
+ *   - the descriptive columns are the survivor's, falling back to the loser's where it has none, so a
+ *     hand-typed label or a merchant parsed from the other email is never lost;
+ *   - `first_seen_at` is the earlier of the two, which is when the shipment really was first seen;
+ *   - the status columns come from whichever row was polled LAST, as a block. Picking them field by
+ *     field could invent a state neither row was ever in - `delivered` still carrying a pickup point;
+ *   - `pickup_announced` is the OR, so a pickup point the user has already been told about is not
+ *     announced a second time;
+ *   - `archived_at` survives only if BOTH rows were archived: one of them saying the shipment is live
+ *     means it is live;
+ *   - `needs_postcode` is cleared. It is only meaningful against the row's own `postal_code`, and the
+ *     merged row's may now come from the other parcel; clearing it costs one poll, which re-flags the
+ *     parcel if the carrier still rejects the code.
+ */
+function mergeParcel(db: Database, keep: number, loser: number): void {
+  const read = db.prepare('SELECT * FROM parcels WHERE id = ?')
+  const a = read.get(keep) as Record<string, Value>
+  const b = read.get(loser) as Record<string, Value>
+
+  // Which row the carrier spoke to last. A tie (including neither ever polled) keeps the survivor's.
+  const fresher = (b.last_polled_at ?? '') > (a.last_polled_at ?? '') ? b : a
+  const merged: Record<string, Value> = {
+    label: a.label ?? b.label,
+    merchant: a.merchant ?? b.merchant,
+    postal_code: a.postal_code ?? b.postal_code,
+    source_message_id: a.source_message_id ?? b.source_message_id,
+    first_seen_at: earlier(a.first_seen_at, b.first_seen_at),
+    last_polled_at: later(a.last_polled_at, b.last_polled_at),
+    last_attempted_at: later(a.last_attempted_at, b.last_attempted_at),
+    last_changed_at: later(a.last_changed_at, b.last_changed_at),
+    pickup_announced: a.pickup_announced || b.pickup_announced ? 1 : 0,
+    archived_at: a.archived_at === null || b.archived_at === null ? null : later(a.archived_at, b.archived_at),
+    needs_postcode: null,
+  }
+  for (const c of STATUS_SNAPSHOT) merged[c] = fresher[c] ?? null
+
+  const columns = Object.keys(merged)
+  db.prepare(`UPDATE parcels SET ${columns.map(c => `${c} = @${c}`).join(', ')} WHERE id = @id`)
+    .run({ ...merged, id: keep })
+
+  for (const table of MOVED_WHOLESALE) {
+    db.prepare(`UPDATE ${table} SET parcel_id = ? WHERE parcel_id = ?`).run(keep, loser)
+  }
+  for (const table of MOVED_IF_FREE) {
+    db.prepare(`UPDATE OR IGNORE ${table} SET parcel_id = ? WHERE parcel_id = ?`).run(keep, loser)
+    db.prepare(`DELETE FROM ${table} WHERE parcel_id = ?`).run(loser)
+  }
+  db.prepare('DELETE FROM parcels WHERE id = ?').run(loser)
+}
 
 export const latestVersion = (migrations: Migration[] = MIGRATIONS): number =>
   migrations.reduce((n, m) => Math.max(n, m.version), BASELINE)

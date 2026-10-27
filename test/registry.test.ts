@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest'
 import {
-  normalizeNumber, detectCarrier, register, getAdapter, allAdapters, resolveCarrier,
+  normalizeNumber, canonicalNumber, detectCarrier, register, getAdapter, allAdapters, resolveCarrier,
 } from '../src/carriers/registry.js'
 import type { CarrierAdapter, CarrierId } from '../src/core/types.js'
 import { isPollable } from '../src/core/types.js'
@@ -116,6 +116,79 @@ describe('with the real adapters', () => {
     expect(detectCarrier('SK0TEST6000000000X')).toEqual(['sps'])
     expect(detectCarrier('RA123456785SK')).toEqual(['posta'])
     expect(detectCarrier(normalizeNumber('sk0tes t600 0000000x'))).toEqual(['sps'])
+  })
+
+  // --- canonicalNumber: the leading-zero reconciliation ------------------------------------------
+
+  test('the two forms of the real GLS shipment canonicalise to one number', () => {
+    // Straight out of the author's database: one shipment, ingested from two different emails, once
+    // zero-padded to 11 digits by the shop's mail and once bare at 10 by GLS's own.
+    expect(canonicalNumber('gls', '01928813352')).toBe('1928813352')
+    expect(canonicalNumber('gls', '1928813352')).toBe('1928813352')
+    expect(canonicalNumber('gls', '001928813352')).toBe('1928813352')
+  })
+
+  test('canonicalNumber stops at the shortest form the carrier itself still accepts', () => {
+    // 10 digits is GLS's floor: stripping this zero would leave 9 digits, which GLS does not claim,
+    // so the zero is part of the number and stays.
+    expect(canonicalNumber('gls', '0123456789')).toBe('0123456789')
+    expect(canonicalNumber('gls', '0012345678')).toBe('0012345678')
+    expect(canonicalNumber('gls', '000000000001')).toBe('0000000001')
+  })
+
+  test('a leading zero stays significant for every carrier that counts digits', () => {
+    // DHL's eCommerce form IS its leading zeros (`^000\d{13,25}$`) and DPD's shape is fixed-width,
+    // so stripping there would not reconcile two numbers, it would destroy one.
+    expect(canonicalNumber('dhl', '0001234567890123')).toBe('0001234567890123')
+    expect(canonicalNumber('dpd', '01505515835276')).toBe('01505515835276')
+    // The two that would really collapse if the rule were let loose on every carrier: DPD's shape
+    // takes 14 digits OR 15, so stripping a 15-digit number lands on a DIFFERENT, equally valid DPD
+    // number; and `000` + 13-to-25 digits does the same for DHL whenever the fourth digit is a zero.
+    expect(canonicalNumber('dpd', '015055158352761')).toBe('015055158352761')
+    expect(canonicalNumber('dhl', '0000123456789012345')).toBe('0000123456789012345')
+    expect(canonicalNumber('packeta', 'Z0000000001')).toBe('Z0000000001')
+    expect(canonicalNumber('posta', 'RA123456785SK')).toBe('RA123456785SK')
+    expect(canonicalNumber('sps', '7031234567890123')).toBe('7031234567890123')
+    expect(canonicalNumber('sps', 'SK0TEST6000000000X')).toBe('SK0TEST6000000000X')
+  })
+
+  test('canonicalNumber collapses no two numbers that genuinely differ, for any carrier', () => {
+    const numbers: [CarrierId, string][] = [
+      ['gls', '1928813352'], ['gls', '1234567890'], ['gls', '1234567891'], ['gls', '31217533227'],
+      ['gls', '123456789012'], ['gls', '0123456789'], ['gls', '0012345678'], ['gls', '000000000001'],
+      ['dpd', '01505515835276'], ['dpd', '11505515835276'], ['dpd', '00000000000008'],
+      ['dpd', '015055158352761'], ['dpd', '15055158352761'],
+      ['packeta', 'Z0000000001'], ['packeta', 'Z1234567890'],
+      ['posta', 'RA123456785SK'], ['posta', 'RA987654326SK'],
+      ['sps', '7031234567890123'], ['sps', 'SK0TEST6000000000X'],
+      ['dhl', '0001234567890123'], ['dhl', '0001234567890124'], ['dhl', 'JJD0099990758473189'],
+      ['dhl', '0000123456789012345'], ['dhl', '000123456789012345'],
+    ]
+    const seen = new Map<string, string>()
+    for (const [carrier, n] of numbers) {
+      const key = `${carrier} ${canonicalNumber(carrier, n)}`
+      expect(seen.get(key) ?? n).toBe(n)   // nothing else has already canonicalised to this
+      seen.set(key, n)
+    }
+    expect(seen.size).toBe(numbers.length)
+  })
+
+  test('a number the carrier does not claim is left verbatim: an explicit carrier is not shape-checked', () => {
+    // `resolveCarrier` lets the user force a carrier for a number that fails `matches`. Canonicalising
+    // such a number would be guesswork, so it is stored and looked up exactly as typed.
+    expect(canonicalNumber('gls', '0GARBAGE')).toBe('0GARBAGE')
+    expect(canonicalNumber('gls', '0123456789012345')).toBe('0123456789012345')
+    // The one that matters: 13 digits is not a GLS number, but strip a zero and 12 digits is. Rewriting
+    // a forced number the carrier never claimed could hand it the identity of a real GLS parcel.
+    expect(canonicalNumber('gls', '0123456789012')).toBe('0123456789012')
+    expect(canonicalNumber('gls', '')).toBe('')
+  })
+
+  test('normalizeNumber keeps leading zeros: the carrier is not known yet when it runs', () => {
+    // Detection runs on normalizeNumber's output, and DHL and DPD are recognised BY their digit count.
+    expect(normalizeNumber('0 1928 8133 52')).toBe('01928813352')
+    expect(detectCarrier(normalizeNumber('000 1234 5678 90123'))).toEqual(['dhl'])
+    expect(detectCarrier(normalizeNumber('0150 5515 8352 76'))).toEqual(['dpd'])
   })
 
   test('detectCarrier prefers the distinctive carriers over the ambiguous ones', () => {

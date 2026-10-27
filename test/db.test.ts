@@ -1,5 +1,5 @@
-import { test, expect, beforeEach } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { test, expect, beforeEach, vi } from 'vitest'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
@@ -9,6 +9,7 @@ import {
   type NewParcel,
 } from '../src/db/parcels.js'
 import { appendEvents } from '../src/db/events.js'
+import { storeMessage } from '../src/db/messages.js'
 
 let db: Database
 beforeEach(() => { db = openDb(':memory:') })
@@ -77,6 +78,38 @@ test('findParcel returns undefined for an unknown parcel', () => {
 test('inserting the same carrier+number twice throws a unique constraint', () => {
   insertParcel(db, base)
   expect(() => insertParcel(db, base)).toThrow(/UNIQUE/)
+})
+
+test('the two forms of one real GLS shipment are one parcel, stored under the shortest', () => {
+  // Parcels 39 and 40 in the author's database: the same GLS shipment, once padded and once bare.
+  const id = insertParcel(db, { carrier: 'gls', trackingNumber: '01928813352', merchant: 'SUPERSKLEP', source: 'email' })
+  expect(getParcel(db, id)?.trackingNumber).toBe('1928813352')
+  expect(findParcel(db, 'gls', '01928813352')?.id).toBe(id)
+  expect(findParcel(db, 'gls', '1928813352')?.id).toBe(id)
+  expect(findParcel(db, 'gls', '001928813352')?.id).toBe(id)
+})
+
+test('a second email naming the other form finds the existing parcel instead of creating one', () => {
+  // The ingest's own sequence: findParcel first, insertParcel only when that misses.
+  const first = insertParcel(db, { carrier: 'gls', trackingNumber: '1928813352', source: 'email' })
+  expect(findParcel(db, 'gls', '01928813352')?.id).toBe(first)
+  // And the table itself refuses the second form, so no other write path can create one either.
+  expect(() => insertParcel(db, { carrier: 'gls', trackingNumber: '01928813352', source: 'email' })).toThrow(/UNIQUE/)
+  expect(count(db, 'parcels')).toBe(1)
+})
+
+test('parcels whose numbers genuinely differ stay apart, and padded carriers keep their zeros', () => {
+  insertParcel(db, { carrier: 'gls', trackingNumber: '0123456789', source: 'manual' })   // 10 digits: GLS's floor
+  insertParcel(db, { carrier: 'gls', trackingNumber: '1234567890', source: 'manual' })
+  insertParcel(db, { carrier: 'dhl', trackingNumber: '0001234567890123', source: 'manual' })
+  insertParcel(db, { carrier: 'dpd', trackingNumber: '01505515835276', source: 'manual' })
+  expect(count(db, 'parcels')).toBe(4)
+  expect(findParcel(db, 'gls', '0123456789')?.trackingNumber).toBe('0123456789')
+  expect(findParcel(db, 'dhl', '0001234567890123')?.trackingNumber).toBe('0001234567890123')
+  expect(findParcel(db, 'dpd', '01505515835276')?.trackingNumber).toBe('01505515835276')
+  // Stripping a DHL or DPD number would be a lookup for a parcel that is not there, not a reconciliation.
+  expect(findParcel(db, 'dhl', '1234567890123')).toBeUndefined()
+  expect(findParcel(db, 'dpd', '1505515835276')).toBeUndefined()
 })
 
 test('updateParcelState writes status, pickup and timestamps', () => {
@@ -168,7 +201,7 @@ test('deleteParcel removes the parcel with its events, raw responses and deadlin
   expect(db.pragma('foreign_key_check')).toEqual([])
 })
 
-test('deleteParcel keeps the emails, unlinked and parsed_ok = 1: no re-ingest, and not dumped into needs-attention', () => {
+test('deleteParcel keeps the email ROWS, unlinked and parsed_ok = 1: no re-ingest, and not dumped into needs-attention', () => {
   const id = insertParcel(db, base)
   db.prepare(`
     INSERT INTO messages (message_id, received_at, from_addr, subject, raw_path, parsed_ok, parse_note, parcel_id)
@@ -178,11 +211,73 @@ test('deleteParcel keeps the emails, unlinked and parsed_ok = 1: no re-ingest, a
   deleteParcel(db, id)
 
   // The row is what the ingest dedupes against: delete it and the next poll would recreate the parcel.
+  // Its stored .eml is gone, though, so `raw_path` must no longer point at a file (see the test below).
   const row = db.prepare('SELECT message_id, parsed_ok, parcel_id, raw_path FROM messages').get()
-  expect(row).toMatchObject({ message_id: '<m1@x>', parsed_ok: 1, parcel_id: null, raw_path: '/tmp/1.eml' })
+  expect(row).toMatchObject({ message_id: '<m1@x>', parsed_ok: 1, parcel_id: null, raw_path: null })
   // parsed_ok = 1, so the attention predicate (parsed_ok = 0 AND parcel_id IS NULL) does not match it.
   expect(count(db, 'messages WHERE parsed_ok = 0 AND parcel_id IS NULL')).toBe(0)
   expect(db.pragma('foreign_key_check')).toEqual([])
+})
+
+test('deleteParcel throws away the stored .eml files and clears raw_path, exactly like a dismissal', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'parcels-del-'))
+  try {
+    const id = insertParcel(db, base)
+    const kept = insertParcel(db, { ...base, trackingNumber: 'Z0000000077' })
+    const paths = ['1.eml', '2.eml', '3.eml'].map(n => join(dir, n))
+    for (const p of paths) writeFileSync(p, 'raw mail')
+    const add = db.prepare(
+      'INSERT INTO messages (message_id, subject, raw_path, parsed_ok, parcel_id) VALUES (?, ?, ?, 1, ?)',
+    )
+    add.run('<a@x>', 'Shipped', paths[0], id)
+    add.run('<b@x>', 'Ready', paths[1], id)
+    add.run('<c@x>', 'Other parcel', paths[2], kept)
+    // An oversize message was never written to disk: raw_path is already NULL and must not confuse anything.
+    add.run('<d@x>', 'Huge', null, id)
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    deleteParcel(db, id)
+
+    expect(errors).not.toHaveBeenCalled()   // the row with no file is skipped, not unlinked as `null`
+    errors.mockRestore()
+
+    expect(existsSync(paths[0]!)).toBe(false)
+    expect(existsSync(paths[1]!)).toBe(false)
+    expect(existsSync(paths[2]!)).toBe(true)                       // another parcel's mail is untouched
+    expect(count(db, 'messages')).toBe(4)                          // every row survives
+    expect(count(db, 'messages WHERE raw_path IS NULL')).toBe(3)
+    expect(count(db, 'messages WHERE parcel_id = ?', kept)).toBe(1)
+    expect(db.prepare('SELECT raw_path FROM messages WHERE message_id = ?').get('<c@x>'))
+      .toEqual({ raw_path: paths[2] })
+    expect(db.pragma('foreign_key_check')).toEqual([])
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('a deleted parcel is not resurrected by re-ingesting the same mailbox, and its .eml is not rewritten', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'parcels-del-'))
+  try {
+    const id = insertParcel(db, base)
+    const mail = {
+      messageId: '<m1@x>', from: 'shop@example.com', subject: 'Shipped',
+      receivedAt: new Date('2026-07-13T11:08:00.000Z'), raw: Buffer.from('From: shop\r\n\r\nbody'),
+    }
+    const msg = storeMessage(db, mail, dir)
+    db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = ? WHERE id = ?').run(id, msg)
+    const path = join(dir, `${msg}.eml`)
+    expect(existsSync(path)).toBe(true)
+
+    deleteParcel(db, id)
+    expect(existsSync(path)).toBe(false)
+
+    // The next poll offers the very same mail again. The row is the Message-ID dedupe key, so the
+    // message is recognised, nothing is created, and the .eml is not written back either.
+    expect(storeMessage(db, mail, dir)).toBe(msg)
+    expect(count(db, 'messages')).toBe(1)
+    expect(count(db, 'parcels')).toBe(0)
+    expect(existsSync(path)).toBe(false)
+    expect(db.prepare('SELECT parsed_ok, parcel_id, raw_path FROM messages').get())
+      .toEqual({ parsed_ok: 1, parcel_id: null, raw_path: null })
+  } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
 test('deleteParcel on an id that is not there changes nothing', () => {

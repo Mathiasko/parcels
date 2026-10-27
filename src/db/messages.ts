@@ -68,6 +68,36 @@ function discard(path: string): void {
   }
 }
 
+/** Throws away stored `.eml` files whose rows no longer point at them. See `discard`. */
+export function discardRaw(paths: string[]): void {
+  for (const path of paths) discard(path)
+}
+
+/**
+ * Unlinks a deleted parcel's mail from it, and returns the `.eml` paths that nothing references any
+ * more, for the caller to hand to `discardRaw` once its transaction has committed.
+ *
+ * The rows are NOT deleted, and that is load-bearing twice over:
+ *   - the ingest dedupes by Message-ID against this table, so deleting them would make the next poll
+ *     re-ingest the same mail and RECREATE the parcel that was just deleted;
+ *   - `parsed_ok = 1` (not 0) keeps the orphaned mail off /attention, because deleting a parcel must
+ *     not dump its emails into the attention queue as fresh alerts.
+ *
+ * The stored files DO go, for the same reason a dismissal's do: this state - `parsed_ok = 1` with no
+ * parcel - is matched by no reader. `reprocessMessages` selects on `PENDING` (`parsed_ok = 0 AND
+ * parcel_id IS NULL`) and the pickup-code scan reads only mail still linked to a parcel, so the
+ * bytes are dead weight, and mail is the bulk of what this app keeps on disk. Writing `raw_path =
+ * NULL` in the same statement is what keeps a path from ever outliving its file.
+ */
+export function orphanParcelMessages(db: Database, parcelId: number): string[] {
+  const rows = db.prepare('SELECT raw_path FROM messages WHERE parcel_id = ? AND raw_path IS NOT NULL')
+    .all(parcelId) as Array<{ raw_path: string }>
+  db.prepare(
+    "UPDATE messages SET parcel_id = NULL, parsed_ok = 1, parse_note = 'Parcel deleted; email discarded', raw_path = NULL WHERE parcel_id = ?",
+  ).run(parcelId)
+  return rows.map(r => r.raw_path)
+}
+
 /**
  * Dismisses a message the ingest could not place: junk mail (a verification notice with no tracking
  * number) that would otherwise sit on /attention as a permanent false alert.

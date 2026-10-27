@@ -1,5 +1,7 @@
 import type { Database } from './index.js'
 import type { CanonicalStatus, CarrierId, PickupPoint } from '../core/types.js'
+import { canonicalNumber } from '../carriers/registry.js'
+import { orphanParcelMessages, discardRaw } from './messages.js'
 
 export interface NewParcel {
   carrier: CarrierId
@@ -108,6 +110,12 @@ function toParcel(r: Row): Parcel {
   }
 }
 
+/**
+ * Creates a parcel, under the CANONICAL spelling of its number (see `canonicalNumber`): a GLS
+ * shipment announced as `01928813352` by one email and `1928813352` by the next is one parcel, and
+ * storing the number as typed is what let it become two. Applied here rather than in every caller
+ * so the `UNIQUE (carrier, tracking_number)` index can actually do its job.
+ */
 export function insertParcel(db: Database, p: NewParcel): number {
   const info = db.prepare(`
     INSERT INTO parcels (carrier, tracking_number, label, merchant, postal_code, status,
@@ -116,7 +124,7 @@ export function insertParcel(db: Database, p: NewParcel): number {
             @firstSeenAt, @source, @sourceMessageId)
   `).run({
     carrier: p.carrier,
-    trackingNumber: p.trackingNumber,
+    trackingNumber: canonicalNumber(p.carrier, p.trackingNumber),
     label: p.label ?? null,
     merchant: p.merchant ?? null,
     postalCode: p.postalCode ?? null,
@@ -127,9 +135,10 @@ export function insertParcel(db: Database, p: NewParcel): number {
   return Number(info.lastInsertRowid)
 }
 
+/** Looks a parcel up by the canonical spelling of its number, so either form of it finds the row. */
 export function findParcel(db: Database, carrier: CarrierId, number: string): Parcel | undefined {
   const row = db.prepare('SELECT * FROM parcels WHERE carrier = ? AND tracking_number = ?')
-    .get(carrier, number) as Row | undefined
+    .get(carrier, canonicalNumber(carrier, number)) as Row | undefined
   return row && toParcel(row)
 }
 
@@ -256,23 +265,25 @@ export function setPostalCode(db: Database, id: number, postalCode: string): voi
  * The parcel's own `events`, `raw_responses` and `deadline_reminders` rows are deleted; a carrier-level
  * raw body (`parcel_id IS NULL`, from a failed batch) belongs to the carrier and is left alone.
  *
- * The `messages` rows are NOT deleted, they are unlinked, and that is load-bearing twice over:
- *   - the ingest dedupes by Message-ID against this table, so deleting the rows would make the next
- *     poll re-ingest the same mail and RECREATE the parcel that was just deleted;
- *   - `parsed_ok = 1` (not 0) keeps the orphaned mail off /attention, because deleting a parcel must
- *     not dump its emails into the attention queue as fresh alerts.
- * The `.eml` files stay on disk; the note says why the row no longer points anywhere.
+ * The `messages` ROWS are not deleted, they are unlinked, while their stored `.eml` files are thrown
+ * away: a dismissal and a deletion leave mail in the same never-read-again state, so they must leave
+ * the same amount of it on disk. `orphanParcelMessages` owns both halves and explains them.
+ *
+ * The files go AFTER the transaction has committed, so a row can never hold a path to a file that is
+ * not there, and a failed unlink leaks an unreferenced file rather than undoing the deletion.
  */
 export function deleteParcel(db: Database, id: number): void {
-  db.transaction(() => {
+  const orphaned = db.transaction((): string[] => {
     db.prepare('DELETE FROM events WHERE parcel_id = ?').run(id)
     db.prepare('DELETE FROM raw_responses WHERE parcel_id = ?').run(id)
     db.prepare('DELETE FROM deadline_reminders WHERE parcel_id = ?').run(id)
     db.prepare('DELETE FROM pickup_codes WHERE parcel_id = ?').run(id)
     db.prepare('DELETE FROM pickup_nudges WHERE parcel_id = ?').run(id)
-    db.prepare("UPDATE messages SET parcel_id = NULL, parsed_ok = 1, parse_note = 'Parcel deleted; email kept' WHERE parcel_id = ?").run(id)
+    const paths = orphanParcelMessages(db, id)
     db.prepare('DELETE FROM parcels WHERE id = ?').run(id)
+    return paths
   })()
+  discardRaw(orphaned)
 }
 
 export interface DeliveredFilter {
