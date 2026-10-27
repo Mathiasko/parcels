@@ -196,9 +196,9 @@ Carrier ids: `posta`, `packeta`, `gls`, `sps`, `dpd`.
 
 - `add` normalises the number and auto-detects the carrier when exactly one matches; otherwise it
   asks for `--carrier`.
-- `poll` polls the active parcels and sends notifications. It exits 0 even when a carrier is down;
-  that is recorded as health, not as a crash. **It does not read the mailbox**: mail ingest runs only
-  in the scheduled entry point, `node dist/poll.js` (which is what launchd runs).
+- `poll` is exactly the run launchd does (both are built by the same function): read the mailbox label,
+  create the parcels it names, poll active parcels, send notifications. It exits 0 even when a carrier
+  is down; that is recorded as health, not as a crash.
 - `probe` is the only command that hits a live carrier on purpose, and it prints the **raw
   response bodies**. It is the tool for confirming a carrier's real response shape against a
   first real parcel.
