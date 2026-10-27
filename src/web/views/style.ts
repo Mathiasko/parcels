@@ -86,6 +86,14 @@ form.inline{display:inline}
 .notice.warn{background:var(--warn-wash);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
 .notice.warn>.g{color:var(--warn);margin-top:.25rem}
 .notice .inl{margin-top:.5rem}
+/* The one moving thing on the site, and only while a poll run is actually in progress (§8: the premise
+   that "a refreshing state would be a lie" stopped holding once the refresh became a background run
+   that the page re-renders itself to follow). A 14px ring in the notice's glyph slot, drawn in --rule-s
+   with one darker quadrant: ink-3, never --signal, because blue means "this needs you" and a run that
+   is working needs nothing. With reduced motion it stops and stays that ring - a still mark that the
+   sentence beside it explains, rather than a disappearing one. */
+.spin{flex:none;width:14px;height:14px;margin-top:.3125rem;border:2px solid var(--rule-s);border-top-color:var(--ink-3);border-radius:50%;animation:spin 900ms linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 /* pickup card: one per place, the parcels waiting there listed beneath */
 .pk{background:var(--surface);border:1px solid var(--rule-s);border-radius:12px;margin-bottom:1rem;overflow:hidden}
@@ -195,6 +203,10 @@ td .st{line-height:1.375rem}
 .board tr.bad td{background:var(--warn-wash)}
 .board .why{display:block;margin-top:.125rem;overflow-wrap:anywhere}
 .stats td:first-child{white-space:nowrap}
+/* the activity log: a run's state, when it started, who started it, and what it did */
+.runs td:first-child{width:9rem}
+.runs .src{white-space:nowrap}
+.runs .did{overflow-wrap:anywhere}
 
 /* forms on a page of their own, and the attention items */
 .item{background:var(--surface);border:1px solid var(--rule-s);border-radius:12px;padding:1rem 1.5rem;margin-bottom:1rem}
@@ -224,5 +236,5 @@ summary{font-size:.8125rem;color:var(--ink-3);cursor:pointer;padding:.25rem 0}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:20rem;overflow:auto;background:var(--surface);border:1px solid var(--rule-s);border-radius:8px;padding:.75rem;margin:.25rem 0 .75rem;font:400 .75rem/1.5 ui-monospace,"SF Mono",Menlo,monospace}
 
 @media(max-width:40rem){.row{grid-template-columns:1rem minmax(0,1fr)}.row time{grid-column:2;grid-row:auto;text-align:left}.pk-h{flex-direction:column}}
-@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}.spin{animation:none}}
 `

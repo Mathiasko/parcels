@@ -2,7 +2,8 @@ import type { CarrierId } from '../../core/types.js'
 import type { HealthRow } from '../../db/health.js'
 import type { IngestStatus } from '../../db/ingest-status.js'
 import type { PollerStatus } from '../../core/pollwatch.js'
-import { CARRIER_NAME, formatDateTime } from './format.js'
+import { POLL_RUNS_KEPT, type PollRun, type RunTrigger } from '../../db/poll-runs.js'
+import { CARRIER_NAME, formatAgo, formatDateTime } from './format.js'
 import { glyph, type GlyphName } from './glyphs.js'
 import { html, type Html } from './html.js'
 import { layout, scroller, type PageCtx } from './layout.js'
@@ -39,10 +40,45 @@ function lede(rows: Map<CarrierId, HealthRow>, ids: CarrierId[]): string {
   return head + tail
 }
 
+/** Which part of the app acted. Named for what the user did, not for the process that did it. */
+const RUN_SOURCE: Record<RunTrigger, string> = { poller: 'Poller', cli: 'Command line', web: 'Refresh now' }
+
+/**
+ * A run's verdict. A run that ERRORED is the most important row on this panel - it is the one that
+ * means the numbers did not change - so it is washed warn exactly like a failing carrier, and its
+ * error is printed in full. Carrier failures inside an otherwise complete run are warn too, but not
+ * washed: the carrier board above already carries that alarm.
+ */
+function runVerdict(run: PollRun): Html {
+  if (!run.finishedAt) return state('nodata', 'running')
+  if (run.error) return state('attention', 'failed')
+  if (run.failures > 0) return state('failing', 'carrier failures')
+  return state('ok', 'ok')
+}
+
+/**
+ * What each poll run did, newest first: the log that answers "is it working?" rather than "did my
+ * click work?", which is why every entry point writes it (see db/poll-runs.ts). Bounded, and it says so.
+ */
+function runsPanel(runs: PollRun[], ctx: PageCtx): Html {
+  if (runs.length === 0) {
+    return html`<h2>Recent runs</h2><p class="empty">No runs recorded yet. The hourly poller and the Refresh now button both record here.</p>`
+  }
+  return html`<h2>Recent runs</h2>
+<p class="meta">What each poll did, newest first. The last ${POLL_RUNS_KEPT} runs are kept.</p>${
+    scroller('Recent poll runs', html`<table class="board runs"><thead><tr><th scope="col">State</th><th scope="col">Started</th><th scope="col">Source</th><th scope="col">What it did</th></tr></thead>
+<tbody>${runs.map(r => html`<tr data-run="${r.id}"${r.error ? html` class="bad"` : ''}><td>${runVerdict(r)}</td>
+<td>${formatDateTime(r.startedAt, ctx.now)}<span class="meta why">${formatAgo(r.startedAt, ctx.now)}</span></td>
+<td class="src">${RUN_SOURCE[r.trigger] ?? r.trigger}</td>
+<td class="did">${r.error ?? r.summary ?? (r.finishedAt ? 'nothing to report' : 'still going')}</td></tr>`)}</tbody></table>`)}`
+}
+
 export function healthPage(
   rows: HealthRow[], ingest: { configured: boolean; status?: IngestStatus }, poller: PollerStatus, ctx: PageCtx,
   /** `0.1.0 (0db9a83)`, or `unknown`. Resolved once at startup; see core/version.ts. */
   version: string,
+  /** The activity log, newest first. Empty (and absent for a caller that has none) is a stated fact, not a gap. */
+  runs: PollRun[] = [],
 ): Html {
   const byCarrier = new Map(rows.map(r => [r.carrier, r]))
   const ids = Object.keys(CARRIER_NAME) as CarrierId[]
@@ -72,5 +108,6 @@ ${scroller('Carrier and system health', html`<table class="board"><thead><tr><th
   showIngest ? html`<tr id="ingest-health"${ing && ing.consecutiveFailures > 0 ? html` class="bad"` : ''}><td>${ingestState}</td><td>Mail ingest</td>
 <td>${ing?.lastOkAt ? formatDateTime(ing.lastOkAt, ctx.now) : 'never'}</td>${errCell(ing?.lastErrorAt, ing?.lastError)}</tr>` : ''}</tbody></table>`)}${
   poller.overdue ? html`<p class="meta">No poll has completed for over 2 hours of the 07:00-21:00 day. Parcels are not being updated: check that the launchd poller agent is loaded and that the Node path in its plist still exists.</p>` : ''}
+${runsPanel(runs, ctx)}
 <p class="meta" id="version">Version ${version}</p>`, ctx)
 }

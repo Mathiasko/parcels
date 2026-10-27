@@ -60,6 +60,30 @@ export function formatDuration(ms: number): string {
   return `${(hours / 24).toFixed(1)} days`
 }
 
+/**
+ * An elapsed time in the largest unit that still has a whole number of it: `42 seconds`, `2 minutes`,
+ * `2 hours`, `3 days`. Under a second is `just now`, because "0 seconds" reads as a stopped clock.
+ *
+ * Coarse on purpose: this is read while something is happening ("how long has this been going?"), where
+ * the unit matters and the remainder does not. It is also the only relative wording on the site, and
+ * §3.4 allows it only next to the absolute time, never instead of it.
+ */
+export function formatElapsed(ms: number): string {
+  if (ms < 1000) return 'just now'
+  const units: [number, string][] = [[86_400_000, 'day'], [3_600_000, 'hour'], [60_000, 'minute'], [1000, 'second']]
+  for (const [size, name] of units) {
+    const n = Math.floor(ms / size)
+    if (n >= 1) return plural(n, name)
+  }
+  return 'just now'
+}
+
+/** How long ago something was, in words. A future stamp (a clock that moved) is `just now`, never negative. */
+export const formatAgo = (from: Date, now: Date): string => {
+  const elapsed = formatElapsed(Math.max(0, now.getTime() - from.getTime()))
+  return elapsed === 'just now' ? elapsed : `${elapsed} ago`
+}
+
 export const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`
 
 /**

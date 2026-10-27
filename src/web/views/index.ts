@@ -3,7 +3,8 @@ import { postcodeRejected, type Parcel } from '../../db/parcels.js'
 import type { StoredEvent } from '../../db/events.js'
 import type { CanonicalStatus } from '../../core/types.js'
 import {
-  calendarDaysBetween, CARRIER_NAME, formatDateTime, formatDay, isBadge, plural, statusIndicator, toneClass,
+  calendarDaysBetween, CARRIER_NAME, formatAgo, formatDateTime, formatDay, isBadge, plural, statusIndicator,
+  toneClass,
 } from './format.js'
 import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
@@ -11,6 +12,9 @@ import { layout, notice, type PageCtx } from './layout.js'
 import { STATUS_TITLE } from '../../notify/rules.js'
 
 export const parcelName = (p: Parcel): string => p.label ?? p.merchant ?? p.trackingNumber
+
+/** What the dashboard's "Refresh now" does, said while it is doing it. */
+const REFRESH_DOES = 'Checking for new mail and asking the carriers for updates.'
 
 export function pickupSummary(p: Parcel): string | undefined {
   if (!p.pickup) return undefined
@@ -41,11 +45,19 @@ export function mapsUrl(p: Parcel): string | undefined {
   return query === '' ? undefined : `https://maps.apple.com/?q=${encodeURIComponent(query)}`
 }
 
-/** The result of the last "refresh now" click, carried through the redirect as plain counters. */
+/**
+ * What the page says about a poll run: one still going, one that ended badly, or the counts of one that
+ * finished. The counts arrive either from the `poll_runs` row the refresh redirected to, or (for a link
+ * typed or bookmarked from before) from the query string.
+ */
 export interface RefreshNote {
   polled: number
   failures: number
   busy: boolean
+  /** The run is still going: when it started, so the page can say how long. No counters are known yet. */
+  startedAt?: Date
+  /** The run did not complete at all (the process died, or something threw that nothing caught). */
+  error?: string
   /** New messages the mailbox yielded, and the parcels they became. Absent when no mail is configured. */
   read?: number
   created?: number
@@ -53,9 +65,28 @@ export interface RefreshNote {
   active?: number
 }
 
-export function refreshBanner(n: RefreshNote | undefined): Html {
+/**
+ * The result of a poll run, or the run itself while it is still going.
+ *
+ * `doing` is what this page's refresh actually does, supplied by the page because only it knows: the
+ * dashboard button reads the mailbox as well as polling, the parcel button asks about one parcel. A
+ * spinner on its own does not say whether something is stuck, so it never appears without this and
+ * without how long the run has been going.
+ */
+export function refreshBanner(n: RefreshNote | undefined, now: Date, doing?: string): Html {
   if (!n) return html``
   if (n.busy) return notice('neutral', html`<p>A refresh is already running; try again in a moment.</p>`, true)
+  // In progress. The spinner alone would not say whether anything is stuck, so it is paired with how
+  // long the run has been going and with what the page will do next.
+  if (n.startedAt) {
+    return notice('busy', html`<p><strong>Refreshing.</strong>${doing ? html` ${doing}` : ''}</p>
+<p class="meta">Started ${formatAgo(n.startedAt, now)}. This page updates itself until the run finishes.</p>`, true)
+  }
+  // A run that ended badly is the most important thing on the page: it means the numbers did not change.
+  if (n.error) {
+    return notice('warn', html`<p><strong>The refresh did not finish.</strong></p><p>${n.error}</p>
+<p class="meta">See <a href="/health">Health</a> for the recent runs.</p>`, true)
+  }
   // What the mailbox gave, when a mailbox is configured at all. Said first: on a new install this is
   // the only part that can do anything, and "0 parcels polled" otherwise reads as a failure.
   const created = n.created ?? 0
@@ -240,12 +271,12 @@ export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote): H
 
   const body = entries.length === 0
     ? html`<p class="empty">Nothing in flight. Parcels appear here when an email arrives or when you add one.</p>`
-    : html`<p class="lede">${indexLede(entries, ctx)}</p>${refreshBanner(note)}${
+    : html`<p class="lede">${indexLede(entries, ctx)}</p>${refreshBanner(note, ctx.now, REFRESH_DOES)}${
         actRows.length ? html`<ul class="list">${actRows.map(e => parcelRow(e, ctx, pickupSummary(e.parcel)))}</ul>` : ''}${
         places.slice(0, MAX_PICKUP_CARDS).map(([where, es]) => pickupCard(where, es, ctx))}${
         rest.length ? html`<ul class="list">${rest.map(e => parcelRow(e, ctx))}</ul>` : ''}`
   return layout('In flight', '/', html`
 <div class="col"><div class="head"><h1>In flight</h1>
   <form class="inline" method="post" action="/refresh"><button>Refresh now</button></form></div>
-${entries.length === 0 ? refreshBanner(note) : ''}${body}</div>`, ctx)
+${entries.length === 0 ? refreshBanner(note, ctx.now, REFRESH_DOES) : ''}${body}</div>`, ctx)
 }

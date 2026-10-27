@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { fakeImap } from './imap-fake.js'
 import { listActive } from '../src/db/parcels.js'
 import { describe, expect, test, vi } from 'vitest'
-import { buildServer, type WebDeps } from '../src/web/server.js'
+import { buildServer, refreshIdle, type WebDeps } from '../src/web/server.js'
+import { getRun } from '../src/db/poll-runs.js'
 import { appendEvents } from '../src/db/events.js'
 import { recordHealth } from '../src/db/health.js'
 import { recordIngest } from '../src/db/ingest-status.js'
@@ -58,8 +59,24 @@ const form = (fields: Record<string, string>) => ({
 const server = (db: Database, extra: Partial<WebDeps> = {}) =>
   buildServer({ db, config, now: () => NOW, notifier: { send: async () => {} }, ...extra })
 const get = (db: Database, url: string) => server(db).inject({ method: 'GET', url })
-const post = (db: Database, url: string, fields: Record<string, string>, extra: Partial<WebDeps> = {}) =>
-  server(db, extra).inject({ method: 'POST', url, ...form(fields) })
+/**
+ * A POST, and then the background work it started. `POST /refresh` returns a redirect before its poll
+ * has finished, so a test that asserts on what the poll DID has to wait for it; `refreshIdle` is the
+ * same hook the server's own `onClose` uses.
+ */
+const post = async (db: Database, url: string, fields: Record<string, string>, extra: Partial<WebDeps> = {}) => {
+  const app = server(db, extra)
+  const res = await app.inject({ method: 'POST', url, ...form(fields) })
+  await refreshIdle(app)
+  return res
+}
+
+/** Where a `/refresh` redirect points, with the run id it carries resolved to the finished run row. */
+const refreshedRun = (db: Database, res: { headers: Record<string, unknown> }) => {
+  const location = String(res.headers.location)
+  const id = /[?&]run=(\d+)/.exec(location)?.[1]
+  return { location, run: id === undefined ? undefined : getRun(db, Number(id)) }
+}
 
 describe('web pages', () => {
   test('GET /history lists delivered parcels newest-first', async () => {
@@ -356,7 +373,11 @@ describe('web pages', () => {
     const adapter = stubAdapter('posta', inputs => inputs.map(i => okResult(i.number, [ev('x', 'in_transit')])), 100)
     const res = await post(db, '/refresh', { parcel: String(a) }, { adapters: [adapter], http: bodyHttp() })
     expect(res.statusCode).toBe(303)
-    expect(res.headers.location).toMatch(new RegExp(`^/parcel/${a}\\?refreshed=1`))
+    // The redirect names the run it started, not its result: the result is not known yet (see
+    // test/refresh-async.test.ts). What it polled is read back off the recorded run.
+    const { location, run } = refreshedRun(db, res)
+    expect(location).toBe(`/parcel/${a}?run=${run!.id}`)
+    expect(run!.polled).toBe(1)
     expect(adapter.calls).toHaveLength(1)
     expect(adapter.calls[0]!.map(i => i.number)).toEqual(['RR1'])
     expect(getParcel(db, a)!.status).toBe('in_transit')
@@ -368,7 +389,8 @@ describe('web pages', () => {
     insertParcel(db, { carrier: 'posta', trackingNumber: 'RR2', source: 'manual' })
     const adapter = stubAdapter('posta', inputs => inputs.map(i => okResult(i.number, [ev('x', 'in_transit')])), 100)
     const res = await post(db, '/refresh', {}, { adapters: [adapter], http: bodyHttp() })
-    expect(res.headers.location).toMatch(/^\/\?refreshed=2/)
+    expect(res.headers.location).toMatch(/^\/\?run=\d+$/)
+    expect(refreshedRun(db, res).run!.polled).toBe(2)
     expect(adapter.calls[0]!.map(i => i.number)).toEqual(['RR1', 'RR2'])
     expect((await post(db, '/refresh', { parcel: '999' }, { adapters: [adapter] })).statusCode).toBe(404)
   })
@@ -380,7 +402,7 @@ describe('web pages', () => {
     const adapter = stubAdapter('gls', inputs => inputs.map(i => okResult(i.number, [])))
     const res = await post(db, '/refresh', { parcel: String(id) }, { adapters: [adapter], http: bodyHttp() })
     expect(adapter.calls).toHaveLength(0)
-    expect(res.headers.location).toMatch(/refreshed=0/)
+    expect(refreshedRun(db, res).run!.polled).toBe(0)
     // ...and a parcel whose postcode was rejected is not asked again either.
     const db2 = memDb()
     const id2 = insertParcel(db2, { carrier: 'gls', trackingNumber: '123456789012', postalCode: '99999', source: 'manual' })
@@ -431,7 +453,7 @@ describe('web pages: fix round 1', () => {
     const adapter = answer()
     const res = await post(db, '/refresh', { parcel: String(id) }, { adapters: [adapter], http: bodyHttp() })
     expect(polled(adapter)).toEqual(['RA1'])
-    expect(res.headers.location).toMatch(/refreshed=1/)
+    expect(refreshedRun(db, res).run!.polled).toBe(1)
   })
 
   test('the global refresh forces quiet parcels but leaves dormant and just-attempted ones alone', async () => {
@@ -454,7 +476,7 @@ describe('web pages: fix round 1', () => {
     const adapter = stubAdapter('gls', inputs => inputs.map(i => okResult(i.number, [])))
     const res = await post(db, '/refresh', { parcel: String(id) }, { adapters: [adapter], http: bodyHttp() })
     expect(adapter.calls).toHaveLength(0)
-    expect(res.headers.location).toMatch(/refreshed=0/)
+    expect(refreshedRun(db, res).run!.polled).toBe(0)
   })
 
   test('delivered, returned and archived parcels get no refresh button', async () => {
@@ -872,8 +894,7 @@ describe('refresh reads the mailbox, not only the carriers', () => {
         ingestClient: fake.client, http: bodyHttp(),
         adapters: [stubAdapter('packeta', inputs => inputs.map(i => okResult(i.number, [ev('x', 'ready_for_pickup')])), 100)],
       })
-      expect(res.headers.location).toMatch(/read=1/)
-      expect(res.headers.location).toMatch(/created=1/)
+      expect(refreshedRun(db, res).run).toMatchObject({ mailRead: 1, created: 1 })
       expect(listActive(db)).toHaveLength(1)
       expect(fake.forbidden).toEqual([])            // still read-only against the mailbox
     } finally { rmSync(dir, { recursive: true, force: true }) }
@@ -887,15 +908,20 @@ describe('refresh reads the mailbox, not only the carriers', () => {
     const res = await post(db, '/refresh', { parcel: String(id) }, {
       config: { ...config, imap }, ingestClient: fake.client, adapters: [adapter], http: bodyHttp(),
     })
-    expect(res.headers.location).not.toMatch(/read=/)
+    expect(refreshedRun(db, res).run!.mailRead).toBeUndefined()   // no mailbox was part of this run
     expect(fake.calls).toEqual([])                  // not connected to at all
   })
 
   test('with no mail configured the refresh says nothing about mail', async () => {
     const db = memDb()
     const res = await post(db, '/refresh', {}, { adapters: [], http: bodyHttp() })
-    expect(res.headers.location).not.toMatch(/read=|created=/)
-    expect(res.headers.location).toMatch(/active=0/)
+    const { location, run } = refreshedRun(db, res)
+    expect(run!.mailRead).toBeUndefined()
+    expect(run!.created).toBeUndefined()
+    // The dashboard counts what is in flight as it renders, so an empty one still says so.
+    const body = (await server(db).inject({ method: 'GET', url: location })).body
+    expect(body).toContain('Nothing is in flight yet.')
+    expect(body).not.toContain('No new mail.')
   })
 })
 

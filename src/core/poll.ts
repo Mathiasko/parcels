@@ -14,6 +14,7 @@ import { dedupHash } from './dedup.js'
 import { appendEvents, markNotified, recomputeParcelStatus } from '../db/events.js'
 import { recordIngest } from '../db/ingest-status.js'
 import { carrierHealth, recordHealth, type HealthOutcome, type HealthRow } from '../db/health.js'
+import { failRun, finishRun, type RunCounts } from '../db/poll-runs.js'
 import {
   listActive, markAttempted, postcodeRejected, setNeedsPostcode, updateParcelState, type Parcel,
 } from '../db/parcels.js'
@@ -395,11 +396,51 @@ function storeRaw(db: Database, parcelId: number | null, carrier: CarrierId, bod
   `).run(carrier, parcelId, carrier, parcelId, RAW_RESPONSES_KEPT)
 }
 
+/**
+ * The numbers one run produced: what the log line says, and what the `poll_runs` row stores. One
+ * reading of the report, used by both, so the line in web.out.log and the row on the Health page can
+ * never disagree about what a run did.
+ */
+export const runCounts = (report: PollReport): RunCounts => ({
+  polled: report.polled,
+  newEvents: report.newEvents.length,
+  mailRead: report.ingest?.read,
+  created: report.ingest?.created,
+  failures: report.failures.length,
+})
+
+/**
+ * Runs a poll into an already-open `poll_runs` row (`startRun`), completing it whatever happens: the
+ * counts and the log line on success, the error on a throw - which is then rethrown, because a caller
+ * that wanted to know still needs to.
+ *
+ * Takes the poll as a promise rather than starting it, so every entry point keeps calling `runPoll`
+ * itself and the recording cannot change what a poll IS. Writing the log is never allowed to turn a
+ * good poll into a failed one, so a database problem here is logged and dropped.
+ */
+export async function recordPollRun(
+  db: Database, runId: number, work: Promise<PollReport>, nowFn: () => Date = () => new Date(),
+): Promise<PollReport> {
+  const quietly = (what: string, write: () => void): void => {
+    try { write() } catch (err) { console.error(`poll: could not record the run (${what}): ${describe(err)}`) }
+  }
+  let report: PollReport
+  try {
+    report = await work
+  } catch (err) {
+    quietly('failed', () => failRun(db, runId, describe(err), nowFn()))
+    throw err
+  }
+  quietly('finished', () => finishRun(db, runId, { counts: runCounts(report), summary: summarize(report) }, nowFn()))
+  return report
+}
+
 /** One line for logs: `polled 3 parcels, 2 new events, 1 carrier failed (gls: gated ...)`. */
 export function summarize(report: PollReport): string {
-  const failed = report.failures.length === 0
+  const c = runCounts(report)
+  const failed = c.failures === 0
     ? ''
-    : `, ${report.failures.length} carrier failure(s) (${report.failures.map(f => `${f.carrier}: ${f.reason}`).join('; ')})`
+    : `, ${c.failures} carrier failure(s) (${report.failures.map(f => `${f.carrier}: ${f.reason}`).join('; ')})`
   const i = report.ingest
   const mail = !i ? ''
     : i.error ? `, mail ingest failed: ${i.error}`
@@ -408,5 +449,5 @@ export function summarize(report: PollReport): string {
   const map = report.map ? summarizeMapPreview(report.map) : ''
   // The code itself is deliberately NOT logged: it opens a physical locker and this line lands in a file.
   const codes = report.codes ? `, ${report.codes.found} pickup code(s) found` : ''
-  return `polled ${report.polled} parcel(s), ${report.newEvents.length} new event(s)${mail}${codes}${map}${failed}`
+  return `polled ${c.polled} parcel(s), ${c.newEvents} new event(s)${mail}${codes}${map}${failed}`
 }

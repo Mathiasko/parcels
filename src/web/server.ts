@@ -13,7 +13,8 @@ import { cachedGrid } from '../core/map-preview.js'
 import { parseTile } from '../core/slippy.js'
 import { readTile, tileDirFor } from '../core/tiles.js'
 import { isDormant } from '../core/backoff.js'
-import { runPoll, type PollDeps } from '../core/poll.js'
+import { recordPollRun, runPoll, type PollDeps } from '../core/poll.js'
+import { getRun, listRuns, reapStaleRuns, runningRun, startRun, type PollRun } from '../db/poll-runs.js'
 import { allAdapters } from '../carriers/registry.js'
 import { createNotifier } from '../notify/send.js'
 import type { Notifier } from '../notify/types.js'
@@ -117,6 +118,27 @@ export function refreshNote(query: Record<string, unknown>): RefreshNote | undef
   }
 }
 
+/**
+ * How often a page waiting on a run re-requests itself. Short, because this is a local server answering
+ * from a local database and the whole point is that the wait is visible. The loop is not capped here:
+ * it is capped by the run, which stops being "in progress" once it finishes or once `RUN_STALE_MS` has
+ * passed without it finishing (see `reapStaleRuns`), and a page with no run in progress emits no meta
+ * refresh at all. One mechanism, so there is no second number that could outlive the first.
+ */
+const RELOAD_SECONDS = 3
+
+/** How many runs the Health page's activity log shows. */
+const RUNS_SHOWN = 20
+
+/**
+ * The background refresh each server has in flight, if any. `POST /refresh` returns before its run is
+ * done, so something has to be able to wait for it: the `onClose` hook, so shutting the server down
+ * does not abandon a run halfway, and tests that need the run's effects before they assert on them.
+ * Resolved, never rejected - a background run that throws is recorded as a failed run, not a crash.
+ */
+const inFlightRefresh = new WeakMap<FastifyInstance, Promise<void>>()
+export const refreshIdle = (app: FastifyInstance): Promise<void> => inFlightRefresh.get(app) ?? Promise.resolve()
+
 export function buildServer(deps: WebDeps): FastifyInstance {
   const { db } = deps
   /**
@@ -170,12 +192,47 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     reply.code(status).type('text/plain').send(status >= 500 ? 'internal error' : (err as Error).message)
   })
 
+  /**
+   * What a page should say about the run named in `?run=N`, and whether it should re-request itself.
+   *
+   * Stale runs are closed FIRST, and that is the whole of the crash recovery: a process killed
+   * mid-refresh leaves a row nothing will ever finish, and the next page view turns it into a failed
+   * run rather than a dashboard that waits for it for ever. No restart, no sweep job - the recovery
+   * happens on the next look, which is exactly when somebody is there to see it.
+   *
+   * `reloadIn` is set only while the run is genuinely unfinished, so the reload loop ends on its own:
+   * either the run completes (the counters replace the spinner) or it is reaped (the failure does).
+   *
+   * No `run` in the query falls back to `?refreshed=N`, which is what a bookmarked or typed link from
+   * before this was asynchronous still carries.
+   */
+  const runState = (
+    query: Record<string, unknown>, now: Date, active?: number,
+  ): { note?: RefreshNote; reloadIn?: number } => {
+    const id = one(query.run)
+    if (id === undefined || !/^\d{1,12}$/.test(id)) return { note: refreshNote(query) }
+    reapStaleRuns(db, now)
+    const run = getRun(db, Number(id))
+    if (!run) return {}                                     // trimmed away, or never existed
+    if (!run.finishedAt) {
+      return { note: { polled: 0, failures: 0, busy: false, startedAt: run.startedAt }, reloadIn: RELOAD_SECONDS }
+    }
+    return {
+      note: {
+        polled: run.polled, failures: run.failures, busy: false,
+        read: run.mailRead, created: run.created, active, error: run.error,
+      },
+    }
+  }
+
   app.get('/', async (req, reply) => {
     const active = listActive(db)
     // One query for every code on the page, rather than one per parcel inside the card renderer.
     const codes = pickupCodesFor(db, active.filter(p => p.status === 'ready_for_pickup').map(p => p.id))
     const entries = active.map(parcel => ({ parcel, last: latestEvent(db, parcel.id), code: codes.get(parcel.id) }))
-    return send(reply, indexPage(entries, ctx(), refreshNote(req.query as Record<string, unknown>)))
+    const c = ctx()
+    const r = runState(req.query as Record<string, unknown>, c.now, entries.length)
+    return send(reply, indexPage(entries, { ...c, reloadIn: r.reloadIn }, r.note))
   })
 
   /**
@@ -193,9 +250,13 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   app.get<{ Params: { id: string } }>('/parcel/:id', async (req, reply) => {
     const parcel = /^\d+$/.test(req.params.id) ? getParcel(db, Number(req.params.id)) : undefined
     if (!parcel) return reply.code(404).type('text/plain').send('no such parcel')
+    const c = ctx()
+    // No `active` count here: "nothing is in flight yet" is a statement about the dashboard, and this
+    // page's refresh only ever asked about one parcel.
+    const r = runState(req.query as Record<string, unknown>, c.now)
     return send(reply, parcelPage(
-      parcel, listEvents(db, parcel.id), rawResponsesFor(db, parcel.id, parcel.carrier), ctx(),
-      refreshNote(req.query as Record<string, unknown>), mapFor(parcel),
+      parcel, listEvents(db, parcel.id), rawResponsesFor(db, parcel.id, parcel.carrier),
+      { ...c, reloadIn: r.reloadIn }, r.note, mapFor(parcel),
       parcel.status === 'ready_for_pickup' ? getPickupCode(db, parcel.id) : undefined,
     ))
   })
@@ -250,7 +311,13 @@ export function buildServer(deps: WebDeps): FastifyInstance {
 
   app.get('/health', async (_req, reply) => {
     const c = ctx()
-    return send(reply, healthPage(c.health, { configured: config.imap !== undefined, status: getIngestStatus(db) }, pollerStatus(db, c.now), c, version))
+    // Reaped here too, not only on the pages that wait for a run: this is the page somebody opens to ask
+    // whether the app is working, and a run abandoned by a killed process must read as failed on it.
+    reapStaleRuns(db, c.now)
+    return send(reply, healthPage(
+      c.health, { configured: config.imap !== undefined, status: getIngestStatus(db) },
+      pollerStatus(db, c.now), c, version, listRuns(db, RUNS_SHOWN),
+    ))
   })
 
   const attention = (reply: FastifyReply, error?: AttentionError, status = 200) =>
@@ -389,6 +456,12 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   // limit can only be held if ONE process does it. The hourly poller is that process. A click would
   // also have to wait out those politeness gaps before the redirect. So a pickup point found by a
   // manual refresh gets its map at the next hourly poll, and shows the address link until then.
+  //
+  // The run does NOT hold the request open. Since the mailbox became part of it, a first run downloads a
+  // whole mailbox and can take minutes, and a blocked POST shows the user nothing at all for that whole
+  // time. So the row is opened, the run is started, and the response is a redirect to the page that
+  // reports that row - which re-renders itself until the row is finished. `refreshing` still guards
+  // against a double click, and is now released by the background run rather than by the request.
   let refreshing = false
   app.post('/refresh', async (req, reply) => {
     const target = text(form(req).parcel)
@@ -405,38 +478,45 @@ export function buildServer(deps: WebDeps): FastifyInstance {
         .filter(p => !isDormant(p, now()) && (p.lastAttemptedAt === undefined || t - p.lastAttemptedAt.getTime() > MIN_REFRESH_GAP_MS))
         .map(p => p.id)
     }
-    if (refreshing) return reply.redirect(`${back}?busy=1`, 303)   // a double click must not poll twice
-    refreshing = true
-    try {
-      // Read the mailbox too, but only for the whole-dashboard refresh. This is what the button is for
-      // on a new install: with no parcels yet, polling carriers can do nothing, and without this the
-      // only way to turn mail into parcels was to wait for the next hourly run. A single-parcel
-      // refresh asks about that parcel and should not go near the mailbox.
-      const ingest = target === '' && config.imap
-        ? {
-            imap: config.imap,
-            mailDir: join(dirname(config.dbPath), 'mail'),
-            ...(deps.ingestClient ? { client: deps.ingestClient } : {}),
-          }
-        : undefined
-      const report = await runPoll({
-        db, config, parcelIds, forceAll: true, ingest,
-        http: deps.http ?? createHttpClient(),
-        adapters: deps.adapters ?? allAdapters(),
-        notifier: deps.notifier ?? createNotifier(config.notifier),
-        now: now(),
-      })
-      const q = new URLSearchParams({ refreshed: String(report.polled), failures: String(report.failures.length) })
-      if (report.ingest) {
-        q.set('read', String(report.ingest.read))
-        q.set('created', String(report.ingest.created))
-      }
-      if (target === '') q.set('active', String(listActive(db).length))
-      return reply.redirect(`${back}?${q}`, 303)
-    } finally {
-      refreshing = false
+    // A double click must not poll twice. The second click is answered with the run already in flight,
+    // so it lands on the spinner rather than on an error it can do nothing about.
+    if (refreshing) {
+      const live = runningRun(db)
+      return reply.redirect(live ? `${back}?run=${live.id}` : `${back}?busy=1`, 303)
     }
+    refreshing = true
+    // Read the mailbox too, but only for the whole-dashboard refresh. This is what the button is for
+    // on a new install: with no parcels yet, polling carriers can do nothing, and without this the
+    // only way to turn mail into parcels was to wait for the next hourly run. A single-parcel
+    // refresh asks about that parcel and should not go near the mailbox.
+    const ingest = target === '' && config.imap
+      ? {
+          imap: config.imap,
+          mailDir: join(dirname(config.dbPath), 'mail'),
+          ...(deps.ingestClient ? { client: deps.ingestClient } : {}),
+        }
+      : undefined
+    const runId = startRun(db, 'web', now())
+    const work = recordPollRun(db, runId, runPoll({
+      db, config, parcelIds, forceAll: true, ingest,
+      http: deps.http ?? createHttpClient(),
+      adapters: deps.adapters ?? allAdapters(),
+      notifier: deps.notifier ?? createNotifier(config.notifier),
+      now: now(),
+    }), now)
+    // Nothing awaits `work` on the request path, so its rejection has to be dealt with here or it is an
+    // unhandled rejection that takes the process down. `recordPollRun` has already written it to the run
+    // row by this point, which is where the user will see it; this only keeps the server alive and puts
+    // it in the log. The guard is released either way, so one failed run cannot wedge the button.
+    inFlightRefresh.set(app, work.then(() => {}, (err: unknown) => {
+      console.error(`${new Date().toISOString()} POST /refresh: run ${runId} failed:`, err)
+    }).finally(() => { refreshing = false }))
+    return reply.redirect(`${back}?run=${runId}`, 303)
   })
+
+  // Shutting down must not abandon a run halfway through: the row would be left unfinished, and only
+  // `reapStaleRuns` would ever close it, ten minutes later and as a failure it was not.
+  app.addHook('onClose', async () => { await refreshIdle(app) })
 
   return app
 }

@@ -158,3 +158,25 @@ CREATE TABLE IF NOT EXISTS pickup_nudges (
   sent_at   TEXT NOT NULL,
   PRIMARY KEY (parcel_id, slot_key)
 );
+
+-- One row per poll run, whoever started it: the hourly poller, `cli poll`, or the "Refresh now" button.
+-- This is the app's activity log, which is why every entry point writes it rather than only the button.
+-- The row is opened BEFORE the run (the web refresh redirects to it and shows it while it is going) and
+-- completed afterwards, so `finished_at IS NULL` means "in progress" - and a process killed mid-run can
+-- therefore leave a row that nothing will ever finish, which `reapStaleRuns` closes. `mail_read` and
+-- `created` are NULL (not 0) when the run had no mailbox to read, because "no mail configured" and "no
+-- new mail" are different answers. Bounded to the newest POLL_RUNS_KEPT rows on every insert.
+-- A table of its own, so an existing database gains it from the idempotent schema exec with no migration.
+CREATE TABLE IF NOT EXISTS poll_runs (
+  id          INTEGER PRIMARY KEY,
+  trigger     TEXT NOT NULL,                 -- 'poller' | 'cli' | 'web'
+  started_at  TEXT NOT NULL,
+  finished_at TEXT,                          -- NULL while the run is still going
+  polled      INTEGER NOT NULL DEFAULT 0,
+  new_events  INTEGER NOT NULL DEFAULT 0,
+  mail_read   INTEGER,
+  created     INTEGER,
+  failures    INTEGER NOT NULL DEFAULT 0,    -- carriers that failed during the run
+  error       TEXT,                          -- why the run itself ended, when it did not complete
+  summary     TEXT                           -- the one-line log summary, verbatim
+);

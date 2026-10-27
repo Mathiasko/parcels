@@ -10,6 +10,13 @@ export interface PageCtx {
   health: HealthRow[]
   /** The poller has not completed a run for over two hours of the polling day: every status shown may be stale. */
   pollerOverdue?: boolean
+  /**
+   * Seconds after which the page re-requests itself, set only while a poll run is in progress. This is
+   * the no-JS way to show progress: a `<meta http-equiv="refresh">` on a page that re-renders itself
+   * until the work is done. Absent is what ENDS the loop, so nothing may default it to a number - a run
+   * that has finished, or is too old to still be going, leaves it out and the browser stops asking.
+   */
+  reloadIn?: number
 }
 
 /** A carrier that has failed its last run(s). The nav shows a dot for this and for nothing else (see design-language §5.1). */
@@ -25,7 +32,7 @@ export function layout(title: string, current: string, body: Html, ctx: PageCtx)
   return html`<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title} - Parcels</title>
+${ctx.reloadIn ? html`<meta http-equiv="refresh" content="${ctx.reloadIn}">` : ''}<title>${title} - Parcels</title>
 <style>${raw(STYLE)}</style></head>
 <body>${SPRITE}<div class="frame">
 <header><nav aria-label="Main"><b>Parcels</b>${NAV.map(([href, label]) =>
@@ -35,9 +42,14 @@ export function layout(title: string, current: string, body: Html, ctx: PageCtx)
 `
 }
 
-/** The warn or neutral notice box; the leading glyph is only for warn. `role="status"` so a result is announced. */
-export function notice(tone: 'neutral' | 'warn', content: Html, status = false): Html {
-  return html`<div class="notice${tone === 'warn' ? raw(' warn') : ''}"${status ? raw(' role="status"') : ''}>${tone === 'warn' ? glyph('problem') : ''}<div>${content}</div></div>`
+/**
+ * The notice box. `warn` leads with the problem glyph; `busy` leads with the spinner, which is the one
+ * place on the site anything moves, and is otherwise a neutral notice - a run in progress is progress,
+ * not a demand, so it gets no colour at all. `role="status"` so a result is announced.
+ */
+export function notice(tone: 'neutral' | 'warn' | 'busy', content: Html, status = false): Html {
+  const mark = tone === 'warn' ? glyph('problem') : tone === 'busy' ? raw('<span class="spin"></span>') : ''
+  return html`<div class="notice${tone === 'warn' ? raw(' warn') : ''}"${status ? raw(' role="status"') : ''}>${mark}<div>${content}</div></div>`
 }
 
 /** A table that scrolls sideways on a narrow window instead of widening the page; focusable so a keyboard can scroll it. */

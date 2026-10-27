@@ -1,5 +1,6 @@
 import { loadRuntimeConfig } from './core/config.js'
-import { runPoll, summarize } from './core/poll.js'
+import { recordPollRun, runPoll, summarize } from './core/poll.js'
+import { startRun } from './db/poll-runs.js'
 import { buildPollDeps, initRuntime } from './core/runtime.js'
 import { openDb } from './db/index.js'
 import { checkSleepGap, recordPoll } from './core/sleepgap.js'
@@ -18,7 +19,10 @@ async function main(): Promise<void> {
     // (tier backoff only; the gated-carrier throttle and needs_postcode skip still apply).
     const startedMs = Date.now()
     const gap = checkSleepGap(db)
-    const report = await runPoll(buildPollDeps(db, config, { forceAll: gap.longGap }))
+    // Recorded in `poll_runs` before the work starts and completed whatever happens, so a run that
+    // crashes or is killed is still in the activity log rather than missing from it.
+    const runId = startRun(db, 'poller', new Date(startedMs))
+    const report = await recordPollRun(db, runId, runPoll(buildPollDeps(db, config, { forceAll: gap.longGap })))
     // Only after the run completed (a crash mid-refresh leaves the gap to be retried), and never fatal:
     // failing to note the time must not turn a good poll into exit 1.
     try { recordPoll(db, startedMs) } catch (err) {

@@ -267,6 +267,8 @@ The current format (`ccc d LLL, HH:mm`) has no year. Real consequence: the Atten
 
 The pickup deadline keeps its weekday forever (`Sat 31 Oct`): "Saturday" is the thing you plan around.
 
+> **[Rev 4]** A third place may carry a relative count, under the same condition (next to the absolute time, never instead of it): Health's **Recent runs** rows (`Mon 26 Oct, 10:55` with `5 minutes ago` beneath), and the in-progress refresh notice (`Started 47 seconds ago`). The notice is the one page on the site that *does* keep itself current - it re-requests itself every 3 seconds while the run lasts - so there the count cannot go stale, and on Health it is the thing being asked about ("when did it last run?").
+
 **The comparison must be on the full calendar date, not on day and month.** An implementation that compares `d`/`LLL` will print the 2025 email as the same day as now. Fixtures, verbatim (they go in the formatter's tests): `Mon 27 Oct` one year ago; `Wed 12 Nov` with today = 27 Oct 2026; an event at 22:05 UTC on Sat 24 Oct (it is **Sun 25 Oct, 00:05** in Bratislava: the day heading must use the zone, not UTC); the DST change on Sun 25 Oct 2026 (CEST to CET), which falls *inside* parcel #34's event range; and a Packeta event stored as `Europe/Prague`.
 
 ---
@@ -617,6 +619,8 @@ One board, not three tables: a row per system, one column grid, two groups (`Car
 
 `no data` (SPS has never been polled: all five SPS parcels are archived) is neutral and **explicitly not** warn: nothing has been asked yet. The `Last ok` cell says `never`. The healthy board is a calm column of check discs; the eye lands on whichever one breaks that rhythm. Lede: `4 of 5 carriers reporting. SPS has never been polled.` Error detail text is 13px ink-3, wraps with `overflow-wrap: anywhere`, no clamp: an error message you cannot read is useless on exactly this page. Rendered with the real data it is 698px tall and entirely calm.
 
+**Recent runs** (Rev 4) sits beneath the board: one row per poll run, newest first, `State | Started | Source | What it did`. The state words are `ok`, `carrier failures`, `failed` and `running`, with the same glyphs as the board above. A **failed** run is washed `--warn-wash` and prints its error in full, because it is the row that means the numbers did not change; carrier failures inside an otherwise complete run are warn but not washed, the board above having already raised that alarm. `Source` names what the user did (`Poller`, `Refresh now`, `Command line`), not the process. Empty state: `No runs recorded yet. The hourly poller and the Refresh now button both record here.`
+
 ### 6.10 Attention (unparsed emails)
 
 A list of items, not a list of tall cards. Each: subject (15/600, wraps), sender · date · reason on one 13px ink-3 line, then the assign form in the compact layout from §6.7. Dormant parcels: the section lede is kept; empty state is `None.` in ink-3.
@@ -680,7 +684,9 @@ Glyphs are `flex: none; display: block`, aligned to the text's centre line by th
 The only transitions allowed:
 
 - `transition: background-color .1s, border-color .1s` on hover for rows, cards, buttons (a 100ms ease so the hover doesn't flicker as the pointer crosses a list).
-- Nothing else. No entrance animations, no skeletons, no spinners (there is no JS to remove them), no `scroll-behavior: smooth`.
+- Nothing else. No entrance animations, no skeletons, no `scroll-behavior: smooth`.
+
+> **[Rev 4]** One spinner, because the premise above stopped being true. `POST /refresh` no longer holds the request open (it polls carriers *and* reads the mailbox, which on a first run is minutes), so it starts the run and redirects to a page that re-requests itself with `<meta http-equiv="refresh">` until the run finishes. There is therefore now a state that genuinely *is* in progress while the page is on screen, and no JS is needed to remove the spinner: the next render of the page does not contain it. Rules it still obeys: it appears only while a run is actually running; it is `--rule-s` with an `--ink-3` quadrant and **never `--signal`** (a run that is working needs nothing from you); it is never alone - it is paired with what the run is doing and how long it has been going, because a spinner by itself cannot say whether something is stuck; and under `prefers-reduced-motion: reduce` it stops and stays that ring rather than vanishing.
 
 ```css
 @media (prefers-reduced-motion: reduce) { * { transition: none !important } }

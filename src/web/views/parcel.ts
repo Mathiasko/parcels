@@ -172,7 +172,7 @@ export function parcelPage(
   ${isTracked(p) ? html`<form class="inline" method="post" action="/refresh"><input type="hidden" name="parcel" value="${p.id}"><button>Refresh this parcel</button></form>` : ''}</div>
 <div class="status">${statusLine(p, events)}</div>
 <p class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span>${p.merchant && p.merchant !== parcelName(p) ? html` · ${p.merchant}` : ''}${p.statusRaw ? html` · carrier says: ${p.statusRaw}` : ''}</p>
-${refreshBanner(note)}${postcodeNotice(p)}${pickupPanel(p, last, ctx, map, code)}
+${refreshBanner(note, ctx.now, 'Asking the carrier about this parcel.')}${postcodeNotice(p)}${pickupPanel(p, last, ctx, map, code)}
 ${timelineSection(p, events, ctx)}
 ${rawSection(raws, ctx)}
 ${deleteSection(p)}

@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { loadRuntimeConfig, type Config } from './core/config.js'
 import { captureBodies, createHttpClient } from './core/http.js'
-import { runPoll, summarize } from './core/poll.js'
+import { recordPollRun, runPoll, summarize } from './core/poll.js'
+import { startRun } from './db/poll-runs.js'
 import type { CarrierAdapter, CarrierId, HttpClient } from './core/types.js'
 import { buildPollDeps, initRuntime } from './core/runtime.js'
 import { allAdapters, getAdapter, normalizeNumber, resolveCarrier } from './carriers/registry.js'
@@ -116,11 +117,14 @@ function show(argv: string[], ctx: CliContext): void {
 async function poll(ctx: CliContext): Promise<void> {
   // The same run the hourly agent does (including mail ingest), built by the same function. A manual poll
   // stores the very status changes the hourly run would have announced, so it announces them too.
-  const report = await runPoll(buildPollDeps(ctx.db, ctx.config, {
+  // Recorded in `poll_runs` like every other poll: the activity log on the Health page is of the app's
+  // activity, so a run started by hand belongs in it exactly as the hourly one does.
+  const runId = startRun(ctx.db, 'cli', new Date())
+  const report = await recordPollRun(ctx.db, runId, runPoll(buildPollDeps(ctx.db, ctx.config, {
     ...(ctx.http && { http: ctx.http }),
     ...(ctx.adapters && { adapters: ctx.adapters }),
     ...(ctx.notifier && { notifier: ctx.notifier }),
-  }))
+  })))
   ctx.out(summarize(report))
 }
 

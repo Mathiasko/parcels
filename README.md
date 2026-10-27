@@ -468,9 +468,42 @@ running server predates that change** — `npm run build`, then restart the web 
 | `/parcel/:id` | Full event timeline, pickup location and deadline, editable label and postcode, and delete (behind a disclosure, at the bottom). |
 | `/history` | Archived and delivered parcels; filter by carrier, text, date. |
 | `/attention` | Unparsed mail awaiting a carrier and number, or a dismissal; dormant parcels. |
-| `/health` | Per-carrier last-ok / last-error, ingest health, and the running version and commit. |
+| `/health` | Per-carrier last-ok / last-error, ingest health, the recent-runs log, and the running version and commit. |
 | `/add` | Add a parcel by hand. |
 | `/settings` | The editable half of `config.json`, and the mail connection test. |
+
+### Refresh now, and the recent-runs log
+
+**The button does not hold the page open.** A refresh polls the carriers *and* reads the mailbox, and a
+first run downloads a whole mailbox, so it can take minutes. `POST /refresh` therefore opens a row in
+`poll_runs`, starts the run in the background and redirects immediately to `/?run=<id>` (or back to the
+parcel, for a single-parcel refresh). That page shows a spinner, says what the run is doing and how long
+it has been going, and **re-requests itself every 3 seconds** with `<meta http-equiv="refresh">` until
+the run finishes - at which point the meta tag is gone and the usual result banner is there instead.
+
+There is still **no JavaScript anywhere**: a meta refresh is markup, not script, so the CSP
+(`default-src 'none'`) is untouched. The spinner is CSS, it is deliberately *not* the signal blue (blue
+means "this needs you", and a run that is working needs nothing), and under
+`prefers-reduced-motion: reduce` it stops and stays a still ring.
+
+Two things keep that reload loop finite:
+
+- **A double click starts no second run.** The in-memory `refreshing` guard still holds, and the second
+  click is answered with the run already in flight, so it lands on the spinner rather than on an error.
+- **A killed process does not leave it "running" for ever.** The row records when the run started, and
+  any run still unfinished after `RUN_STALE_MS` (10 minutes, `src/db/poll-runs.ts`) is closed as failed
+  by the next page view - `/`, `/parcel/:id` and `/health` all reap before they read. That is also the
+  cap on the reloading: a page only asks again while a run is genuinely in progress. A long run that
+  *does* finish after being reaped corrects its own row, so the guess never outlives the answer.
+
+A background run that throws is recorded as a failed run and logged; it never takes the server down.
+
+**The log is of the app's activity, not of button presses**: the hourly poller, `cli poll` and the web
+refresh all write a row, so `/health` → *Recent runs* answers "is it working?" rather than "did my click
+work?". Each row carries when the run started (absolute time and relative age), what started it, and the
+same one-line summary that goes to `data/poll.log` - or, for a run that failed, the error, washed warn so
+it cannot be skimmed past. The table is **bounded to the newest 50 rows**, trimmed on every insert, like
+`raw_responses`.
 
 ### Reminders while a parcel is waiting
 
@@ -564,8 +597,8 @@ Everything lives under `data/` (gitignored):
   ```
 
   Tables: `parcels`, `events` (status history, UTC with the carrier's original string kept),
-  `messages`, `carrier_health`, `raw_responses`, `ingest_status`, `geocode_cache`, and a few
-  bookkeeping tables.
+  `messages`, `carrier_health`, `raw_responses`, `ingest_status`, `geocode_cache`, `poll_runs` (the
+  activity log behind `/health` → *Recent runs*, newest 50), and a few bookkeeping tables.
   Every parcel ever tracked stays there; archiving only hides it from the in-flight list.
 - `data/mail/` holds the raw `.eml` files, `0600` inside a `0700` directory.
 - `data/tiles/` holds cached OpenStreetMap map tiles, same `0600`/`0700` posture. Fetched during a
@@ -586,6 +619,9 @@ Everything lives under `data/` (gitignored):
   alarm, unlike `not_found`, which is normal for a brand-new number and never an error.
 - **No notifications:** run `node dist/cli.js notify-test` and read which mechanism it used.
 - **Empty or strange output from `node`:** you used a bare `node`; use the absolute path.
+- **"Did the refresh do anything?"** `/health` → *Recent runs*. Every poll is there, whatever started
+  it, with what it did or why it failed. A row that says `failed` is the answer; a row that says
+  `running` and is more than ten minutes old cannot happen - it is closed as failed on sight.
 - **"Which version is this?"** The bottom of `/health`. If it says `unknown`, `package.json` could
   not be read; if it shows no commit, the directory is not a git checkout.
 - **`update.sh` refuses to run:** read the first line. A dirty tree lists the files; a divergent
