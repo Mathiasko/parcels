@@ -22,7 +22,7 @@ import { listDelivered, setLabel, setPostalCode } from '../db/parcels.js'
 import { carrierHealth } from '../db/health.js'
 import { getIngestStatus } from '../db/ingest-status.js'
 import { getPickupCode, pickupCodesFor } from '../db/pickup-codes.js'
-import { dismissMessage } from '../db/messages.js'
+import { dismissMessage, dismissMessages } from '../db/messages.js'
 import { addParcel, cleanPostcode, MAX_LABEL } from './actions.js'
 import { applySettings, settingsValues, submittedSettings, type SettingsValues } from './settings.js'
 import { probeImap, type ImapProbeLike, type ImapProbeResult } from '../ingest/imap-probe.js'
@@ -411,9 +411,29 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     return attention(reply, { messageId, message: result.message, values }, result.status)
   })
 
+  /**
+   * Clearing the queue: every message the page listed, or every one of them from a single sender.
+   *
+   * `up_to` is the newest row id the page rendered, and it is REQUIRED - a bulk dismissal has to be
+   * anchored to the list the person was looking at, or a stale page could clear mail that arrived
+   * since. A malformed one is a 404 rather than a generous default, because the generous default here
+   * is "dismiss everything". Decimal digits only: `Number('1e9')` is an integer too.
+   *
+   * The confirm step is the `<details>` disclosure on the page itself (see `clearSection`), which is
+   * why this route does no confirming of its own. Idempotent, so a double submit is harmless.
+   */
+  app.post('/attention/dismiss', async (req, reply) => {
+    const f = form(req)
+    const upTo = text(f.up_to)
+    if (!/^[0-9]+$/.test(upTo) || Number(upTo) < 1) return notFound(reply)
+    const from = text(f.from)
+    dismissMessages(db, { upTo: Number(upTo), from: from === '' ? undefined : from })
+    return reply.redirect('/attention', 303)
+  })
+
   // Junk mail with no tracking number is not a parcel and never will be, so it must be possible to
   // take it off the list. `getUnparsedMessage` is the same guard the assign route uses, so a stale page
-  // or a double submit is a 404 rather than a second write. No confirm step: nothing is destroyed here.
+  // or a double submit is a 404 rather than a second write. No confirm step: one row, one button.
   app.post<{ Params: { messageId: string } }>('/attention/:messageId/dismiss', async (req, reply) => {
     const messageId = Number(req.params.messageId)
     const message = Number.isInteger(messageId) ? getUnparsedMessage(db, messageId) : undefined

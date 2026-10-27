@@ -5,6 +5,7 @@ import { isEmailOnlyCarrier } from '../core/types.js'
 import { findParcel, insertParcel, setArchived } from '../db/parcels.js'
 import { appendEvents } from '../db/events.js'
 import { storeMessage } from '../db/messages.js'
+import { accountKey, getImapState, saveImapState, type ImapState } from '../db/imap-state.js'
 import { extract, type Extraction } from './extract.js'
 import { fetchMessages, type FetchDeps, type ImapConfig, type RawMessage } from './imap.js'
 
@@ -27,7 +28,7 @@ export interface IngestDeps extends ReprocessDeps {
 }
 
 export interface IngestReport {
-  /** Messages new to the database this run (the label is re-read in full; known ones are skipped). */
+  /** Messages new to the database this run (only UIDs above the watermark are looked at; see `fetchMessages`). */
   read: number
   /** Parcels created. */
   created: number
@@ -56,16 +57,27 @@ interface Item {
 const keyOf = (e: Extraction) => `${e.carrier}:${e.number}`
 
 /**
- * Reads the mailbox label (read-only: see `fetchMessages`), stores each new message and its raw .eml,
- * and turns the ones that name a parcel into parcels. Mail that does not yield a tracking number is
- * kept, unassigned, for the needs-attention page; nothing is dropped and nothing is guessed.
+ * Reads the mailbox label (read-only and incrementally: see `fetchMessages`), stores each new message
+ * and its raw .eml, and turns the ones that name a parcel into parcels. Mail that does not yield a
+ * tracking number is kept, unassigned, for the needs-attention page; nothing is dropped and nothing
+ * is guessed.
  *
  * A failure to reach the mailbox rejects; a failure on one message does not stop the others.
+ *
+ * The IMAP watermark is advanced here rather than in `fetchMessages`, and only by a run that stored
+ * everything it read. A message that threw while being stored or placed was rolled back whole: it has
+ * no row, so it is not `known`, and the next run has to be able to fetch it again. Leaving the
+ * watermark where it was costs that run one envelope per already-stored message above it, which is
+ * what every run cost before any state was kept - and is the price of never losing a message.
  */
 export async function ingestMessages(db: Database, deps: IngestDeps): Promise<IngestReport> {
   const known = new Set((db.prepare('SELECT message_id FROM messages').all() as Array<{ message_id: string }>).map(r => r.message_id))
+  const account = accountKey(deps.imap)
+  let scanned: ImapState | undefined
   const raws = await fetchMessages({
     config: deps.imap, client: deps.client, maxBytes: deps.maxBytes, known: id => known.has(id),
+    state: getImapState(db, account, deps.imap.mailbox),
+    onScanned: state => { scanned = state },
   })
 
   const items: Array<Item & { raw: RawMessage }> = await Promise.all(raws.map(async raw => ({
@@ -75,6 +87,7 @@ export async function ingestMessages(db: Database, deps: IngestDeps): Promise<In
 
   const report = { ...emptyReport(), read: raws.length }
   place(db, items, deps, report, it => { it.id = storeMessage(db, it.raw, deps.mailDir) })
+  if (scanned && report.failed === 0) saveImapState(db, account, deps.imap.mailbox, scanned, deps.now)
   return report
 }
 

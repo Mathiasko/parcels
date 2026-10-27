@@ -233,6 +233,15 @@ summary{font-size:.8125rem;color:var(--ink-3);cursor:pointer;padding:.25rem 0}
 /* the destructive action: last on the page, below a rule of its own, and quiet until it is opened */
 .del{margin:3rem 0 0;border-top:1px solid var(--rule);padding-top:.75rem}
 .del p{max-width:34rem;color:var(--ink-2);margin:.5rem 0 .75rem}
+/* Clearing the whole attention queue. Above the items (hundreds of them put anything below the list
+   out of reach) but collapsed to a single quiet line, so it never competes with Assign - and with no
+   --signal anywhere: blue means "this needs you", not "delete these". */
+.bulk{margin:0 0 1.25rem;border:1px solid var(--rule-s);border-radius:12px;padding:.125rem .875rem;background:var(--surface)}
+.bulk p{max-width:34rem;color:var(--ink-2);margin:.5rem 0 .75rem}
+.bulk ul{list-style:none;margin:.25rem 0 .75rem;padding:0;display:grid;gap:.375rem}
+.bulk li{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.bulk form{margin:0}
+.bulk .who{font-size:.8125rem;color:var(--ink-2);overflow-wrap:anywhere}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:20rem;overflow:auto;background:var(--surface);border:1px solid var(--rule-s);border-radius:8px;padding:.75rem;margin:.25rem 0 .75rem;font:400 .75rem/1.5 ui-monospace,"SF Mono",Menlo,monospace}
 
 @media(max-width:40rem){.row{grid-template-columns:1rem minmax(0,1fr)}.row time{grid-column:2;grid-row:auto;text-align:left}.pk-h{flex-direction:column}}

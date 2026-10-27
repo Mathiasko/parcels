@@ -168,6 +168,8 @@ Nothing is forwarded and there is no second mailbox. Ingest is **strictly read-o
 label with `EXAMINE`, fetches with `BODY.PEEK`, and never writes an IMAP flag, so your mail is not
 marked as read. Messages already seen are skipped by Message-ID.
 
+It is also **incremental**: see [Only the new mail is read](#only-the-new-mail-is-read).
+
 **Set it up on `/settings`, and prove it with the Test mail connection button.** Every way this can
 go wrong is otherwise silent: an App Password that was revoked surfaces three polls later on
 `/health`, a label that is not ticked "Show in IMAP" is indistinguishable from "no new mail", and a
@@ -244,19 +246,83 @@ Notes on behaviour:
 - Mail that cannot be parsed, or that names several different numbers, is never dropped. It lands
   on the **Needs attention** page (`/attention`), where one click assigns a carrier and number.
   Mail that is simply junk (a verification notice with no tracking number in it) can be **dismissed**
-  instead: that marks it parsed with no parcel, which takes it off the page and out of future
-  `reprocess` runs. The row and its `.eml` are kept either way.
+  instead, one at a time or in bulk: see [Clearing the attention queue](#clearing-the-attention-queue).
 - Deleting a parcel (`/parcel/:id`) removes it with its events, stored carrier responses and pickup
   reminder, but **not** the emails it came from: those are unlinked and marked parsed. The ingest
   dedupes by Message-ID, so deleting the message rows would let the next poll recreate the parcel.
 - If ingest fails three runs in a row you get one notification per outage, and the Health page
   shows the last error. A revoked App Password does not fail silently.
-- Raw messages are kept as `data/mail/<id>.eml` (files `0600` in a `0700` directory).
+- Raw messages are kept as `data/mail/<id>.eml` (files `0600` in a `0700` directory), except for
+  dismissed ones, whose copy is deleted (see [Clearing the attention queue](#clearing-the-attention-queue)).
   After a parser change, `node dist/cli.js reprocess` re-runs extraction over stored messages that
   produced no parcel, without needing the mail on the server.
 - An App Password is not scope-limited by Google: it can read and send as the whole account. The
   label scope is a convention this app honours, not a boundary Google enforces. The credential is
   local, `chmod 600`, never leaves the machine, and can be revoked instantly at the same page.
+
+### Only the new mail is read
+
+Each run remembers the **highest UID** it read in the mailbox and fetches `<lastUid+1>:*` next time,
+instead of enveloping the whole label and discarding what it already knew. The cost of a run is then
+what arrived since the last one, not what the label holds: on a label of 783 messages this turned a
+whole-dashboard refresh from about **165 seconds into well under a second** when there is no new mail.
+The state lives in the `imap_state` table, one row per account and mailbox.
+
+The things that keep that safe, each of which has a test:
+
+- **UIDVALIDITY.** A stored UID means nothing unless the server still reports the same `UIDVALIDITY`
+  for that mailbox — that value *is* the server's promise that the numbering has not been reused. If
+  it changed, every stored UID is meaningless and the mailbox is **read in full** and the watermark
+  replaced. If the server does not report one at all, no watermark is ever stored and every run is a
+  full read, exactly as before.
+- **One account, one mailbox.** The row is keyed by `user host:port` *and* mailbox name. The same
+  label name reached through a different login is a different mailbox with unrelated UIDs.
+- **Message-ID dedupe is unchanged.** The range is an optimisation on top of it, not a replacement:
+  `messages.message_id` is still `UNIQUE`, and a message inside the range that is already stored
+  costs one envelope and no body download.
+- **Retroactively labelled mail still arrives.** Gmail assigns a message a *new, higher* UID when a
+  label is applied to it, so three-year-old mail that has just been labelled appears **above** the
+  watermark. (That is also what makes the Gmail filter's "apply to matching conversations" work.)
+- **The watermark only moves on a run that finished.** A run that threw mid-fetch, that lost the
+  connection while downloading a body, or in which any message failed to store (a full disk, an
+  unwritable `data/mail`) leaves it where it was, so the next run fetches that mail again. A message
+  that failed to store has no row and is not "already seen"; skipping it would lose it silently.
+- **Nothing new is never an error.** When `UIDNEXT` (or an `EXISTS` of 0) already proves there is
+  nothing above the watermark, no `FETCH` is issued at all — which is the only behaviour that is the
+  same on every server, because `<lastUid+1>:*` is a *range* and some servers answer it with their
+  highest message while others refuse it outright. Both are handled anyway: anything at or below the
+  watermark is dropped, and a server that refuses an empty set with `BAD Invalid messageset` is read
+  as "no new mail". Any other failure, or a failure after real messages have arrived, is still a
+  failure — a dead connection must never read as an empty mailbox.
+
+To force a full re-read (there is no command for it; this is not something that should be needed):
+
+```sh
+sqlite3 data/parcels.db "DELETE FROM imap_state"
+```
+
+### Clearing the attention queue
+
+`/attention` holds the mail that yielded no parcel, and on a long-lived label that is mostly
+newsletters the filter caught — hundreds of them. Each item has its own **Dismiss**, and above the
+list there is a collapsed **Clear this queue (N emails)** disclosure holding two bulk actions:
+
+- **Dismiss all N emails.**
+- **Dismiss *n* from `sender`**, for each sender with more than one message waiting, busiest first.
+  Most of the queue is usually a handful of senders, so this is the one people actually want. The
+  match is the **exact sender address**, never the domain: `gmail.com` can hold two unrelated people.
+
+Opening the disclosure *is* the confirm step (the site has no JavaScript, so there is no dialog), and
+every label states the exact number it would dismiss. A bulk action covers **only the messages the
+page listed**: mail ingested between the page being drawn and the button being pressed gets a higher
+row id and survives.
+
+Dismissing is `parsed_ok = 1` with no parcel, which takes a message off the page and out of every
+future `reprocess` run. The row itself is **never deleted** — it is the Message-ID dedupe key, and
+without it the next mail check would ingest the same junk again — but the stored `data/mail/<id>.eml`
+**is** deleted and `raw_path` cleared, because nothing will ever read it again. That is where the
+disk goes: on the author's machine 132 MB of the 139 MB in `data/mail` belonged to mail waiting on
+`/attention`. The mail itself stays in your Gmail label; only this machine's copy goes.
 
 ## DHL, and other email-only carriers
 
@@ -635,9 +701,12 @@ Everything lives under `data/` (gitignored):
 
   Tables: `parcels`, `events` (status history, UTC with the carrier's original string kept),
   `messages`, `carrier_health`, `raw_responses`, `ingest_status`, `geocode_cache`, `poll_runs` (the
-  activity log behind `/health` → *Recent runs*, newest 50), and a few bookkeeping tables.
+  activity log behind `/health` → *Recent runs*, newest 50), `imap_state` (how far each mailbox has
+  been read; see [Only the new mail is read](#only-the-new-mail-is-read)), and a few bookkeeping tables.
   Every parcel ever tracked stays there; archiving only hides it from the in-flight list.
-- `data/mail/` holds the raw `.eml` files, `0600` inside a `0700` directory.
+- `data/mail/` holds the raw `.eml` files, `0600` inside a `0700` directory. A dismissed message's
+  file is deleted, so this directory holds mail that became a parcel plus mail still waiting on
+  `/attention`.
 - `data/tiles/` holds cached OpenStreetMap map tiles, same `0600`/`0700` posture. Fetched during a
   poll, never when a page is viewed; see [Pickup point maps](#pickup-point-maps) for what leaves this
   machine and how to turn it off.
@@ -649,6 +718,10 @@ Everything lives under `data/` (gitignored):
   failure (password, label not shown in IMAP, host unreachable, label empty) instead of leaving you
   to guess from an empty in-flight list.
 - **IMAP connects but finds nothing:** the label is not ticked "Show in IMAP"; see step 3 above.
+- **"Is it missing mail that is in the label?"** Unlikely but checkable: `sqlite3 data/parcels.db
+  "SELECT * FROM imap_state"` shows how far each mailbox has been read, and
+  `DELETE FROM imap_state` makes the next run read the label in full. A changed `UIDVALIDITY` already
+  triggers that by itself; see [Only the new mail is read](#only-the-new-mail-is-read).
 - **`/settings` says the config file cannot be loaded:** `config.json` was hand-edited into something
   `loadConfig` rejects, and the poller is failing on it too. The page names the field; correcting it
   there and saving writes a file that loads.

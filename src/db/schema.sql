@@ -116,6 +116,27 @@ CREATE TABLE IF NOT EXISTS ingest_status (
   notified_at          TEXT                  -- the current outage has been announced; cleared by the next ok
 );
 
+-- Where the mail ingest got to in each mailbox, so a run fetches `<last_uid + 1>:*` instead of `1:*`
+-- and its cost stops growing with the size of the Gmail label.
+--
+-- `uid_validity` is the server's promise that those UIDs still mean the same messages. It is stored
+-- as TEXT because it is an unsigned 32-bit number that imapflow hands over as a BigInt, and a string
+-- comparison cannot lose a digit or round one. When it differs from what the server now reports,
+-- every UID here is meaningless and the mailbox is read in full again (see `fetchMessages`).
+--
+-- Keyed by account AND mailbox: the same label name on a different account is a different mailbox
+-- with unrelated UIDs, and resuming one from the other would silently hide every message in it.
+-- `last_uid` is only ever advanced by a run that read its whole range AND stored every message in it.
+-- A table of its own, so an existing database gains it from the idempotent schema exec, no migration.
+CREATE TABLE IF NOT EXISTS imap_state (
+  account      TEXT NOT NULL,                 -- 'user host:port': whose UIDs these are
+  mailbox      TEXT NOT NULL,
+  uid_validity TEXT NOT NULL,
+  last_uid     INTEGER NOT NULL,
+  updated_at   TEXT NOT NULL,
+  PRIMARY KEY (account, mailbox)
+);
+
 -- Geocoding results, keyed by the NORMALISED query string rather than by parcel, because several
 -- parcels routinely wait at the same Z-BOX or post office and must cost one lookup between them.
 -- Failures are rows too: without them a query that Nominatim cannot place, or that failed in

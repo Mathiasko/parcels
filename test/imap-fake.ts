@@ -30,9 +30,25 @@ export interface FakeImap {
   locks: Array<{ path: string; readOnly: boolean; released: boolean }>
   /** Forbidden calls (flag writes, moves, deletes, searches that imply UNSEEN, ...). */
   forbidden: string[]
+  /** Every envelope FETCH the code issued: the range it asked for, and whether it was a UID range. */
+  fetches: Array<{ range: string; uid: boolean }>
   /** UIDs whose full source was downloaded. */
   downloaded: number[]
   loggedOut: () => boolean
+}
+
+/** The default UIDVALIDITY: a distinctive value, so a test that asserts on it cannot be reading a 1. */
+export const UID_VALIDITY = 9001
+
+/**
+ * Which messages a UID range selects. Only the `a:*` form the ingest uses is implemented; anything
+ * else (and a sequence-number fetch, which is what no `{ uid: true }` means) selects everything, as
+ * `1:*` does.
+ */
+function selectRange(messages: FakeMessage[], range: string, uidMode: boolean): FakeMessage[] {
+  const m = uidMode ? /^(\d+):\*$/.exec(range) : null
+  if (!m) return messages
+  return messages.filter(x => x.uid >= Number(m[1]))
 }
 
 /**
@@ -51,16 +67,41 @@ export function fakeImap(
     exists?: number
     /** A server that selects the mailbox but reports nothing about it. */
     noMailboxObject?: boolean
+    /**
+     * UIDVALIDITY as the server reports it (imapflow hands it over as a BigInt, hence the type).
+     * `null` is a server that selects the mailbox and says nothing about UIDVALIDITY.
+     */
+    uidValidity?: number | bigint | string | null
+    /** UIDNEXT; defaults to one above the highest UID given. `null` is a server that omits it. */
+    uidNext?: number | null
+    /**
+     * A server that answers a UID range matching nothing with its highest message anyway: `12:*` is
+     * the set {12..highest}, which several servers read as containing the highest message.
+     */
+    emptyRangeYieldsHighest?: boolean
+    /** A server that refuses a UID range matching nothing instead of answering it with nothing. */
+    emptyRangeError?: Error
+    /** A server that ignores the range it was given and answers with the whole mailbox. */
+    ignoresRange?: boolean
+    /** Thrown mid-stream, AFTER this many envelopes have been handed over. */
+    fetchErrorAfter?: { count: number; error: Error }
+    /** Thrown when a body is downloaded: the connection dying between envelopes and sources. */
+    fetchOneError?: Error
   } = {},
 ): FakeImap {
   const calls: string[] = []
   const forbidden: string[] = []
   const locks: FakeImap['locks'] = []
+  const fetches: FakeImap['fetches'] = []
   const downloaded: number[] = []
   let out = false
 
+  const highest = messages.reduce((hi, m) => Math.max(hi, m.uid), 0)
+  const validity = opts.uidValidity === undefined ? UID_VALIDITY : opts.uidValidity
+  const uidNext = opts.uidNext === undefined ? highest + 1 : opts.uidNext
+
   const impl = {
-    mailbox: false as { path: string; exists: number } | false,
+    mailbox: false as { path: string; exists: number; uidValidity?: number | bigint | string; uidNext?: number } | false,
     on: () => impl,
     async connect() {
       if (opts.connectError) throw opts.connectError
@@ -69,13 +110,28 @@ export function fakeImap(
       if (opts.lockError) throw opts.lockError
       const lock = { path, readOnly: options?.readOnly === true, released: false }
       locks.push(lock)
-      if (!opts.noMailboxObject) impl.mailbox = { path, exists: opts.exists ?? messages.length }
+      if (!opts.noMailboxObject) {
+        impl.mailbox = {
+          path, exists: opts.exists ?? messages.length,
+          ...(validity !== null && { uidValidity: validity }),
+          ...(uidNext !== null && { uidNext }),
+        }
+      }
       return { release: () => { lock.released = true; impl.mailbox = false } }
     },
-    fetch(_range: string, _query: object, _options?: object) {
+    fetch(range: string, _query: object, options?: { uid?: boolean }) {
+      const uidMode = options?.uid === true
+      fetches.push({ range, uid: uidMode })
+      const selected = opts.ignoresRange ? [...messages] : selectRange(messages, range, uidMode)
       return (async function* () {
         if (opts.fetchError) throw opts.fetchError
-        for (const m of messages) {
+        if (selected.length === 0 && messages.length > 0) {
+          if (opts.emptyRangeError) throw opts.emptyRangeError
+          if (opts.emptyRangeYieldsHighest) selected.push(messages.find(m => m.uid === highest)!)
+        }
+        let handed = 0
+        for (const m of selected) {
+          if (opts.fetchErrorAfter && handed++ === opts.fetchErrorAfter.count) throw opts.fetchErrorAfter.error
           yield {
             uid: m.uid,
             size: m.size ?? m.source?.length ?? 0,
@@ -92,6 +148,7 @@ export function fakeImap(
     },
     async fetchOne(uid: string | number, _query: object, _options?: object) {
       downloaded.push(Number(uid))
+      if (opts.fetchOneError) throw opts.fetchOneError
       const m = messages.find(x => x.uid === Number(uid))
       return m ? { uid: m.uid, source: m.source } : false
     },
@@ -110,5 +167,5 @@ export function fakeImap(
     },
   }) as unknown as ImapProbeLike
 
-  return { client, calls, locks, forbidden, downloaded, loggedOut: () => out }
+  return { client, calls, locks, forbidden, fetches, downloaded, loggedOut: () => out }
 }

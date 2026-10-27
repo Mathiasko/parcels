@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fakeImap } from './imap-fake.js'
@@ -301,15 +301,21 @@ describe('web pages', () => {
     expect(dismissForm).not.toContain('name="number"') // and carries no assign field
   })
 
-  test('POST /attention/:messageId/dismiss clears the item from the list and keeps the mail', async () => {
+  test('POST /attention/:messageId/dismiss clears the item from the list and prunes its stored copy', async () => {
     const db = memDb()
     const id = junkMail(db)
+    const eml = join(mkdtempSync(join(tmpdir(), 'parcels-dismiss-')), 'junk.eml')
+    writeFileSync(eml, 'From: noreply@packeta.com\r\n\r\nbody\r\n')
+    db.prepare('UPDATE messages SET raw_path = ? WHERE id = ?').run(eml, id)
+
     const res = await post(db, `/attention/${id}/dismiss`, {})
     expect(res.statusCode).toBe(303)
     expect(res.headers.location).toBe('/attention')
-    // parsed_ok = 1 with no parcel: out of /attention and out of every future reprocess run.
+    // parsed_ok = 1 with no parcel: out of /attention and out of every future reprocess run. Nothing
+    // will ever read the .eml again, so it goes, and the path goes with it.
     expect(db.prepare('SELECT parsed_ok, parcel_id, parse_note, raw_path FROM messages WHERE id = ?').get(id))
-      .toMatchObject({ parsed_ok: 1, parcel_id: null, parse_note: 'Dismissed', raw_path: '/tmp/junk.eml' })
+      .toMatchObject({ parsed_ok: 1, parcel_id: null, parse_note: 'Dismissed', raw_path: null })
+    expect(existsSync(eml)).toBe(false)
     expect((await get(db, '/attention')).body).not.toContain(JUNK_SUBJECT)
     expect(db.prepare('SELECT COUNT(*) n FROM messages').get()).toEqual({ n: 1 })   // the row is never deleted
   })

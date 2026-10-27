@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
@@ -599,6 +599,38 @@ describe('reprocessing', () => {
     expect(r).toMatchObject({ read: 0, created: 0, needsAttention: 0 })
     expect(counts(db).parcels).toBe(0)
     expect(listUnparsedMessages(db)).toEqual([])
+  })
+
+  test('dismissing deletes the stored .eml, and reprocess is untroubled by its absence', async () => {
+    const db = memDb()
+    const dir = mkdtempSync(join(tmpdir(), 'parcels-prune-'))
+    const s = setup([mail(1, 'packeta-app-verification', 2)], { mailDir: dir })
+    await ingestMessages(db, s.deps)
+    const before = (db.prepare('SELECT id, raw_path FROM messages').get() as { id: number; raw_path: string })
+    expect(existsSync(before.raw_path)).toBe(true)
+
+    expect(dismissMessage(db, before.id)).toBe(true)
+    expect(existsSync(before.raw_path)).toBe(false)          // 139 MB of newsletters is why
+    expect(db.prepare('SELECT raw_path FROM messages WHERE id = ?').get(before.id)).toEqual({ raw_path: null })
+
+    const r = await reprocessMessages(db, { now: NOW, adapters: allAdapters(), defaultPostalCode: '81101' })
+    expect(r).toMatchObject({ read: 0, failed: 0 })
+  })
+
+  test('a message still waiting for attention whose file vanished is skipped, not a failure', async () => {
+    const db = memDb()
+    const dir = mkdtempSync(join(tmpdir(), 'parcels-gone-'))
+    // Two messages: one keeps its file, the other's is removed from under the reprocess.
+    const s = setup([mail(1, 'packeta-app-verification', 2), mail(2, 'packeta-accepted', 2)], {
+      adapters: allAdapters().filter(a => a.id !== 'packeta'), mailDir: dir,
+    })
+    await ingestMessages(db, s.deps)
+    const rows = db.prepare('SELECT id, raw_path FROM messages ORDER BY id').all() as Array<{ id: number; raw_path: string }>
+    rmSync(rows[0]!.raw_path)
+
+    const r = await reprocessMessages(db, { now: NOW, adapters: allAdapters(), defaultPostalCode: '81101' })
+    expect(r).toMatchObject({ read: 1, created: 1, failed: 0 })   // only the one still on disk
+    expect(findParcel(db, 'packeta', 'Z0000000001')).toBeDefined()
   })
 })
 

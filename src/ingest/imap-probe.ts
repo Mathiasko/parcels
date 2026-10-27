@@ -2,13 +2,14 @@ import { ImapFlow } from 'imapflow'
 import type { ImapConfig, ImapLike } from './imap.js'
 
 /**
- * What the probe needs on top of {@link ImapLike}: the mailbox the server reported when it selected
+ * What the probe needs is exactly {@link ImapLike}: the mailbox the server reported when it selected
  * it. `exists` is the EXISTS line of the SELECT/EXAMINE response, so the message count costs nothing
  * and reads no message. Like `ImapLike` this has no way to write anything.
+ *
+ * Kept as a name of its own because it is what the probe's callers (and the fake in the tests) speak
+ * of; the ingest needs the same mailbox object for UIDVALIDITY, so the member lives on `ImapLike`.
  */
-export interface ImapProbeLike extends ImapLike {
-  readonly mailbox: { path: string; exists: number } | false
-}
+export type ImapProbeLike = ImapLike
 
 /**
  * The answer the settings page shows. Each case is a different thing for the user to do, which is the

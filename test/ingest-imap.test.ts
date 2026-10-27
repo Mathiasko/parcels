@@ -1,4 +1,4 @@
-import { mkdtempSync, existsSync, readFileSync, statSync } from 'node:fs'
+import { mkdtempSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
@@ -164,15 +164,48 @@ describe('storeMessage', () => {
 describe('dismissMessage', () => {
   const row = (db: ReturnType<typeof memDb>, id: number) =>
     db.prepare('SELECT parsed_ok, parcel_id, parse_note, raw_path FROM messages WHERE id = ?').get(id) as Record<string, unknown>
-  const unparsed = (db: ReturnType<typeof memDb>) =>
-    Number(db.prepare("INSERT INTO messages (message_id, subject, raw_path, parsed_ok) VALUES ('<junk@x>', 'Verification of your e-mail', '/tmp/1.eml', 0)")
-      .run().lastInsertRowid)
+  const unparsed = (db: ReturnType<typeof memDb>, path = '/tmp/1.eml') =>
+    Number(db.prepare("INSERT INTO messages (message_id, subject, raw_path, parsed_ok) VALUES ('<junk@x>', 'Verification of your e-mail', ?, 0)")
+      .run(path).lastInsertRowid)
+  /** A stored message whose .eml really is on disk, so its deletion can be observed. */
+  const withFile = (db: ReturnType<typeof memDb>) => {
+    const path = join(mkdtempSync(join(tmpdir(), 'parcels-dismiss-')), '1.eml')
+    writeFileSync(path, eml('junk@x'))
+    return { id: unparsed(db, path), path }
+  }
 
-  test('marks junk mail parsed with a note, leaving it unassigned and its .eml path alone', () => {
+  test('marks junk mail parsed with a note, leaving it unassigned, and deletes the .eml it will never read again', () => {
     const db = memDb()
-    const id = unparsed(db)
+    const { id, path } = withFile(db)
     expect(dismissMessage(db, id)).toBe(true)
-    expect(row(db, id)).toMatchObject({ parsed_ok: 1, parcel_id: null, parse_note: 'Dismissed', raw_path: '/tmp/1.eml' })
+    // raw_path goes with the file: a path to a file that is not there is worse than no path.
+    expect(row(db, id)).toMatchObject({ parsed_ok: 1, parcel_id: null, parse_note: 'Dismissed', raw_path: null })
+    expect(existsSync(path)).toBe(false)
+  })
+
+  test('a .eml that is already gone is not an error: the dismissal still happens', () => {
+    const db = memDb()
+    const { id, path } = withFile(db)
+    rmSync(path)
+    expect(dismissMessage(db, id)).toBe(true)
+    expect(row(db, id)).toMatchObject({ parsed_ok: 1, raw_path: null })
+  })
+
+  test('a message that never had a file (over the size cap) dismisses just the same', () => {
+    const db = memDb()
+    const id = Number(db.prepare("INSERT INTO messages (message_id, subject, parsed_ok) VALUES ('<big@x>', 'huge', 0)").run().lastInsertRowid)
+    expect(dismissMessage(db, id)).toBe(true)
+    expect(row(db, id)).toMatchObject({ parsed_ok: 1, raw_path: null })
+  })
+
+  test('an assigned message keeps its .eml: only mail that will never be read again is pruned', () => {
+    const db = memDb()
+    const { id, path } = withFile(db)
+    db.prepare("INSERT INTO parcels (carrier, tracking_number, status, first_seen_at, source) VALUES ('gls','000000000009','unknown','x','manual')").run()
+    db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = 1 WHERE id = ?').run(id)
+    expect(dismissMessage(db, id)).toBe(false)
+    expect(existsSync(path)).toBe(true)                      // the pickup-code scanner still reads it
+    expect(row(db, id)).toMatchObject({ raw_path: path })
   })
 
   test('a second dismiss, an assigned message and an unknown id are all no-ops', () => {
