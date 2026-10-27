@@ -2,7 +2,7 @@ import { test, expect, beforeEach } from 'vitest'
 import { openDb, type Database } from '../src/db/index.js'
 import { insertParcel, findParcel } from '../src/db/parcels.js'
 import {
-  appendEvents, latestEvent, recomputeParcelStatus, unnotifiedEvents, markNotified,
+  appendEvents, latestEvent, recomputeParcelStatus, markNotified,
 } from '../src/db/events.js'
 import { dedupHash } from '../src/core/dedup.js'
 import type { ParcelEvent } from '../src/core/types.js'
@@ -50,30 +50,30 @@ test('dedupHash ignores location and status but distinguishes description', () =
   expect(dedupHash(a)).toBe(dedupHash(b))
   expect(dedupHash(a)).not.toBe(dedupHash(c))
 })
-test('recomputeParcelStatus sets status from the newest event by occurredAt', () => {
+test('recomputeParcelStatus writes the given status and does not consult the newest event by occurredAt', () => {
   // newest by occurredAt is inserted FIRST, so insertion order != chronological order
   appendEvents(db, parcelId, [
     ev('2026-04-29 12:00:00', { status: 'out_for_delivery' }),
     ev('2026-04-29 08:00:00', { status: 'pre_transit' }),
   ])
-  recomputeParcelStatus(db, parcelId)
-  expect(findParcel(db, 'packeta', 'Z1234567890')!.status).toBe('out_for_delivery')
+  recomputeParcelStatus(db, parcelId, 'in_transit')
+  expect(findParcel(db, 'packeta', 'Z1234567890')!.status).toBe('in_transit')
   expect(latestEvent(db, parcelId)!.status).toBe('out_for_delivery')
 })
-test('recomputeParcelStatus sets delivered_at when the newest event is delivered', () => {
+test('recomputeParcelStatus sets delivered_at to the newest event\'s time when the status is delivered', () => {
   appendEvents(db, parcelId, [...three, ev('2026-04-29 14:00:00', { status: 'delivered' })])
-  recomputeParcelStatus(db, parcelId)
+  recomputeParcelStatus(db, parcelId, 'delivered')
   const p = findParcel(db, 'packeta', 'Z1234567890')!
   expect(p.status).toBe('delivered')
   expect(p.deliveredAt?.toISOString()).toBe('2026-04-29T14:00:00.000Z')
 })
 
-test('recomputeParcelStatus with an authoritative status is not overridden by the newest event', () => {
+test('recomputeParcelStatus is not overridden by the newest event', () => {
   appendEvents(db, parcelId, three)   // newest event is out_for_delivery
   recomputeParcelStatus(db, parcelId, 'ready_for_pickup')
   expect(findParcel(db, 'packeta', 'Z1234567890')!.status).toBe('ready_for_pickup')
 })
-test('recomputeParcelStatus takes delivered_at from the newest event when the authoritative status is delivered', () => {
+test('recomputeParcelStatus takes delivered_at from the newest event when the status is delivered', () => {
   // the newest event is stamped unknown (stored events are never restamped), yet the parcel is delivered
   appendEvents(db, parcelId, [...three, ev('2026-04-29 14:00:00', { status: 'unknown' })])
   recomputeParcelStatus(db, parcelId, 'delivered', new Date('2026-05-01T00:00:00.000Z'))
@@ -87,7 +87,7 @@ test('recomputeParcelStatus falls back to the poll time for delivered_at when th
   expect(p.status).toBe('delivered')
   expect(p.deliveredAt?.toISOString()).toBe('2026-05-01T00:00:00.000Z')
 })
-test('recomputeParcelStatus clears delivered_at when the authoritative status is not delivered', () => {
+test('recomputeParcelStatus clears delivered_at when the status is not delivered', () => {
   appendEvents(db, parcelId, three)
   recomputeParcelStatus(db, parcelId, 'delivered')
   recomputeParcelStatus(db, parcelId, 'problem')
@@ -99,9 +99,9 @@ test('recomputeParcelStatus clears delivered_at when the authoritative status is
 test('latestEvent is undefined when a parcel has no events', () => {
   expect(latestEvent(db, parcelId)).toBeUndefined()
 })
-test('recomputeParcelStatus leaves a parcel with no events untouched', () => {
-  recomputeParcelStatus(db, parcelId)
-  expect(findParcel(db, 'packeta', 'Z1234567890')!.status).toBe('unknown')
+test('recomputeParcelStatus writes the given status for a parcel with no events', () => {
+  recomputeParcelStatus(db, parcelId, 'in_transit')
+  expect(findParcel(db, 'packeta', 'Z1234567890')!.status).toBe('in_transit')
 })
 test('stored events round-trip through latestEvent with all fields', () => {
   const e = ev('2026-04-29 08:00:00', { location: 'Praha', code: undefined })
@@ -111,12 +111,11 @@ test('stored events round-trip through latestEvent with all fields', () => {
   expect(got.location).toBe('Praha')
   expect(got.code).toBeUndefined()
 })
-test('unnotifiedEvents lists events until markNotified, then not again', () => {
+test('markNotified stamps exactly the events it is given', () => {
   appendEvents(db, parcelId, three)
-  const pending = unnotifiedEvents(db)
-  expect(pending).toHaveLength(3)
-  markNotified(db, pending.slice(0, 2).map(e => e.id), new Date('2026-04-29T15:00:00.000Z'))
-  const left = unnotifiedEvents(db)
-  expect(left).toHaveLength(1)
-  expect(left[0]!.id).toBe(pending[2]!.id)
+  const unnotified = () => (db.prepare('SELECT id FROM events WHERE notified_at IS NULL ORDER BY id').all() as { id: number }[]).map(r => r.id)
+  const all = unnotified()
+  expect(all).toHaveLength(3)
+  markNotified(db, all.slice(0, 2), new Date('2026-04-29T15:00:00.000Z'))
+  expect(unnotified()).toEqual([all[2]])
 })

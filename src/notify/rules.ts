@@ -50,7 +50,7 @@ const collectBy = (d: Date): string =>
  * The facts come from durable state, not from this run alone:
  * - A status transition is `parcels.status` differing from `last_announced_status`. It therefore
  *   needs no new event (Packeta and SPS change status with prose-only events), survives a run that
- *   had no notifier, and a transient `unknown` is not a transition. Never from `unnotifiedEvents`:
+ *   had no notifier, and a transient `unknown` is not a transition. Never from the events table's `notified_at`:
  *   every appended event is marked notified at append time so a newly added parcel's backfilled
  *   history cannot fire a burst of stale banners.
  * - `newEvents` (this run's inserted events) is used only for a repeat failed attempt, where the

@@ -154,22 +154,26 @@ test('never derives status from the localised evtDscr text', async () => {
   expect(r.events.at(-1)!.status).toBe('in_transit')
 })
 
-test('rejects a 200 carrying more than 50 events as a gated dummy response', async () => {
+test('rejects a 200 carrying more than 50 events as a per-parcel not_found (never gated), with a warning', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
   const dummy = fixture('dummy-parcel.json')
   expect(JSON.parse(dummy).tuStatus[0].history.length).toBeGreaterThan(50)
   const { r } = await fetchOne(detail(dummy))
-  expect(r).toEqual({ ok: false, number: NUMBER, reason: 'gated' })
+  expect(r).toEqual({ ok: false, number: NUMBER, reason: 'not_found' })
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining('dummy'))
 })
 
 test('a dummy response is also rejected when it arrives from the rstt029 fallback', async () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
   const { r } = await fetchOne({
     rstt028: { body: fixture('e609-postcode-mismatch.json') },
     rstt029: { body: fixture('dummy-parcel.json') },
   })
-  expect(r).toEqual({ ok: false, number: NUMBER, reason: 'gated' })
+  expect(r).toEqual({ ok: false, number: NUMBER, reason: 'not_found' })
 })
 
 test('exactly 50 events is still trusted; 51 is not', async () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
   const withHistory = (n: number) => {
     const body = JSON.parse(fixture('rstt028-detail.json'))
     const template = body.tuStatus[0].history[0]
@@ -177,7 +181,7 @@ test('exactly 50 events is still trusted; 51 is not', async () => {
     return JSON.stringify(body)
   }
   expect(ok((await fetchOne(detail(withHistory(50)))).r).events).toHaveLength(50)
-  expect((await fetchOne(detail(withHistory(51)))).r).toMatchObject({ ok: false, reason: 'gated' })
+  expect((await fetchOne(detail(withHistory(51)))).r).toMatchObject({ ok: false, reason: 'not_found' })
 })
 
 test('treats an HTML body with status 200 as gated, not as a parse failure', async () => {

@@ -72,33 +72,19 @@ export function listEvents(db: Database, parcelId: number): StoredEvent[] {
 }
 
 /**
- * Settles the parcel's cached status and `delivered_at`.
- *
- * On the poll path pass the adapter's authoritative top-level `status`: it is written as-is and
- * never overridden by the newest event, because stored events are never restamped (carriers with
- * prose-only events would otherwise be reverted on every poll). `delivered_at` is the newest
- * event's time when that status is `delivered` (`now` when there are no events), else cleared.
- *
- * Without an authoritative status the status is derived from the newest event instead, and a
- * parcel with no events is left untouched.
+ * Settles the parcel's cached status and `delivered_at`. The status is the adapter's authoritative
+ * top-level `status`: it is written as-is and never derived from, or overridden by, the newest event,
+ * because stored events are never restamped (carriers with prose-only events would otherwise be
+ * reverted on every poll). `delivered_at` is the newest event's time when that status is `delivered`
+ * (`now` when there are no events), else cleared.
  */
 export function recomputeParcelStatus(
-  db: Database, parcelId: number, authoritativeStatus?: CanonicalStatus, now: Date = new Date(),
+  db: Database, parcelId: number, status: CanonicalStatus, now: Date = new Date(),
 ): void {
-  const newest = latestEvent(db, parcelId)
-  const status = authoritativeStatus ?? newest?.status
-  if (status === undefined) return
-  const deliveredAt = status === 'delivered' ? (newest?.occurredAt ?? now) : undefined
+  const deliveredAt = status === 'delivered' ? (latestEvent(db, parcelId)?.occurredAt ?? now) : undefined
   db.prepare('UPDATE parcels SET status = ?, delivered_at = ? WHERE id = ?').run(
     status, deliveredAt?.toISOString() ?? null, parcelId,
   )
-}
-
-export function unnotifiedEvents(db: Database): StoredEvent[] {
-  const rows = db.prepare(
-    'SELECT * FROM events WHERE notified_at IS NULL ORDER BY occurred_at, id',
-  ).all() as Row[]
-  return rows.map(toEvent)
 }
 
 export function markNotified(db: Database, eventIds: number[], at: Date): void {

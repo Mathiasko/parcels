@@ -5,7 +5,6 @@ import { runPoll } from '../src/core/poll.js'
 import { findParcel, setNeedsPostcode, updateParcelState } from '../src/db/parcels.js'
 import type { HttpClient } from '../src/core/types.js'
 import { carrierHealth } from '../src/db/health.js'
-import { unnotifiedEvents } from '../src/db/events.js'
 import {
   NOW, config, memDb, addParcel, ev, okResult, failResult, stubAdapter, bodyHttp,
 } from './poll-helpers.js'
@@ -33,7 +32,7 @@ test('marks every appended event notified, including a new parcel\'s whole histo
   const report = await runPoll({ db, http: bodyHttp(), adapters: [posta], config, now: NOW })
 
   expect(report.newEvents).toHaveLength(3)
-  expect(unnotifiedEvents(db)).toEqual([])
+  expect(db.prepare('SELECT COUNT(*) AS n FROM events WHERE notified_at IS NULL').get()).toEqual({ n: 0 })
 })
 
 test('keeps only the last 5 raw responses per parcel', async () => {
@@ -361,4 +360,20 @@ describe('gated carrier backoff', () => {
     db.prepare("UPDATE carrier_health SET last_error_kind = 'transport'").run()
     expect((await poll(db)).packeta.calls.map(c => c.length)).toEqual([3])
   })
+})
+
+test('a not_found parcel (e.g. a mistyped GLS number) does not mark its carrier gated, and the healthy parcels are still polled', async () => {
+  const db = memDb()
+  addParcel(db, 'gls', '11111111111')   // the bad number: lowest id
+  addParcel(db, 'gls', '22222222222')
+  const gls = stubAdapter('gls', ins => ins.map(i =>
+    i.number === '11111111111' ? failResult(i.number, 'not_found') : okResult(i.number, [ev('2026-10-26 09:00:00', 'in_transit')])), 1)
+
+  const first = await runPoll({ db, http: bodyHttp(), adapters: [gls], config, now: NOW })
+  const second = await runPoll({ db, http: bodyHttp(), adapters: [gls], config, now: new Date(NOW.getTime() + 60_000) })
+
+  expect(first.failures).toEqual([])
+  expect(carrierHealth(db).find(h => h.carrier === 'gls')).toMatchObject({ consecutiveFailures: 0 })
+  expect(gls.calls.flat().map(i => i.number).sort()).toEqual(['11111111111', '11111111111', '22222222222', '22222222222'])
+  expect(second.failures).toEqual([])
 })

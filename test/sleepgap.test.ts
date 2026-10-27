@@ -148,6 +148,23 @@ describe('forced full refresh', () => {
     expect(report.polled).toBe(1)
   })
 
+  test('forceAll skips a dormant parcel (no event ever, first seen over 30 days ago) unless it is named in parcelIds', async () => {
+    const db = memDb()
+    const dormant = addParcel(db, 'posta', 'RA000000001SK')
+    db.prepare('UPDATE parcels SET first_seen_at = ? WHERE id = ?').run(new Date(NOW.getTime() - 400 * 24 * HOUR).toISOString(), dormant)
+
+    const skipped = adapter()
+    const r1 = await runPoll({ db, http: bodyHttp(), adapters: [skipped], config, now: NOW, forceAll: true })
+    expect(r1.polled).toBe(0)
+    expect(skipped.calls).toEqual([])
+
+    // The per-parcel "Refresh this parcel" button deliberately works on a dormant parcel.
+    const named = adapter()
+    const r2 = await runPoll({ db, http: bodyHttp(), adapters: [named], config, now: NOW, forceAll: true, parcelIds: [dormant] })
+    expect(r2.polled).toBe(1)
+    expect(named.calls.flat().map(i => i.number)).toEqual(['RA000000001SK'])
+  })
+
   test('forceAll still never polls a delivered parcel', async () => {
     const { db } = staleParcel()
     db.prepare("UPDATE parcels SET status = 'delivered'").run()
@@ -182,6 +199,22 @@ describe('forced full refresh', () => {
     expect(posta.calls).toHaveLength(1)
     expect(posta.calls[0]).toHaveLength(1)
     expect(report.polled).toBe(1)
+  })
+
+  test('the canary is the least-recently-attempted due parcel, so one parcel cannot pin the carrier', async () => {
+    const { db, id: first } = staleParcel(undefined, 'posta', 'RA000000001SK')
+    const { id: second } = staleParcel(db, 'posta', 'RA000000002SK')
+    const { id: third } = staleParcel(db, 'posta', 'RA000000003SK')
+    // Parcel 1 (lowest id) was probed most recently; 3 was tried longer ago than 2.
+    const stamp = (id: number, minsAgo: number) =>
+      db.prepare('UPDATE parcels SET last_attempted_at = ? WHERE id = ?').run(new Date(NOW.getTime() - minsAgo * 60_000).toISOString(), id)
+    stamp(first, 5); stamp(second, 50); stamp(third, 500)
+    recordHealth(db, 'posta', 'gated', 'endpoint closed', new Date(NOW.getTime() - 2 * HOUR))   // 1h window, elapsed
+    const posta = adapter('posta')
+
+    await runPoll({ db, http: bodyHttp(), adapters: [posta], config, now: NOW, forceAll: true })
+
+    expect(posta.calls.flat().map(i => i.number)).toEqual(['RA000000003SK'])
   })
 
   test('forceAll does not re-send a parcel whose postcode the carrier already rejected', async () => {

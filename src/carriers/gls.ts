@@ -67,6 +67,7 @@ type Answer =
   | { kind: 'code'; code: string }
   | { kind: 'bad_postcode' }   // HTTP 400 naming `zipcode`: the postcode is malformed
   | { kind: 'failed'; reason: 'gated' | 'transport' }
+  | { kind: 'dummy'; events: number }   // GLS's fabricated parcel for a number it does not know
 
 function mapStatus(statusInfo: string): CanonicalStatus {
   const mapped = STATUS_INFO.get(statusInfo)
@@ -157,9 +158,11 @@ async function ask(url: string, http: HttpClient): Promise<Answer> {
   // (Contrast the postcode problems, which are known and handled as one policy: see fetchOne.)
   if (res.status !== 200 || !item || typeof item !== 'object') return { kind: 'failed', reason: 'transport' }
   // The dummy-parcel trap: HTTP 200 and a fabricated parcel carrying every event code. It would
-  // parse cleanly and report a nonsense status with full confidence, so it is refused.
+  // parse cleanly and report a nonsense status with full confidence, so it is refused. This is a
+  // property of the one number asked about, not evidence that the adapter is broken (`gated`), so it
+  // is a per-parcel `not_found`: a single mistyped number must not throttle the carrier's other parcels.
   if (Array.isArray(item.history) && item.history.length > MAX_PLAUSIBLE_EVENTS) {
-    return { kind: 'failed', reason: 'gated' }
+    return { kind: 'dummy', events: item.history.length }
   }
   return { kind: 'item', item }
 }
@@ -173,6 +176,10 @@ async function fetchOne({ number, postalCode }: FetchInput, http: HttpClient): P
   const finish = (answer: Answer): FetchResult => {
     if (answer.kind === 'item') return toResult(number, answer.item)
     if (answer.kind === 'failed') return { ok: false, number, reason: answer.reason }
+    if (answer.kind === 'dummy') {
+      console.warn(`gls: ${number} came back as GLS's fabricated dummy parcel (${answer.events} events); treating it as not found`)
+      return { ok: false, number, reason: 'not_found' }
+    }
     if (answer.kind === 'bad_postcode') return transport   // only reachable if rstt029 itself complained
     return NOT_FOUND_CODES.has(answer.code) ? { ok: false, number, reason: 'not_found' } : transport
   }

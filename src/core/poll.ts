@@ -7,7 +7,7 @@ import type { Notifier } from '../notify/types.js'
 import { buildNotifications } from '../notify/rules.js'
 import { ingestMessages, type IngestDeps, type IngestReport } from '../ingest/ingest.js'
 import { HttpTransportError, captureBodies } from './http.js'
-import { isDue, slotFor } from './backoff.js'
+import { isDormant, isDue, slotFor } from './backoff.js'
 import { dedupHash } from './dedup.js'
 import { appendEvents, markNotified, recomputeParcelStatus } from '../db/events.js'
 import { recordIngest } from '../db/ingest-status.js'
@@ -87,6 +87,10 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   const byCarrier = new Map<CarrierId, Parcel[]>()
   for (const p of listActive(db)) {
     if (deps.parcelIds && !deps.parcelIds.includes(p.id)) continue
+    // `forceAll` skips `isDue` entirely, and dormancy lives inside `isDue`. Without this, every long
+    // sleep gap (every morning) would re-poll every dormant parcel. A parcel named in `parcelIds` is
+    // the user's explicit "refresh this one" and is polled even when dormant.
+    if (deps.parcelIds === undefined && isDormant(p, now)) continue
     if (!deps.forceAll && !isDue(p, now, slot)) continue
     // Deterministic: the carrier rejected this exact postcode and would reject it identically for
     // ever, so do not ask. The flag is NOT cleared here: clearing at selection would unflag a
@@ -106,7 +110,7 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
     // streak, so the next run is a normal one; a failure widens the window.
     const throttle = gatedThrottle(health.get(carrier), now)
     if (throttle === 'wait') continue
-    const parcels = throttle === 'canary' ? due.slice(0, 1) : due
+    const parcels = throttle === 'canary' ? [leastRecentlyAttempted(due)] : due
     report.polled += parcels.length
 
     const fetched = await fetchCarrier(adapter, parcels, http)
@@ -179,6 +183,16 @@ function gatedThrottle(h: HealthRow | undefined, now: Date): 'none' | 'wait' | '
   if (!h || h.lastErrorKind !== 'gated' || h.consecutiveFailures <= 0 || !h.lastErrorAt) return 'none'
   const wait = Math.min(2 ** (h.consecutiveFailures - 1) * HOUR, GATED_MAX_WAIT)
   return now.getTime() - h.lastErrorAt.getTime() < wait ? 'wait' : 'canary'
+}
+
+/**
+ * The canary is the parcel tried longest ago (never-tried first, then lowest id), not simply the first
+ * by id: `markAttempted` moves it to the back after each probe, so the choice rotates and no single
+ * parcel (say, one mistyped number the carrier always rejects) can pin a carrier's canary for ever.
+ */
+function leastRecentlyAttempted(due: Parcel[]): Parcel {
+  const tried = (p: Parcel) => p.lastAttemptedAt?.getTime() ?? -Infinity
+  return due.reduce((best, p) => (tried(p) < tried(best) || (tried(p) === tried(best) && p.id < best.id) ? p : best))
 }
 
 /** Calls the adapter once per `batchSize` chunk; each call is isolated so one throw loses one chunk. */
