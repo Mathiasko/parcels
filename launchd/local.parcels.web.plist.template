@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Template: scripts/install-agents.sh replaces __ABS_DIR__ with the project directory. -->
+<!-- Template: scripts/install-agents.sh substitutes __ABS_DIR__ (project directory),
+     __NODE__ (the node binary it found) and __NODE_DIR__ (the directory holding it). -->
 <plist version="1.0">
 <dict>
   <key>Label</key>
@@ -8,7 +9,7 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/you/.nvm/versions/node/v24.21.0/bin/node</string>
+    <string>__NODE__</string>
     <string>__ABS_DIR__/dist/server.js</string>
   </array>
 
@@ -28,7 +29,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>/Users/you/.nvm/versions/node/v24.21.0/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>__NODE_DIR__:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
 </dict>
 </plist>

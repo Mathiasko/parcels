@@ -214,6 +214,25 @@ and the exit code, and exits 0 when the notifier ran (a zero exit only means the
 that a banner actually appeared). Once step 1 is done it will switch to
 `terminal-notifier` by itself.
 
+## Schema changes and updates
+
+The database is versioned with `PRAGMA user_version`, and `src/db/migrate.ts` holds an ordered,
+append-only list of migrations.
+
+- A new **table** needs no migration: `schema.sql` is applied with `CREATE TABLE IF NOT EXISTS` on
+  every open, so an existing database gains it for free.
+- A new **column**, a changed constraint or a data fix-up needs **both**: the column in `schema.sql`
+  (so a fresh database is born correct) *and* a migration (so an existing one catches up). Write one
+  without the other and the next open fails, naming the column.
+- A fresh database is stamped at the latest version and runs nothing, because `schema.sql` already
+  describes the newest shape and replaying history over it would fail on the first duplicate column.
+- A database created before migrations existed has no stamp, and is treated as the baseline.
+- Each migration runs in its own transaction: a failure leaves the database at the last version that
+  did succeed, never half-way through one.
+
+Never edit or renumber a migration that has shipped. Somebody's database has already recorded that
+it ran, and changing it alters what their database contains without telling them.
+
 ## Run it on a schedule (launchd)
 
 ```sh

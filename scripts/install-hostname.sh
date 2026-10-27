@@ -68,13 +68,22 @@ uninstall() {
 echo "Installing ${HOST_NAME} -> 127.0.0.1:${PORT}"
 
 # --- 1. /etc/hosts ---------------------------------------------------------------------------------
-if grep -qE "^[^#]*[[:space:]]${HOST_NAME}([[:space:]]|$)" /etc/hosts; then
-  note "/etc/hosts already resolves ${HOST_NAME}, left alone"
+if grep -q "^${BEGIN}\$" /etc/hosts; then
+  # Our own block: rewrite it rather than leave it, so a correction here reaches a machine that
+  # already ran an older version of this script.
+  cp -p /etc/hosts "/etc/hosts.parcels-backup-$(date +%s)"
+  strip_block /etc/hosts
+  printf '%s\n127.0.0.1\t%s\n%s\n' "$BEGIN" "$HOST_NAME" "$END" >> /etc/hosts
+  note "refreshed ${HOST_NAME} in /etc/hosts"
+elif grep -qE "^[^#]*[[:space:]]${HOST_NAME}([[:space:]]|$)" /etc/hosts; then
+  note "/etc/hosts already resolves ${HOST_NAME} by some other means, left alone"
 else
   cp -p /etc/hosts "/etc/hosts.parcels-backup-$(date +%s)"
-  # Both families: a browser given a name may try ::1 first, and a v6 answer with no listener there is a
-  # visible stall before it falls back.
-  printf '%s\n127.0.0.1\t%s\n::1\t%s\n%s\n' "$BEGIN" "$HOST_NAME" "$HOST_NAME" "$END" >> /etc/hosts
+  # IPv4 only, deliberately. The pf rule below redirects port 80 for 127.0.0.1, and a redirect cannot
+  # send IPv6 traffic to an IPv4 listener - the server binds 127.0.0.1 and nothing else. Publishing a
+  # ::1 answer as well would hand browsers an address with no listener on it, which costs a Happy
+  # Eyeballs timeout before they fall back: the opposite of the stall it looks like it prevents.
+  printf '%s\n127.0.0.1\t%s\n%s\n' "$BEGIN" "$HOST_NAME" "$END" >> /etc/hosts
   note "added ${HOST_NAME} to /etc/hosts"
 fi
 
