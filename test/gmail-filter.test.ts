@@ -57,10 +57,22 @@ describe('gmail-filter.xml', () => {
     const q = prop('hasTheWord')!
     expect(q).toMatch(/^from:\(/)
     expect(q).toMatch(/\bOR subject:\(/)
-    expect(q).not.toMatch(/\bna ceste\b/)   // matched half the mailbox
+    // A shop's domain alone labels everything it sends - order confirmations, cancellations,
+    // marketing. Shops are therefore ANDed with shipping wording; only carriers stand on their
+    // sender alone. Measured on the real mailbox: 430 labelled without this, 220 with it, and no
+    // real parcel lost either way.
+    expect(q).toMatch(/\(from:\([^)]*\) AND subject:\([^)]*\)\)/)
+    // Nothing is a bare term: strip every from:(...) and subject:(...) group and only the
+    // operators are left. A bare term is matched against the whole message, which is how
+    // "na ceste" - everyday Slovak for "on the way" - once labelled a friend's email.
+    const skeleton = q.replace(/(from|subject):\([^)]*\)/g, 'X').replace(/[()]/g, ' ')
+    expect(skeleton.split(/\s+/).filter(w => w && w !== 'X' && w !== 'OR' && w !== 'AND')).toEqual([])
     expect(q).not.toMatch(/\bto:/)
     expect(q).not.toMatch(/\blabel:/)
-    expect(q).not.toMatch(/\bAND\b/)
+    // AND inside this one field is fine and now deliberate (shops must also say something about
+    // shipping). The trap this file guards is AND across Gmail's separate From/Subject/Has-the-words
+    // boxes, which the test above pins by asserting those fields are absent.
+    expect(q.match(/\bAND\b/g)?.length ?? 0).toBeLessThanOrEqual(1)
     expect(q).not.toMatch(/\s-\w/)                     // no negated term either
   })
 
