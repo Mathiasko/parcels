@@ -334,9 +334,9 @@ export function indexLede(entries: Entry[], ctx: PageCtx): string {
   if (dormant) parts.push(`${dormant} ${dormant === 1 ? 'is' : 'are'} no longer polled (see Attention).`)
   if (unclassified) parts.push(`${unclassified} ${unclassified === 1 ? 'has' : 'have'} no status; read ${unclassified === 1 ? 'its' : 'their'} latest message.`)
   if (failing.length) parts.push(`${listNames(failing)} ${failing.length === 1 ? 'is' : 'are'} failing, so this may be out of date.`)
-  if (ctx.pollerOverdue) parts.push('The poller has not run lately, so this may be out of date (see Health).')
+  if (ctx.poller?.overdue) parts.push('The poller has not run lately, so this may be out of date (see Health).')
   // The all-clear is earned: nothing waiting, nothing unreadable or unpolled, and nothing it depends on is broken.
-  if (!act.length && !unclassified && !failing.length && !noPostcode && !dormant && !ctx.pollerOverdue) parts.push('Nothing needs you.')
+  if (!act.length && !unclassified && !failing.length && !noPostcode && !dormant && !ctx.poller?.overdue) parts.push('Nothing needs you.')
   return parts.join(' ')
 }
 

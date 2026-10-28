@@ -1,4 +1,5 @@
 import type { HealthRow } from '../../db/health.js'
+import type { PollerStatus } from '../../core/pollwatch.js'
 import { glyph } from './glyphs.js'
 import { SPRITE } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
@@ -8,8 +9,11 @@ import { STYLE } from './style.js'
 export interface PageCtx {
   now: Date
   health: HealthRow[]
-  /** The poller has not completed a run for over two hours of the polling day: every status shown may be stale. */
-  pollerOverdue?: boolean
+  /**
+   * When the poller last completed a run, and whether that is overdue (over two hours of the polling
+   * day without one: every status shown may be stale). Read once per request, for every page.
+   */
+  poller?: PollerStatus
   /**
    * Seconds after which the page re-requests itself, set only while a poll run is in progress. This is
    * the no-JS way to show progress: a `<meta http-equiv="refresh">` on a page that re-renders itself

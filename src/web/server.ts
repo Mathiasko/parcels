@@ -192,7 +192,10 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   const version = deps.version ?? appVersion()
   const now = () => (deps.now ?? (() => new Date()))()
   /** What every page needs besides its own data: the clock, and carrier health (for the lede and the nav dot). */
-  const ctx = (): PageCtx => ({ now: now(), health: carrierHealth(db), pollerOverdue: pollerStatus(db, now()).overdue })
+  const ctx = (): PageCtx => {
+    const at = now()
+    return { now: at, health: carrierHealth(db), poller: pollerStatus(db, at) }
+  }
 
   // Without authentication, a page the user happens to visit must not be able to drive this server:
   // a foreign Host header is a DNS-rebinding attempt, and a cross-site POST is a forged form. The Origin
@@ -372,8 +375,9 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const dataDir = updateDataDir()
     const outcome = adoptUpdateOutcome(db, dataDir, now, { actor: 'web', at: now })
     const run = readUpdateRun(updateStatusPath(dataDir))
+    const check = getUpdateCheck(db)
     return {
-      ...(getUpdateCheck(db) && { check: getUpdateCheck(db) }),
+      ...(check && { check }),
       ...(run && { run }),
       ...(outcome && { outcome }),
     }
@@ -391,7 +395,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const page = { ...c, ...(updateBusy(update) && { reloadIn: RELOAD_SECONDS }) }
     return send(reply, healthPage(
       c.health, { configured: config.imap !== undefined, status: getIngestStatus(db) },
-      pollerStatus(db, c.now), page, version, listRuns(db, RUNS_SHOWN), support,
+      c.poller ?? { overdue: false }, page, version, listRuns(db, RUNS_SHOWN), support,
       listActivity(db, ACTIVITY_SHOWN), update,
     ))
   }
