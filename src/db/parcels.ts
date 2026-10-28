@@ -1,6 +1,7 @@
 import type { Database } from './index.js'
 import type { CanonicalStatus, CarrierId, PickupPoint } from '../core/types.js'
 import { canonicalNumber } from '../carriers/registry.js'
+import { logAction, logStatusChange, UNATTRIBUTED, type Cause } from './activity-log.js'
 import { orphanParcelMessages, discardRaw } from './messages.js'
 
 export interface NewParcel {
@@ -156,7 +157,20 @@ export function listActive(db: Database): Parcel[] {
   return rows.map(toParcel)
 }
 
-export function updateParcelState(db: Database, id: number, s: ParcelStateUpdate): void {
+/**
+ * `cause` is what the activity log records against the transition this write may be: who acted, in
+ * which run, on which clock (see db/activity-log.ts). It is optional because this is the chokepoint
+ * every status write goes through and a missing attribution must degrade to an honest "nobody said"
+ * rather than block the write; every real call site in the app passes one.
+ */
+export function updateParcelState(
+  db: Database, id: number, s: ParcelStateUpdate, cause: Cause = UNATTRIBUTED,
+): void {
+  // Read BEFORE the write, because the whole value of the log is the status that is about to be
+  // overwritten: `delivered` replacing `ready_for_pickup` is the line the GLS incident needed, and a
+  // moment later the row no longer knows it. One indexed lookup per update, which is the price.
+  const before = db.prepare('SELECT status, carrier FROM parcels WHERE id = ?').get(id) as
+    { status: CanonicalStatus; carrier: CarrierId } | undefined
   // A supplied pickup point REPLACES the stored one wholesale (unspecified fields become NULL),
   // so a parcel that moves to a point without coordinates never keeps the old point's lat/lon.
   // An omitted pickup leaves every pickup_* column untouched.
@@ -196,6 +210,13 @@ export function updateParcelState(db: Database, id: number, s: ParcelStateUpdate
     lastChangedAt: iso(s.lastChangedAt),
     deliveredAt: iso(s.deliveredAt),
   })
+  // Only a real move is an entry. The poller writes this row for every parcel it polls, every hour,
+  // and logging the unchanged ones would bury the handful of transitions that matter under them.
+  if (before !== undefined && before.status !== s.status) {
+    logStatusChange(db, {
+      parcelId: id, carrier: before.carrier, from: before.status, to: s.status, raw: s.statusRaw,
+    }, cause)
+  }
 }
 
 /**
@@ -271,8 +292,14 @@ export function setPostalCode(db: Database, id: number, postalCode: string): voi
  *
  * The files go AFTER the transaction has committed, so a row can never hold a path to a file that is
  * not there, and a failed unlink leaks an unreferenced file rather than undoing the deletion.
+ *
+ * The `activity_log` row is the one thing deliberately NOT deleted with the parcel, and is written
+ * inside the same transaction with the status the parcel was in when it went: "where did my parcel
+ * go" has to be answerable with "you deleted it on Tuesday", which is only possible if the evidence
+ * outlives the row. That is why the log holds no foreign key to `parcels` (see schema.sql).
  */
-export function deleteParcel(db: Database, id: number): void {
+export function deleteParcel(db: Database, id: number, cause: Cause = UNATTRIBUTED): void {
+  const parcel = getParcel(db, id)
   const orphaned = db.transaction((): string[] => {
     db.prepare('DELETE FROM events WHERE parcel_id = ?').run(id)
     db.prepare('DELETE FROM raw_responses WHERE parcel_id = ?').run(id)
@@ -281,6 +308,11 @@ export function deleteParcel(db: Database, id: number): void {
     db.prepare('DELETE FROM pickup_nudges WHERE parcel_id = ?').run(id)
     const paths = orphanParcelMessages(db, id)
     db.prepare('DELETE FROM parcels WHERE id = ?').run(id)
+    if (parcel) {
+      logAction(db, {
+        kind: 'parcel_deleted', parcelId: id, carrier: parcel.carrier, status: parcel.status,
+      }, cause)
+    }
     return paths
   })()
   discardRaw(orphaned)

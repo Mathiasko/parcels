@@ -22,7 +22,11 @@ async function main(): Promise<void> {
     // Recorded in `poll_runs` before the work starts and completed whatever happens, so a run that
     // crashes or is killed is still in the activity log rather than missing from it.
     const runId = startRun(db, 'poller', new Date(startedMs))
-    const report = await recordPollRun(db, runId, runPoll(buildPollDeps(db, config, { forceAll: gap.longGap })))
+    const report = await recordPollRun(db, runId, runPoll(buildPollDeps(db, config, {
+      forceAll: gap.longGap,
+      // Every status change this run makes is attributed to the hourly poller and to this run row.
+      cause: { actor: 'poller', runId, at: new Date(startedMs) },
+    })))
     // Only after the run completed (a crash mid-refresh leaves the gap to be retried), and never fatal:
     // failing to note the time must not turn a good poll into exit 1.
     try { recordPoll(db, startedMs) } catch (err) {

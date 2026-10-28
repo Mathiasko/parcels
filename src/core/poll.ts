@@ -13,6 +13,7 @@ import { runPickupCodes, type PickupCodeReport } from './pickup-code.js'
 import { isDormant, isDue, slotFor } from './backoff.js'
 import { dedupHash } from './dedup.js'
 import { appendEvents, markNotified, recomputeParcelStatus } from '../db/events.js'
+import { UNATTRIBUTED, type Cause } from '../db/activity-log.js'
 import { recordIngest } from '../db/ingest-status.js'
 import { carrierHealth, recordHealth, type HealthOutcome, type HealthRow } from '../db/health.js'
 import { failRun, finishRun, type RunCounts } from '../db/poll-runs.js'
@@ -28,6 +29,13 @@ export interface PollDeps {
   now: Date
   /** When present, the run's notifications are built and sent; when absent nothing is built at all. */
   notifier?: Notifier
+  /**
+   * Who this run belongs to, for the activity log: the hourly poller, `cli poll` or the Refresh now
+   * button, and the `poll_runs` row it is recording itself in (see db/activity-log.ts). Every entry
+   * point passes its own, which is what makes a status change attributable to the thing that caused
+   * it rather than to "a poll". Absent in a test that does not care; the log then says nobody said.
+   */
+  cause?: Cause
   /**
    * Poll every active parcel regardless of its per-parcel backoff tier (set after a long sleep gap).
    * Overrides the tier ONLY: the gated-carrier throttle and the needs_postcode skip still apply, so a
@@ -93,6 +101,7 @@ function* chunks<T>(items: T[], size: number): Generator<T[]> {
 export async function runPoll(deps: PollDeps): Promise<PollReport> {
   const { db, http, now } = deps
   const slot = slotFor(now)
+  const cause = deps.cause ?? UNATTRIBUTED
   const report: PollReport = { polled: 0, newEvents: [], failures: [] }
 
   if (deps.ingest) report.ingest = await runIngest(db, deps, deps.ingest)
@@ -134,7 +143,7 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
 
     const fetched = await fetchCarrier(adapter, parcels, http)
     try {
-      const applied = db.transaction(() => applyCarrier(db, carrier, fetched, now))()
+      const applied = db.transaction(() => applyCarrier(db, carrier, fetched, now, cause))()
       report.newEvents.push(...applied.newEvents)
       if (applied.failure) report.failures.push({ carrier, reason: applied.failure })
     } catch (err) {
@@ -148,7 +157,7 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   if (deps.notifier) await notify(deps.notifier, db, report, now, deps.config.port)
   // Last, and after the notifications: this is the only step that deliberately sleeps (both services
   // it uses are free and rate-limited), and nothing else in the run depends on it.
-  report.codes = await pickupCodes(deps)
+  report.codes = await pickupCodes(deps, cause)
   report.map = await mapPreview(deps)
   return report
 }
@@ -163,9 +172,9 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
  * the pickup columns this pass then tops up) and BEFORE the map preview, so a point that only the mail
  * knew about is geocoded and drawn in the same run that found it.
  */
-async function pickupCodes(deps: PollDeps): Promise<PickupCodeReport | undefined> {
+async function pickupCodes(deps: PollDeps, cause: Cause): Promise<PickupCodeReport | undefined> {
   try {
-    const r = await runPickupCodes({ db: deps.db, now: deps.now })
+    const r = await runPickupCodes({ db: deps.db, now: deps.now, cause })
     return r.scanned === 0 ? undefined : r
   } catch (err) {
     console.error(`pickup codes: ${describe(err)}`)
@@ -287,7 +296,7 @@ async function fetchCarrier(adapter: CarrierAdapter, parcels: Parcel[], http: Ht
 }
 
 function applyCarrier(
-  db: Database, carrier: CarrierId, fetched: Fetched[], now: Date,
+  db: Database, carrier: CarrierId, fetched: Fetched[], now: Date, cause: Cause,
 ): { newEvents: NewEvent[]; failure?: string } {
   const newEvents: NewEvent[] = []
   const outcomes: Outcome[] = []
@@ -304,7 +313,7 @@ function applyCarrier(
       // nothing about any single parcel, so their statuses are left exactly as they were.
       if (f.error.kind === 'parse' && f.chunk.length === 1) {
         const p = f.chunk[0]!
-        updateParcelState(db, p.id, { status: 'unknown', statusRaw: p.statusRaw })
+        updateParcelState(db, p.id, { status: 'unknown', statusRaw: p.statusRaw }, cause)
       }
       continue
     }
@@ -319,7 +328,7 @@ function applyCarrier(
       if (!r) {
         outcomes.push({ kind: 'transport', detail: `no result for ${p.trackingNumber}` })
       } else if (r.ok) {
-        newEvents.push(...applyOk(db, p, r, now))
+        newEvents.push(...applyOk(db, p, r, now, cause))
         outcomes.push({ kind: 'ok' })
       } else if (r.reason === 'gated' || r.reason === 'transport') {
         outcomes.push({ kind: r.reason, detail: `${r.reason} for ${p.trackingNumber}` })
@@ -333,7 +342,7 @@ function applyCarrier(
         // not_found (a freshly announced parcel) is normal, not an alarm.
         updateParcelState(db, p.id, {
           status: p.status, statusRaw: p.statusRaw, statusDetail: p.statusDetail, lastPolledAt: now,
-        })
+        }, cause)
         outcomes.push({ kind: 'ok' })
       }
     }
@@ -360,7 +369,9 @@ function carrierVerdict(outcomes: Outcome[]): (Outcome & { kind: HealthOutcome }
   return informative[0]
 }
 
-function applyOk(db: Database, p: Parcel, r: Extract<FetchResult, { ok: true }>, now: Date): NewEvent[] {
+function applyOk(
+  db: Database, p: Parcel, r: Extract<FetchResult, { ok: true }>, now: Date, cause: Cause,
+): NewEvent[] {
   const inserted = appendEvents(db, p.id, r.events)
   markAppendedNotified(db, p.id, inserted, now)
 
@@ -374,7 +385,7 @@ function applyOk(db: Database, p: Parcel, r: Extract<FetchResult, { ok: true }>,
     retainedTill: r.retainedTill,
     lastPolledAt: now,
     lastChangedAt: movedAt !== p.lastChangedAt ? movedAt : undefined,
-  })
+  }, cause)
   recomputeParcelStatus(db, p.id, r.status, now)
   storeRaw(db, p.id, p.carrier, JSON.stringify(r.raw), now)
   return inserted.map(e => ({ ...e, parcelId: p.id }))

@@ -570,6 +570,12 @@ append-only list of migrations.
 Never edit or renumber a migration that has shipped. Somebody's database has already recorded that
 it ran, and changing it alters what their database contains without telling them.
 
+The one amendment that rule allows is an **activity-log line**: migrations 2 and 3 now record what they
+rewrote (see [The activity log](#the-activity-log-what-changed-and-what-you-did)). That changes no data
+and no outcome - it adds a diagnostics row describing the change the migration was already making - so
+a database that ran one of them before the log existed simply has no line, and there is nothing it got
+wrong and nothing to backfill.
+
 ## Run it on a schedule (launchd)
 
 ```sh
@@ -685,6 +691,50 @@ same one-line summary that goes to `data/poll.log` - or, for a run that failed, 
 it cannot be skimmed past. The table is **bounded to the newest 50 rows**, trimmed on every insert, like
 `raw_responses`.
 
+### The activity log: what changed, and what you did
+
+*Recent runs* answers "is the poller working?". It cannot answer **"where did my parcel go?"** - and
+that is the question a real fault asks. A GLS parcel once left the dashboard silently: it was marked
+`delivered` while it was in fact sitting in a locker, because `DELIVEREDPS` ("handed to a ParcelShop")
+was mapped to `delivered`. That was only diagnosed by reading the live database within hours, and the
+evidence was already perishing - the status is overwritten by the next poll, and `raw_responses` keeps
+five bodies per parcel. A day later, on somebody else's machine, there would have been nothing to find.
+
+So **every change to a parcel's status, and everything you do here, is recorded**, in one table
+(`activity_log`) shown on `/health` → *Recent activity* and carried in the support bundle. The line
+that would have made that incident self-diagnosing reads:
+
+```
+2026-10-28T09:00:00.000Z  poller  14  #36 gls: ready_for_pickup -> delivered (raw DELIVEREDPS)
+```
+
+- **The transition, not the state.** A status is logged only when it really moved. The poller rewrites
+  every parcel's row every hour, and logging the unchanged ones would bury the handful that matter.
+- **Who caused it.** A change found by the hourly poller says `Poller`, one found by **Refresh now**
+  says `In the app`, one made by `cli poll` says `Command line`, and one made by a schema upgrade says
+  `Upgrade` - with the `poll_runs` row it happened in, where there was one, so the change and the run
+  that caused it can be read side by side. Migration 3 merged two parcels on the author's machine and
+  said nothing; it is a line now.
+- **What you did.** Dismissing mail (how many, and whether it was one sender or the whole queue),
+  deleting a parcel (and the status it was in), assigning an email to a parcel, saving settings, and
+  pressing refresh. "Where did my parcel go" is answerable with *you deleted it on Tuesday*: the log
+  holds **no foreign key** to `parcels`, precisely so that it outlives the row it talks about.
+- **Nothing in it is private.** Ids, counts, carriers, canonical statuses and words from this app's own
+  vocabulary - never a tracking number, parcel name, shop, address, locker code, mail subject or mail
+  address. A bulk dismissal records *that* it was one sender and **not which one**: a sender is a mail
+  address, it says who you correspond with, and the count is what answers the question. Settings
+  records **which fields changed and never their values**, which is why `imap.pass` is a safe thing to
+  see on that page. The carrier's raw status string is the one free-form field, because `DELIVEREDPS`
+  is the whole point of the log; where it leaves the machine it goes through an allow-list that admits
+  a code and refuses a sentence, since a carrier's sentence can name the place a parcel is waiting.
+- **It can never break anything.** Writing it is wrapped, the way the mail-ingest status is: a
+  diagnostics row that cannot be stored is logged to stderr and dropped. No poll and no button press
+  has ever failed because of it.
+- **Bounded to the newest 2000 entries**, trimmed on every insert. Far more than the 50 poll runs,
+  because a run row is written every hour whether or not anything happened while these are written
+  only when something did - on the author's machine about a hundred a week, so roughly five months of
+  history, in under half a megabyte.
+
 ### Reminders while a parcel is waiting
 
 A parcel left at a pickup point is mentioned again **twice a day, at 08:00 and 15:30** local, until
@@ -780,8 +830,10 @@ Everything lives under `data/` (gitignored):
 
   Tables: `parcels`, `events` (status history, UTC with the carrier's original string kept),
   `messages`, `carrier_health`, `raw_responses`, `ingest_status`, `geocode_cache`, `poll_runs` (the
-  activity log behind `/health` → *Recent runs*, newest 50), `imap_state` (how far each mailbox has
-  been read; see [Only the new mail is read](#only-the-new-mail-is-read)), and a few bookkeeping tables.
+  run log behind `/health` → *Recent runs*, newest 50), `activity_log` (every status change and every
+  action you took, newest 2000; see [The activity log](#the-activity-log-what-changed-and-what-you-did)),
+  `imap_state` (how far each mailbox has been read; see
+  [Only the new mail is read](#only-the-new-mail-is-read)), and a few bookkeeping tables.
   Every parcel ever tracked stays there; archiving only hides it from the in-flight list.
 - `data/mail/` holds the raw `.eml` files, `0600` inside a `0700` directory. A dismissed message's
   file is deleted, so this directory holds mail that became a parcel, mail still waiting on
@@ -812,6 +864,11 @@ Everything lives under `data/` (gitignored):
 - **"Did the refresh do anything?"** `/health` → *Recent runs*. Every poll is there, whatever started
   it, with what it did or why it failed. A row that says `failed` is the answer; a row that says
   `running` and is more than ten minutes old cannot happen - it is closed as failed on sight.
+- **"Where did my parcel go?"** `/health` → *Recent activity*. Every status change and every action
+  taken on these pages is there, newest first, with what caused it - including the deletion of a
+  parcel, which the log deliberately outlives. It is also the first place to look when a parcel reads
+  as `delivered` and is not: the line carries the carrier's own raw status string beside the
+  transition, which is exactly what diagnosed the `DELIVEREDPS` fault.
 - **"Which version is this?"** The bottom of `/health`. If it says `unknown`, `package.json` could
   not be read; if it shows no commit, the directory is not a git checkout.
 - **`update.sh` refuses to run:** read the first line. A dirty tree lists the files; a divergent

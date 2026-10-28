@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { simpleParser } from 'mailparser'
 import type { Database } from '../db/index.js'
+import { UNATTRIBUTED, type Cause } from '../db/activity-log.js'
 import { listActive, updateParcelState, type Parcel } from '../db/parcels.js'
 import { needsPickupCodeCheck, recordPickupCode } from '../db/pickup-codes.js'
 import { extractPickupCode, htmlToText, pickupFromMail, type MailPickupPoint } from '../ingest/extract.js'
@@ -9,6 +10,8 @@ import type { PickupPoint } from './types.js'
 export interface PickupCodeDeps {
   db: Database
   now: Date
+  /** Who the poll this pass belongs to was started by, for the activity log. See db/activity-log.ts. */
+  cause?: Cause
   /** Injectable for tests; defaults to reading the stored .eml off disk. */
   readMail?: (path: string) => Buffer
 }
@@ -88,7 +91,7 @@ export async function runPickupCodes(deps: PickupCodeDeps): Promise<PickupCodeRe
       // there and so keep their stored values.
       updateParcelState(db, parcel.id, {
         status: parcel.status, statusRaw: parcel.statusRaw, statusDetail: parcel.statusDetail, pickup: filled,
-      })
+      }, deps.cause ?? UNATTRIBUTED)
       report.points++
     }
   }

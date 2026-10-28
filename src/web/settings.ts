@@ -1,4 +1,5 @@
 import { NOTIFIERS, validateConfig, type Config, type ConfigDocument } from '../core/config.js'
+import type { SettingField } from '../db/activity-log.js'
 
 /**
  * The form, as `application/x-www-form-urlencoded` delivers it. `port` and `dbPath` are deliberately
@@ -156,4 +157,42 @@ export function applySettings(doc: ConfigDocument, f: SettingsForm): ApplyResult
     // (a hand-edited `port`, say) rather than writing something the app could not load afterwards.
     return no(err instanceof Error ? err.message : String(err))
   }
+}
+
+/** The mail-block fields the page offers, in the order the form shows them. */
+const IMAP_FIELDS = [
+  ['imap.host', 'host'], ['imap.port', 'port'], ['imap.user', 'user'],
+  ['imap.mailbox', 'mailbox'], ['imap.pass', 'pass'],
+] as const
+
+/**
+ * WHICH settings a save changed, by name, and never what they changed to.
+ *
+ * This is the whole of what the activity log records about a save, and the reason it is a list of
+ * names rather than a diff: `imap.pass` is an App Password and `defaultPostalCode` is where the user
+ * lives, so a log that carried values would be a log that could not be sent. "The notifier and the App
+ * Password changed on Tuesday" is the diagnostic; the values are already in the config file for
+ * anyone entitled to read them.
+ *
+ * Mail being turned on or off is reported as the single field `imap`, not as five simultaneous
+ * changes: adding or removing the block is one decision, and listing its parts would read as somebody
+ * having edited each of them. Compared against the document as it was on disk (the page re-reads it
+ * per request), so a save that changed nothing is honestly reported as having changed nothing.
+ */
+export function changedSettingFields(before: ConfigDocument, after: ConfigDocument): SettingField[] {
+  const changed: SettingField[] = []
+  if (text(before.defaultPostalCode) !== text(after.defaultPostalCode)) changed.push('defaultPostalCode')
+  if (text(before.notifier) !== text(after.notifier)) changed.push('notifier')
+  // Compared as the effective value, not as the stored one: absent means on, so a document that gains
+  // an explicit `true` did not change the setting and must not read as having done so.
+  if ((before.mapPreview !== false) !== (after.mapPreview !== false)) changed.push('mapPreview')
+
+  const a = imapBlock(before)
+  const b = imapBlock(after)
+  if ((a === undefined) !== (b === undefined)) {
+    changed.push('imap')
+  } else if (a !== undefined && b !== undefined) {
+    for (const [name, key] of IMAP_FIELDS) if (text(a[key]) !== text(b[key])) changed.push(name)
+  }
+  return changed
 }

@@ -205,3 +205,34 @@ CREATE TABLE IF NOT EXISTS poll_runs (
   error       TEXT,                          -- why the run itself ended, when it did not complete
   summary     TEXT                           -- the one-line log summary, verbatim
 );
+
+-- Every change to a parcel's derived status, and everything the user did: the log that answers "why
+-- does the dashboard look like this?" and "where did my parcel go?". See db/activity-log.ts for the
+-- four rules it is written under; the short version is that it holds ids, counts, canonical statuses,
+-- carriers and tokens from this app's own vocabulary, and nothing else - no tracking number, label,
+-- merchant, address, locker code, mail subject or sender - so the whole table is sendable.
+--
+-- Append-only, and bounded to the newest ACTIVITY_LOG_KEPT rows on every insert.
+--
+-- `parcel_id` is deliberately NOT a REFERENCES: the point of the log is to outlive the row it talks
+-- about. A foreign key would either refuse the deletion or take the evidence with it, and "you
+-- deleted it on Tuesday" is the one answer that needs the parcel to be gone.
+--
+-- `status_raw` is the carrier's own string behind the new status (`DELIVEREDPS`), which is the single
+-- field here that is not from a closed vocabulary; it is gated by an allow-list where it leaves the
+-- machine (`bundleStatusRaw`) rather than at this column, because the page that shows it is the
+-- user's own. A table of its own, so an existing database gains it from the idempotent schema exec.
+CREATE TABLE IF NOT EXISTS activity_log (
+  id          INTEGER PRIMARY KEY,
+  at          TEXT NOT NULL,                 -- UTC ISO, the acting run's clock
+  actor       TEXT NOT NULL,                 -- 'poller' | 'cli' | 'web' | 'migration' | 'unknown'
+  run_id      INTEGER,                       -- poll_runs.id, when it happened inside a run
+  kind        TEXT NOT NULL,                 -- 'status' | the action kinds; see ActivityKind
+  parcel_id   INTEGER,                       -- no REFERENCES, on purpose (see above)
+  carrier     TEXT,
+  from_status TEXT,                          -- the status before; for a deletion, the one it was in
+  to_status   TEXT,
+  status_raw  TEXT,
+  count       INTEGER,                       -- how many things the entry covers
+  detail      TEXT                           -- a closed-vocabulary token: a scope, or field names
+);

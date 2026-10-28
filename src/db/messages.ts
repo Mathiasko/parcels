@@ -1,6 +1,7 @@
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Database } from './index.js'
+import { logAction, UNATTRIBUTED, type Cause } from './activity-log.js'
 import type { RawMessage } from '../ingest/imap.js'
 
 /**
@@ -123,8 +124,8 @@ export function orphanParcelMessages(db: Database, parcelId: number): string[] {
  * The predicate is repeated in the WHERE so a second dismiss, or one aimed at a message that has since
  * been assigned, changes nothing. Returns whether this call was the one that dismissed it.
  */
-export function dismissMessage(db: Database, id: number): boolean {
-  return dismissed(db, 'id = ?', [id]) > 0
+export function dismissMessage(db: Database, id: number, cause: Cause = UNATTRIBUTED): boolean {
+  return dismissed(db, 'id = ?', [id], 'one', cause) > 0
 }
 
 /** Which messages a bulk dismissal covers. */
@@ -151,19 +152,28 @@ export interface BulkDismissal {
  * 662 items cannot be cleared one at a time, which is what this exists for. Every row is dismissed in
  * ONE transaction (so the page's count and what happened cannot disagree), and the `.eml` files go
  * afterwards, outside it, for the reason `discard` explains.
+ *
+ * The activity log records how many went and whether it was one sender or the whole queue - never
+ * WHICH sender; db/activity-log.ts says why that one field is left out.
  */
-export function dismissMessages(db: Database, sel: BulkDismissal): number {
+export function dismissMessages(db: Database, sel: BulkDismissal, cause: Cause = UNATTRIBUTED): number {
   const where = sel.from === undefined ? 'id <= ?' : 'id <= ? AND from_addr = ?'
   const params = sel.from === undefined ? [sel.upTo] : [sel.upTo, sel.from]
-  return dismissed(db, where, params)
+  return dismissed(db, where, params, sel.from === undefined ? 'all' : 'sender', cause)
 }
 
 /**
  * The one way a message is dismissed: mark the rows, then delete their files. `PENDING` is part of
  * the UPDATE as well as of the SELECT, so a row that stopped being pending in between is not touched
  * and its file is not deleted.
+ *
+ * The log entry is written from `done.length`, not from the selection: a dismissal that dismissed
+ * nothing (a stale page, a double submit) did nothing and is not an entry.
  */
-function dismissed(db: Database, where: string, params: unknown[]): number {
+function dismissed(
+  db: Database, where: string, params: unknown[],
+  scope: 'all' | 'sender' | 'one', cause: Cause,
+): number {
   const rows = db.prepare(`SELECT id, raw_path FROM messages WHERE ${PENDING} AND ${where}`)
     .all(...params) as Array<{ id: number; raw_path: string | null }>
   if (rows.length === 0) return 0
@@ -171,8 +181,13 @@ function dismissed(db: Database, where: string, params: unknown[]): number {
   const update = db.prepare(
     `UPDATE messages SET parsed_ok = 1, parse_note = 'Dismissed', raw_path = NULL WHERE id = ? AND ${PENDING}`,
   )
-  const done = db.transaction((): Array<{ id: number; raw_path: string | null }> =>
-    rows.filter(r => update.run(r.id).changes > 0))()
+  const done = db.transaction((): Array<{ id: number; raw_path: string | null }> => {
+    const marked = rows.filter(r => update.run(r.id).changes > 0)
+    if (marked.length > 0) {
+      logAction(db, { kind: 'messages_dismissed', count: marked.length, scope }, cause)
+    }
+    return marked
+  })()
 
   for (const r of done) if (r.raw_path !== null) discard(r.raw_path)
   return done.length

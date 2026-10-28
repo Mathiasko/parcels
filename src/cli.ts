@@ -120,8 +120,11 @@ async function poll(ctx: CliContext): Promise<void> {
   // stores the very status changes the hourly run would have announced, so it announces them too.
   // Recorded in `poll_runs` like every other poll: the activity log on the Health page is of the app's
   // activity, so a run started by hand belongs in it exactly as the hourly one does.
-  const runId = startRun(ctx.db, 'cli', new Date())
+  const startedAt = new Date()
+  const runId = startRun(ctx.db, 'cli', startedAt)
   const report = await recordPollRun(ctx.db, runId, runPoll(buildPollDeps(ctx.db, ctx.config, {
+    // A poll run by hand is the command line acting, not the poller; the activity log says which.
+    cause: { actor: 'cli', runId, at: startedAt },
     ...(ctx.http && { http: ctx.http }),
     ...(ctx.adapters && { adapters: ctx.adapters }),
     ...(ctx.notifier && { notifier: ctx.notifier }),

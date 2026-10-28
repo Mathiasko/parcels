@@ -9,6 +9,7 @@ import { pollerStatus } from './pollwatch.js'
 import { PENDING } from '../db/messages.js'
 import type { Database } from '../db/index.js'
 import { carrierHealth } from '../db/health.js'
+import { activityForBundle, describeActivity } from '../db/activity-log.js'
 import { getIngestStatus } from '../db/ingest-status.js'
 import { userVersion } from '../db/migrate.js'
 import { listActive } from '../db/parcels.js'
@@ -45,6 +46,12 @@ export const SUPPORT_BUNDLE_MAX_BYTES = 40_000
 
 /** How many of the most recent poll runs the bundle carries. Two days of hourly polling is 30. */
 const RUNS_INCLUDED = 15
+
+/**
+ * How many activity entries the bundle carries. Fewer than /health shows: the whole point of this file
+ * is that somebody can read it before sending it, and these are the newest lines, which are the fault.
+ */
+const ACTIVITY_INCLUDED = 25
 
 /** The launchd agents this app installs (`scripts/install-agents.sh` keeps the same list). */
 export const SUPPORT_AGENTS = ['local.parcels.poller', 'local.parcels.web'] as const
@@ -457,6 +464,24 @@ export function buildSupportBundle(deps: SupportDeps): string {
         r.mailRead ?? '-', r.created ?? '-', r.failures,
         r.error ?? r.summary ?? (r.finishedAt ? 'nothing to report' : 'still going'),
       ], widths)),
+    ]
+  })
+
+  /**
+   * The activity log: the status transitions and the user actions behind what the rest of this file
+   * reports (see db/activity-log.ts). The one section whose rows are read through a gate rather than
+   * verbatim - `activityForBundle` puts the carrier's raw status string through an allow-list, because
+   * `DELIVEREDPS` is the diagnosis and a carrier's sentence can name the place a parcel is waiting.
+   * Everything else in these rows is an id, a count, a canonical status or a word from this app's own
+   * vocabulary, so the allow-list is doing the work here and not the final redaction pass.
+   */
+  section(`recent activity (newest first, up to ${ACTIVITY_INCLUDED})`, () => {
+    const entries = activityForBundle(db, ACTIVITY_INCLUDED)
+    if (entries.length === 0) return ['nothing has been recorded yet']
+    const widths = [26, 10, 7]
+    return [
+      row(['when', 'who', 'run', 'what happened'], widths),
+      ...entries.map(e => row([iso(e.at), e.actor, e.runId ?? '-', describeActivity(e)], widths)),
     ]
   })
 

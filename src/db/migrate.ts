@@ -1,6 +1,7 @@
 import type { Database } from './index.js'
+import { logAction, logStatusChange, type Cause } from './activity-log.js'
 import { canonicalNumber } from '../carriers/registry.js'
-import type { CarrierId } from '../core/types.js'
+import type { CanonicalStatus, CarrierId } from '../core/types.js'
 
 /**
  * A change to an existing table's shape. New TABLES do not need one: `schema.sql` is applied with
@@ -26,6 +27,20 @@ export interface Migration {
 export const BASELINE = 1
 
 /**
+ * How a migration signs the rows it rewrites in the activity log. A schema upgrade belongs to no poll
+ * run, and a status it changed must never read as something a carrier said: migration 3 folded two of
+ * the author's parcels into one and said nothing at all about it, which is the kind of silence this
+ * log exists to end.
+ *
+ * Writing these from inside migrations that have already shipped is deliberate and safe: a log row is
+ * diagnostics and changes no data, so re-reading the rule in `MIGRATIONS` (never edit a shipped
+ * migration) against its reason (somebody's database has already recorded what it contains) leaves
+ * this on the right side of it. A database that ran one of them before this existed simply has no
+ * line; there is nothing that could be backfilled, and nothing it got wrong.
+ */
+const MIGRATION: Cause = { actor: 'migration' }
+
+/**
  * Ordered, append-only. Never renumber or edit one that has shipped: somebody's database has already
  * recorded that it ran, and editing it changes what their database contains without telling them.
  */
@@ -48,10 +63,21 @@ export const MIGRATIONS: Migration[] = [
         WHERE status = 'delivered' AND parcel_id IN (
           SELECT id FROM parcels WHERE carrier = 'gls' AND status_raw = 'DELIVEREDPS')
       `).run()
+      // Read before the UPDATE, so the log can say which parcels this touched and what they were:
+      // afterwards the rows no longer know, and "the fix moved parcel 36" is the line a reader needs.
+      const rescued = db.prepare(`
+        SELECT id FROM parcels
+        WHERE carrier = 'gls' AND status_raw = 'DELIVEREDPS' AND status = 'delivered'
+      `).all() as { id: number }[]
       db.prepare(`
         UPDATE parcels SET status = 'ready_for_pickup'
         WHERE carrier = 'gls' AND status_raw = 'DELIVEREDPS' AND status = 'delivered'
       `).run()
+      for (const { id } of rescued) {
+        logStatusChange(db, {
+          parcelId: id, carrier: 'gls', from: 'delivered', to: 'ready_for_pickup', raw: 'DELIVEREDPS',
+        }, MIGRATION)
+      }
     },
   },
   {
@@ -77,21 +103,28 @@ export const MIGRATIONS: Migration[] = [
       interface Row { id: number; carrier: CarrierId; tracking_number: string }
       // Ordered by id, so each group's first member is the parcel that was created first.
       const rows = db.prepare('SELECT id, carrier, tracking_number FROM parcels ORDER BY id').all() as Row[]
-      const groups = new Map<string, { canonical: string; stored: string; ids: number[] }>()
+      const groups = new Map<string, { carrier: CarrierId; canonical: string; stored: string; ids: number[] }>()
       for (const r of rows) {
         const canonical = canonicalNumber(r.carrier, r.tracking_number)
         const key = `${r.carrier} ${canonical}`
-        const group = groups.get(key) ?? { canonical, stored: r.tracking_number, ids: [] }
+        const group = groups.get(key) ?? { carrier: r.carrier, canonical, stored: r.tracking_number, ids: [] }
         group.ids.push(r.id)
         groups.set(key, group)
       }
 
       const rename = db.prepare('UPDATE parcels SET tracking_number = ? WHERE id = ?')
-      for (const { canonical, stored, ids } of groups.values()) {
+      for (const { carrier, canonical, stored, ids } of groups.values()) {
         const [keep, ...losers] = ids as [number, ...number[]]
         // The losers go first: one of them may be holding the canonical spelling that the survivor is
         // about to take, and `UNIQUE (carrier, tracking_number)` would refuse the overlap.
         for (const loser of losers) mergeParcel(db, keep, loser)
+        // A merge is the one thing here a user could notice and not be able to explain - a parcel
+        // disappeared and another one changed - so it is a line in the log rather than something to be
+        // inferred from a gap in the ids. One entry per surviving parcel, not per loser: what happened
+        // is that this shipment turned out to be one shipment.
+        if (losers.length > 0) {
+          logAction(db, { kind: 'parcels_merged', parcelId: keep, carrier, count: losers.length }, MIGRATION)
+        }
         // A lone parcel still gets here, because a row left holding the padded spelling would be
         // missed by every future lookup and duplicated all over again.
         if (stored !== canonical) rename.run(canonical, keep)
@@ -191,6 +224,19 @@ function mergeParcel(db: Database, keep: number, loser: number): void {
   const columns = Object.keys(merged)
   db.prepare(`UPDATE parcels SET ${columns.map(c => `${c} = @${c}`).join(', ')} WHERE id = @id`)
     .run({ ...merged, id: keep })
+
+  // The survivor can come out of this in a status it was never polled into, because the whole status
+  // snapshot comes from whichever row the carrier spoke to last. That is a status change like any
+  // other and gets its own line, attributed to the migration rather than to a carrier.
+  if (merged.status !== a.status) {
+    logStatusChange(db, {
+      parcelId: keep,
+      carrier: a.carrier as CarrierId,
+      from: a.status as CanonicalStatus,
+      to: merged.status as CanonicalStatus,
+      ...(typeof merged.status_raw === 'string' && { raw: merged.status_raw }),
+    }, MIGRATION)
+  }
 
   for (const table of MOVED_WHOLESALE) {
     db.prepare(`UPDATE ${table} SET parcel_id = ? WHERE parcel_id = ?`).run(keep, loser)

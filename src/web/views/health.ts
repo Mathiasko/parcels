@@ -4,6 +4,9 @@ import type { HealthRow } from '../../db/health.js'
 import type { IngestStatus } from '../../db/ingest-status.js'
 import type { PollerStatus } from '../../core/pollwatch.js'
 import { POLL_RUNS_KEPT, type PollRun, type RunTrigger } from '../../db/poll-runs.js'
+import {
+  ACTIVITY_LOG_KEPT, activityKindWord, describeActivity, type ActivityEntry, type Actor,
+} from '../../db/activity-log.js'
 import { CARRIER_NAME, formatAgo, formatDateTime } from './format.js'
 import { glyph, type GlyphName } from './glyphs.js'
 import { html, type Html } from './html.js'
@@ -91,6 +94,37 @@ function runsPanel(runs: PollRun[], ctx: PageCtx): Html {
 }
 
 /**
+ * Who acted. Deliberately NOT `RUN_SOURCE`: a web RUN is only ever started by the Refresh now button,
+ * so that table can call it that, but a web ENTRY is any action taken on these pages - a deletion, a
+ * dismissal, a settings save - and labelling those "Refresh now" would be a small lie on every row.
+ * Typed over `Actor`, so adding an actor is a compile error here rather than a bare word on the page.
+ */
+const ACTOR_SOURCE: Record<Actor, string> = {
+  poller: 'Poller', cli: 'Command line', web: 'In the app', migration: 'Upgrade', unknown: 'Not recorded',
+}
+
+/**
+ * What changed and who changed it, newest first: the log that answers "where did my parcel go?" and
+ * "why does it say that?" rather than "is the poller running?" (which is the panel above).
+ *
+ * The status transitions and the user actions are one table on purpose - they are the same question
+ * asked twice, and reading two interleaved lists by eye is how a cause gets missed. See
+ * db/activity-log.ts for what a row may and may not carry.
+ */
+function activityPanel(entries: ActivityEntry[], ctx: PageCtx): Html {
+  if (entries.length === 0) {
+    return html`<h2>Recent activity</h2><p class="empty">Nothing has been recorded yet. Every status change, and everything you do here, lands in this log.</p>`
+  }
+  return html`<h2>Recent activity</h2>
+<p class="meta">What changed and what you did, newest first. The last ${ACTIVITY_LOG_KEPT} entries are kept.</p>${
+    scroller('Recent activity', html`<table class="board runs"><thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Detail</th><th scope="col">Source</th></tr></thead>
+<tbody>${entries.map(e => html`<tr data-activity="${e.id}"><td>${formatDateTime(e.at, ctx.now)}<span class="meta why">${formatAgo(e.at, ctx.now)}</span></td>
+<td>${activityKindWord(e.kind)}</td>
+<td class="did">${describeActivity(e)}</td>
+<td class="src">${ACTOR_SOURCE[e.actor] ?? e.actor}${e.runId === undefined ? '' : html`<span class="meta why">run ${e.runId}</span>`}</td></tr>`)}</tbody></table>`)}`
+}
+
+/**
  * The way a non-technical user reports a fault.
  *
  * The button is the whole feature: one press gathers the diagnostics (see core/support.ts) and prints
@@ -114,10 +148,12 @@ export function healthPage(
   rows: HealthRow[], ingest: { configured: boolean; status?: IngestStatus }, poller: PollerStatus, ctx: PageCtx,
   /** `0.1.0 (0db9a83)`, or `unknown`. Resolved once at startup; see core/version.ts. */
   version: string,
-  /** The activity log, newest first. Empty (and absent for a caller that has none) is a stated fact, not a gap. */
+  /** The run log, newest first. Empty (and absent for a caller that has none) is a stated fact, not a gap. */
   runs: PollRun[] = [],
   /** The support bundle, when one has just been gathered. Absent on a plain view of the page. */
   support?: string,
+  /** The activity log, newest first: status transitions and user actions. Empty is a stated fact. */
+  activity: ActivityEntry[] = [],
 ): Html {
   const byCarrier = new Map(rows.map(r => [r.carrier, r]))
   const ids = Object.keys(CARRIER_NAME) as CarrierId[]
@@ -154,6 +190,7 @@ ${scroller('Carrier and system health', html`<table class="board"><thead><tr><th
 <td>${ing?.lastOkAt ? formatDateTime(ing.lastOkAt, ctx.now) : 'never'}</td>${errCell(ing?.lastErrorAt, ing?.lastError)}</tr>` : ''}</tbody></table>`)}${
   poller.overdue ? html`<p class="meta">No poll has completed for over 2 hours of the 07:00-21:00 day. Parcels are not being updated: check that the launchd poller agent is loaded and that the Node path in its plist still exists.</p>` : ''}
 ${runsPanel(runs, ctx)}
+${activityPanel(activity, ctx)}
 ${supportPanel(support)}
 <p class="meta" id="version">Version ${version}</p>`, ctx)
 }

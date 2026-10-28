@@ -23,8 +23,9 @@ import { carrierHealth } from '../db/health.js'
 import { getIngestStatus } from '../db/ingest-status.js'
 import { getPickupCode, pickupCodesFor } from '../db/pickup-codes.js'
 import { dismissMessage, dismissMessages } from '../db/messages.js'
+import { listActivity, logAction, type Cause } from '../db/activity-log.js'
 import { addParcel, cleanPostcode, MAX_LABEL } from './actions.js'
-import { applySettings, settingsValues, submittedSettings, type SettingsValues } from './settings.js'
+import { applySettings, changedSettingFields, settingsValues, submittedSettings, type SettingsValues } from './settings.js'
 import { probeImap, type ImapProbeLike, type ImapProbeResult } from '../ingest/imap-probe.js'
 import type { ImapConfig } from '../ingest/imap.js'
 import { settingsPage, type SettingsState } from './views/settings.js'
@@ -138,6 +139,13 @@ const RELOAD_SECONDS = 3
 
 /** How many runs the Health page's activity log shows. */
 const RUNS_SHOWN = 20
+
+/**
+ * How many activity entries the Health page shows. More than the runs, because these are what somebody
+ * scrolls looking for the moment a parcel changed or the day they deleted one, and they are one line
+ * each; far fewer than `ACTIVITY_LOG_KEPT`, because a page is not an archive.
+ */
+const ACTIVITY_SHOWN = 40
 
 /**
  * The background refresh each server has in flight, if any. `POST /refresh` returns before its run is
@@ -289,6 +297,12 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     return reply.code(200).type('image/png').header('cache-control', 'private, max-age=86400').send(bytes)
   })
 
+  /**
+   * What this server is, for the activity log: the web, on the clock the page is rendering with. One
+   * helper, so no route can attribute its own action to the poller by copying the wrong literal.
+   */
+  const acted = (): Cause => ({ actor: 'web', at: now() })
+
   const notFound = (reply: FastifyReply) => reply.code(404).type('text/plain').send('not found')
   const form = (req: { body: unknown }): Record<string, string> => (req.body ?? {}) as Record<string, string>
   const text = (v: string | undefined) => (v ?? '').trim()
@@ -326,6 +340,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     return send(reply, healthPage(
       c.health, { configured: config.imap !== undefined, status: getIngestStatus(db) },
       pollerStatus(db, c.now), c, version, listRuns(db, RUNS_SHOWN), support,
+      listActivity(db, ACTIVITY_SHOWN),
     ))
   }
 
@@ -413,6 +428,9 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const saved = writeConfigDocument(configPath, result.doc)
     // `port` and `dbPath` are bound to the open socket and the open database, so they stay as they are.
     config = { ...saved, port: config.port, dbPath: config.dbPath }
+    // Only after the file was written, and only the field NAMES: see `changedSettingFields`. A rejected
+    // save returned above and records nothing, because nothing was saved.
+    logAction(db, { kind: 'settings_saved', fields: changedSettingFields(file.doc, result.doc) }, acted())
     return reply.redirect('/settings?saved=1', 303)
   })
 
@@ -444,6 +462,13 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       // The email is about a parcel we already track: resolve it against that parcel rather than leave it waiting.
       if (r.ok) link(r.id)
       else if (r.status === 409) link(r.existingId)
+      // Logged inside the transaction, from the parcel the mail was actually attached to: the id, never
+      // the number that was typed and never the sender or subject of the mail.
+      const parcelId = r.ok ? r.id : r.status === 409 ? r.existingId : undefined
+      if (parcelId !== undefined) {
+        const linked = getParcel(db, parcelId)
+        if (linked) logAction(db, { kind: 'message_assigned', parcelId, carrier: linked.carrier }, acted())
+      }
       return r
     })()
     if (result.ok) return reply.redirect(`/parcel/${result.id}`, 303)
@@ -467,7 +492,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const upTo = text(f.up_to)
     if (!/^[0-9]+$/.test(upTo) || Number(upTo) < 1) return notFound(reply)
     const from = text(f.from)
-    dismissMessages(db, { upTo: Number(upTo), from: from === '' ? undefined : from })
+    dismissMessages(db, { upTo: Number(upTo), from: from === '' ? undefined : from }, acted())
     return reply.redirect('/attention', 303)
   })
 
@@ -478,7 +503,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const messageId = Number(req.params.messageId)
     const message = Number.isInteger(messageId) ? getUnparsedMessage(db, messageId) : undefined
     if (!message) return notFound(reply)
-    dismissMessage(db, messageId)
+    dismissMessage(db, messageId, acted())
     return reply.redirect('/attention', 303)
   })
 
@@ -502,7 +527,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   app.post<{ Params: { id: string } }>('/parcel/:id/delete', async (req, reply) => {
     const parcel = parcelFor(req.params.id)
     if (!parcel) return notFound(reply)
-    deleteParcel(db, parcel.id)
+    deleteParcel(db, parcel.id, acted())
     return reply.redirect('/', 303)
   })
 
@@ -557,12 +582,21 @@ export function buildServer(deps: WebDeps): FastifyInstance {
         }
       : undefined
     const runId = startRun(db, 'web', now())
+    // The press itself is an entry, not only its effects: "nothing changed when I pressed refresh" is a
+    // report, and without this there would be no record that it was ever pressed. The count is how many
+    // parcels it actually covered, which is the other half of that answer.
+    logAction(db, {
+      kind: 'refresh', count: parcelIds.length, scope: target === '' ? 'all' : 'one',
+    }, { actor: 'web', runId, at: now() })
     const work = recordPollRun(db, runId, runPoll({
       db, config, parcelIds, forceAll: true, ingest,
       http: deps.http ?? createHttpClient(),
       adapters: deps.adapters ?? allAdapters(),
       notifier: deps.notifier ?? createNotifier(config.notifier),
       now: now(),
+      // A status change found by the button is the WEB acting, not the hourly poller: the whole point
+      // of attributing these is that "it changed while I was looking at it" is a different fact.
+      cause: { actor: 'web', runId, at: now() },
     }), now)
     // Nothing awaits `work` on the request path, so its rejection has to be dealt with here or it is an
     // unhandled rejection that takes the process down. `recordPollRun` has already written it to the run
