@@ -31,7 +31,12 @@ check "that node is new enough to run this app"       "$NODE" -e "process.exit(p
 check "no machine-specific node is baked in"          bash -c "! grep -q 'versions/node/v[0-9]' '$ROOT'/launchd/*.plist.template"
 check "poller has exactly 16 calendar slots"         test "$(key "$P" StartCalendarInterval)" = 16
 check "slots are 7..21 on the hour plus 15:30"       test "$(for i in $(seq 0 15); do echo "$(key "$P" StartCalendarInterval.$i.Hour):$(key "$P" StartCalendarInterval.$i.Minute)"; done | tr '\n' ' ')" = "7:0 8:0 9:0 10:0 11:0 12:0 13:0 14:0 15:0 15:30 16:0 17:0 18:0 19:0 20:0 21:0 "
-check "both reminder times have a run to fire from" bash -c "for t in 8:0 15:30; do for i in \$(seq 0 15); do test \"\$(plutil -extract StartCalendarInterval.\$i.Hour raw -o - '$P'):\$(plutil -extract StartCalendarInterval.\$i.Minute raw -o - '$P')\" = \"\$t\" && continue 2; done; exit 1; done"
+# The reminder times come from NUDGE_SLOTS itself, not a copy of them, so moving a reminder without
+# giving the poller a run at that time fails here. Imported from the TypeScript source (Node strips the
+# types), and an empty answer is a failure of its own rather than a loop that passes vacuously.
+SLOTS="$("$NODE" --input-type=module -e "const { NUDGE_SLOTS } = await import('$ROOT/src/notify/nudge.ts'); process.stdout.write(NUDGE_SLOTS.map(s => s.hour + ':' + s.minute).join(' '))" 2>/dev/null)"
+check "NUDGE_SLOTS can be read from src/notify/nudge.ts" test -n "$SLOTS"
+check "every NUDGE_SLOTS time has a run to fire from" bash -c "test -n '$SLOTS' && for t in $SLOTS; do for i in \$(seq 0 15); do test \"\$(plutil -extract StartCalendarInterval.\$i.Hour raw -o - '$P'):\$(plutil -extract StartCalendarInterval.\$i.Minute raw -o - '$P')\" = \"\$t\" && continue 2; done; exit 1; done"
 check "poller has no StartInterval"                  bash -c "! plutil -extract StartInterval raw -o - '$P'"
 check "poller logs live under data/"                 test "$(key "$P" StandardOutPath)" = "$ROOT/data/poll.log" -a "$(key "$P" StandardErrorPath)" = "$ROOT/data/poll.err.log"
 check "poller sets WorkingDirectory to the project"  test "$(key "$P" WorkingDirectory)" = "$ROOT"
