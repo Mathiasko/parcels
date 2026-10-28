@@ -20,7 +20,7 @@ import { recordIngest } from '../db/ingest-status.js'
 import { carrierHealth, recordHealth, type HealthOutcome, type HealthRow } from '../db/health.js'
 import { failRun, finishRun, type RunCounts } from '../db/poll-runs.js'
 import {
-  listActive, markAttempted, postcodeRejected, setNeedsPostcode, updateParcelState, type Parcel,
+  listActive, markAttempted, markPolled, postcodeRejected, setNeedsPostcode, updateParcelState, type Parcel,
 } from '../db/parcels.js'
 
 export interface PollDeps {
@@ -175,7 +175,7 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   if (deps.notifier) await notify(deps.notifier, db, report, now, deps.config.port)
   // Last, and after the notifications: this is the only step that deliberately sleeps (both services
   // it uses are free and rate-limited), and nothing else in the run depends on it.
-  report.codes = await pickupCodes(deps, cause)
+  report.codes = await pickupCodes(deps)
   report.map = await mapPreview(deps)
   return report
 }
@@ -214,9 +214,9 @@ function updateStep(deps: PollDeps, cause: Cause): UpdateCheck | undefined {
  * the pickup columns this pass then tops up) and BEFORE the map preview, so a point that only the mail
  * knew about is geocoded and drawn in the same run that found it.
  */
-async function pickupCodes(deps: PollDeps, cause: Cause): Promise<PickupCodeReport | undefined> {
+async function pickupCodes(deps: PollDeps): Promise<PickupCodeReport | undefined> {
   try {
-    const r = await runPickupCodes({ db: deps.db, now: deps.now, cause })
+    const r = await runPickupCodes({ db: deps.db, now: deps.now })
     return r.scanned === 0 ? undefined : r
   } catch (err) {
     console.error(`pickup codes: ${describe(err)}`)
@@ -381,10 +381,9 @@ function applyCarrier(
         setNeedsPostcode(db, p.id, p.postalCode ?? '')
         outcomes.push({ kind: 'neutral' })
       } else {
-        // not_found (a freshly announced parcel) is normal, not an alarm.
-        updateParcelState(db, p.id, {
-          status: p.status, statusRaw: p.statusRaw, statusDetail: p.statusDetail, lastPolledAt: now,
-        }, cause)
+        // not_found (a freshly announced parcel) is normal, not an alarm. Only the poll is stamped:
+        // `p` was read before the request, so writing its status back could undo a newer change.
+        markPolled(db, p.id, now)
         outcomes.push({ kind: 'ok' })
       }
     }

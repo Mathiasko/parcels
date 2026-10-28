@@ -233,6 +233,30 @@ export function setPickupCoords(db: Database, id: number, lat: number, lon: numb
     .run(lat, lon, id)
 }
 
+/**
+ * Writes a pickup point learned from the parcel's own mail, touching only the `pickup_*` columns and
+ * only while the parcel is still waiting for collection. The mail pass reads the parcel, then awaits a
+ * parse, and the other process may have marked it delivered in between: writing back the status it
+ * read (as `updateParcelState` would) is what put a collected parcel back to "ready" and re-notified.
+ * Returns whether the row was written.
+ */
+export function setMailPickup(db: Database, id: number, p: PickupPoint): boolean {
+  return db.prepare(`
+    UPDATE parcels SET pickup_kind = ?, pickup_name = ?, pickup_street = ?, pickup_city = ?,
+                       pickup_zip = ?, pickup_lat = ?, pickup_lon = ?
+    WHERE id = ? AND status = 'ready_for_pickup'
+  `).run(p.kind, p.name ?? null, p.street ?? null, p.city ?? null, p.postalCode ?? null, p.lat ?? null, p.lon ?? null, id)
+    .changes > 0
+}
+
+/**
+ * Stamps a real answer that carried no tracking information (`not_found`). Only `last_polled_at`: the
+ * rest of the row was read before the request went out, and the other process may have moved it since.
+ */
+export function markPolled(db: Database, id: number, at: Date): void {
+  db.prepare('UPDATE parcels SET last_polled_at = ? WHERE id = ?').run(at.toISOString(), id)
+}
+
 /** Stamps every attempt, answered or not. `lastPolledAt` stays "last real answer". */
 export function markAttempted(db: Database, ids: number[], at: Date): void {
   const mark = db.prepare('UPDATE parcels SET last_attempted_at = ? WHERE id = ?')

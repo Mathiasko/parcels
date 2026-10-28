@@ -362,6 +362,21 @@ test('what the carrier said about the status, its detail and its deadline surviv
   expect(p.lastPolledAt).toEqual(NOW)
 })
 
+test('a parcel collected while its mail is being read stays collected', async () => {
+  // The other process (a web refresh, or the poller) learns of the delivery while this pass is
+  // awaiting the parse. What this pass read before the await must not be written back over it.
+  const id = waiting()
+  const report = await runPickupCodes({ db, now: NOW, readMail: () => {
+    updateParcelState(db, id, { status: 'delivered', statusRaw: 'DELIVERED' })
+    return GLS_MAIL
+  } })
+  const p = getParcel(db, id)!
+  expect(p.status).toBe('delivered')
+  expect(p.statusRaw).toBe('DELIVERED')
+  expect(p.pickup).toBeUndefined()      // a parcel no longer waiting is given no location
+  expect(report.points).toBe(0)
+})
+
 test('a parcel whose mail has no pickup block is not read again on the next poll', async () => {
   const id = waiting()
   const body = Buffer.from('Subject: x\r\n\r\nVáš balík je na ceste. Odberné miesto zatiaľ nepoznáme.')

@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { simpleParser } from 'mailparser'
 import type { Database } from '../db/index.js'
-import { UNATTRIBUTED, type Cause } from '../db/activity-log.js'
-import { listActive, updateParcelState, type Parcel } from '../db/parcels.js'
+import { listActive, setMailPickup, type Parcel } from '../db/parcels.js'
 import { needsPickupCodeCheck, recordPickupCode } from '../db/pickup-codes.js'
 import { extractPickupCode, htmlToText, pickupFromMail, type MailPickupPoint } from '../ingest/extract.js'
 import type { PickupPoint } from './types.js'
@@ -10,8 +9,6 @@ import type { PickupPoint } from './types.js'
 export interface PickupCodeDeps {
   db: Database
   now: Date
-  /** Who the poll this pass belongs to was started by, for the activity log. See db/activity-log.ts. */
-  cause?: Cause
   /** Injectable for tests; defaults to reading the stored .eml off disk. */
   readMail?: (path: string) => Buffer
 }
@@ -84,16 +81,9 @@ export async function runPickupCodes(deps: PickupCodeDeps): Promise<PickupCodeRe
     recordPickupCode(db, parcel.id, code, mails.length, now)
 
     const filled = point && fillPickup(parcel.pickup, point)
-    if (filled) {
-      // The status fields are passed back verbatim: this update writes the pickup columns, and
-      // `updateParcelState` always overwrites `status_raw` and `status_detail`, so omitting them
-      // would quietly erase what the carrier said. `retainedTill` and the timestamps are COALESCEd
-      // there and so keep their stored values.
-      updateParcelState(db, parcel.id, {
-        status: parcel.status, statusRaw: parcel.statusRaw, statusDetail: parcel.statusDetail, pickup: filled,
-      }, deps.cause ?? UNATTRIBUTED)
-      report.points++
-    }
+    // Only the pickup columns, and only if the parcel is still waiting: `parcel` was read before the
+    // awaits above, and anything else written from it could undo what the other process did meanwhile.
+    if (filled && setMailPickup(db, parcel.id, filled)) report.points++
   }
   return report
 }

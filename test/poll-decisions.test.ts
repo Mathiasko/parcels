@@ -35,6 +35,22 @@ test('marks every appended event notified, including a new parcel\'s whole histo
   expect(db.prepare('SELECT COUNT(*) AS n FROM events WHERE notified_at IS NULL').get()).toEqual({ n: 0 })
 })
 
+test('a not_found answer stamps the poll and nothing else, so it cannot undo a change made meanwhile', async () => {
+  const db = memDb()
+  const id = addParcel(db, 'posta', 'RA000000001SK')
+  updateParcelState(db, id, { status: 'in_transit', statusRaw: 'old' })
+  // The other process marks it delivered while this poll's request is in flight.
+  const posta = stubAdapter('posta', ins => {
+    updateParcelState(db, id, { status: 'delivered', statusRaw: 'new', statusDetail: 'signed' })
+    return ins.map(i => failResult(i.number, 'not_found'))
+  }, 100)
+
+  await runPoll({ db, http: bodyHttp(), adapters: [posta], config, now: NOW })
+
+  const p = findParcel(db, 'posta', 'RA000000001SK')!
+  expect(p).toMatchObject({ status: 'delivered', statusRaw: 'new', statusDetail: 'signed', lastPolledAt: NOW })
+})
+
 test('keeps only the last 5 raw responses per parcel', async () => {
   const db = memDb()
   addParcel(db, 'posta', 'RA000000001SK')
