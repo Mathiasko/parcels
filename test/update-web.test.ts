@@ -126,7 +126,7 @@ describe('the Update section on /health', () => {
     const { app } = server(db)
     const res = await app.inject({ method: 'GET', url: '/health' })
     expect(res.headers['content-security-policy'])
-      .toBe("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'")
+      .toBe("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
     expect(res.body).not.toMatch(/<script/i)
     expect(res.body).not.toMatch(/\son[a-z]+="/i)
   })

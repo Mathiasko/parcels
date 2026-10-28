@@ -494,7 +494,7 @@ describe('the Support section on /health and the download route', () => {
   })
 
   test('neither response adds a script, and the CSP is the one every page sends', async () => {
-    const CSP = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'"
+    const CSP = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
     const db = loadedDb()
     const dir = dataDir()
     for (const res of [
