@@ -333,6 +333,18 @@ describe('web core: faithful rendering', () => {
     expect(/<input name="postcode"[^>]*>/.exec(body)![0]).toContain('inputmode="numeric"')
   })
 
+  test('the arrow after "Open in Apple Maps" is not read aloud, on the dashboard and on the parcel page', async () => {
+    const db = memDb()
+    const id = parcel(db, { label: 'Shoes' })
+    scan(db, id, [ev('x', 'ready_for_pickup')], 'ready_for_pickup',
+      { kind: 'zbox', name: 'Z-BOX Hlavna 6', street: 'Hlavna 6', city: 'Bratislava', lat: 48.1, lon: 17.1 })
+    for (const url of ['/', `/parcel/${id}`]) {
+      const body = (await get(db, url)).body
+      expect(body, url).toContain('Open in Apple Maps <span aria-hidden="true">↗</span></a>')
+      expect(body, url).not.toContain('Open in Apple Maps ↗')
+    }
+  })
+
   test('requests with a foreign Host header are refused (DNS rebinding)', async () => {
     const app = buildServer({ db: memDb(), config })
     const bad = await app.inject({ method: 'GET', url: '/', headers: { host: 'evil.example' } })

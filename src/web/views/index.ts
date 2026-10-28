@@ -307,7 +307,7 @@ function card(c: Card, ctx: PageCtx): Html {
   return html`<article class="card">
 <div class="card-h${dueNow ? raw(' due-now') : ''}">${cardHead(c)}${cardChip(c)}</div>
 <ul class="card-l">${c.members.map(m => cardEntry(c, m, ctx))}</ul>${note || maps
-    ? html`<p class="card-f meta">${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps ↗</a>` : ''}</p>`
+    ? html`<p class="card-f meta">${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps <span aria-hidden="true">↗</span></a>` : ''}</p>`
     : ''}
 </article>`
 }
