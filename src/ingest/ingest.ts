@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import type { Database } from '../db/index.js'
 import type { Carrier, ParcelEvent } from '../core/types.js'
 import { isEmailOnlyCarrier } from '../core/types.js'
-import { findParcel, insertParcel, setArchived } from '../db/parcels.js'
+import { findParcel, insertParcel, reviveArchived, setArchived } from '../db/parcels.js'
 import { appendEvents } from '../db/events.js'
 import { storeMessage } from '../db/messages.js'
 import { accountKey, getImapState, saveImapState, type ImapState } from '../db/imap-state.js'
@@ -242,6 +242,12 @@ function placeOne(db: Database, it: Item, deps: ReprocessDeps, report: IngestRep
   const event = isEmailOnlyCarrier(carrier) ? mailEvent(it) : undefined
   const existing = findParcel(db, carrier, number)
   if (existing) {
+    // Archived on arrival because its first mail was old, and now a fresh one says it is moving after
+    // all. Ingest is the only thing that archives, so it is the one that has to take it back; left
+    // archived, the parcel is never polled and /add answers "already tracking" for it.
+    if (existing.archivedAt && deps.now.getTime() - it.receivedAt.getTime() <= ARCHIVE_AFTER_DAYS * DAY) {
+      reviveArchived(db, existing.id, deps.now)
+    }
     // A later mail may name the sender when the first one did not.
     if (merchant && !existing.merchant) db.prepare('UPDATE parcels SET merchant = ? WHERE id = ?').run(merchant, existing.id)
     // This is how an email-only parcel moves: each later mail adds its own words. `appendEvents`

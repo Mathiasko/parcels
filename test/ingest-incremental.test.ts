@@ -6,7 +6,8 @@ import { fetchMessages } from '../src/ingest/imap.js'
 import { ingestMessages, type IngestDeps } from '../src/ingest/ingest.js'
 import { accountKey, getImapState } from '../src/db/imap-state.js'
 import { allAdapters } from '../src/carriers/registry.js'
-import { findParcel } from '../src/db/parcels.js'
+import { findParcel, listActive } from '../src/db/parcels.js'
+import { isDormant } from '../src/core/backoff.js'
 import type { Database } from '../src/db/index.js'
 import { fakeImap, UID_VALIDITY, type FakeMessage } from './imap-fake.js'
 import { NOW, memDb } from './poll-helpers.js'
@@ -270,6 +271,31 @@ describe('incremental IMAP: what the range must not hide', () => {
     expect(next.report).toMatchObject({ read: 1, created: 1, archivedOld: 1 })
     const p = findParcel(db, 'packeta', number(2))!
     expect(p.archivedAt).toEqual(NOW)                    // old mail, so archived on arrival as before
+  })
+
+  test('a fresh mail in a later run revives a parcel that was archived on arrival from old mail', async () => {
+    // Run one: only the 45-day-old announcement is in the label, so the parcel is created archived.
+    const old = mail(10, 1, { date: new Date(NOW.getTime() - 45 * DAY) })
+    const { db, deps } = setup([old])
+    await ingestMessages(db, deps)
+    expect(findParcel(db, 'packeta', number(1))!.archivedAt).toEqual(NOW)
+
+    // Run two: a new mail about the SAME parcel (its own Message-ID) arrives yesterday.
+    const fresh = mail(11, 1, { messageId: '<p1-again@fixture>', date: new Date(NOW.getTime() - DAY) })
+    const next = await rerun(db, deps, [old, fresh])
+    expect(next.report).toMatchObject({ read: 1, created: 0, linked: 1 })
+    const p = findParcel(db, 'packeta', number(1))!
+    expect(p.archivedAt).toBeUndefined()
+    expect(listActive(db).map(a => a.id)).toEqual([p.id])
+    // Counted from the revival, not from the old mail: otherwise it is dormant the moment it is back.
+    expect(isDormant(p, NOW)).toBe(false)
+  })
+
+  test('an old mail in a later run leaves an archived parcel archived', async () => {
+    const { db, deps } = setup([mail(10, 1, { date: new Date(NOW.getTime() - 60 * DAY) })])
+    await ingestMessages(db, deps)
+    await rerun(db, deps, [mail(10, 1), mail(11, 1, { messageId: '<p1-again@fixture>', date: new Date(NOW.getTime() - 50 * DAY) })])
+    expect(findParcel(db, 'packeta', number(1))!.archivedAt).toEqual(NOW)
   })
 
   test('Message-ID dedupe still holds inside the range: the same mail at a new uid is not stored twice', async () => {

@@ -253,6 +253,16 @@ export function setArchived(db: Database, id: number, at: Date): void {
   db.prepare('UPDATE parcels SET archived_at = ? WHERE id = ?').run(at.toISOString(), id)
 }
 
+/**
+ * Un-archives a parcel that was archived on arrival from old mail, now that fresh mail says it is live.
+ * `first_seen_at` restarts at `at` as well: it was back-dated to the old mail for history's sake, and
+ * left there it would make the revived parcel dormant (no event in 30 days) the moment it came back.
+ */
+export function reviveArchived(db: Database, id: number, at: Date): void {
+  db.prepare('UPDATE parcels SET archived_at = NULL, first_seen_at = ? WHERE id = ? AND archived_at IS NOT NULL')
+    .run(at.toISOString(), id)
+}
+
 /** Records what the user has now been told, so the same status or pickup point is never announced twice. */
 export function markAnnounced(db: Database, id: number, status: CanonicalStatus, pickupAnnounced: boolean): void {
   db.prepare('UPDATE parcels SET last_announced_status = ?, pickup_announced = pickup_announced OR ? WHERE id = ?')
