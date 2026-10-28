@@ -45,12 +45,16 @@ export function median(values: number[]): number | undefined {
  * is left out instead of being measured some other way: one with no events at all (a carrier can flip a
  * parcel to delivered without emitting an event), or whose span is not positive (a single event, which
  * is the delivery itself). `measured` against `delivered` is what tells the reader how much to trust it.
+ *
+ * A parcel the user marked collected is not counted at all, in either number: its `delivered_at` is the
+ * moment of a click (often hours after the carrier actually handed it over, or for a parcel the
+ * carrier never closed), and this table is a measure of the CARRIER.
  */
 export function deliveryStats(db: Database): Map<CarrierId, CarrierDeliveryStats> {
   const rows = db.prepare(`
     SELECT p.carrier, p.delivered_at, MIN(e.occurred_at) AS first_event
     FROM parcels p LEFT JOIN events e ON e.parcel_id = p.id
-    WHERE p.status = 'delivered'
+    WHERE p.status = 'delivered' AND p.id NOT IN (SELECT parcel_id FROM user_marks)
     GROUP BY p.id
   `).all() as { carrier: CarrierId; delivered_at: string | null; first_event: string | null }[]
 

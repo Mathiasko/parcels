@@ -140,6 +140,19 @@ form.inline{display:inline}
 /* The calendar link belongs to the deadline, so it rides on the deadline line, one per parcel, at the size
    of the Maps link; lifted above a card's stretched link like the tracking number. */
 .cal{position:relative;z-index:1;font-size:.8125rem}
+/* "Mark as collected": a secondary button, never blue (the chip already says this parcel is waiting on you).
+   In a card it is lifted above the stretched link like .cal and .sel, so it takes its own click and the
+   rest of the block still opens the parcel; it sits at the foot of its parcel's block, one per parcel. */
+.got{position:relative;z-index:1;width:fit-content;margin:.5rem 0 0}
+.got button{height:1.75rem;padding:0 .625rem;font-weight:500;color:var(--ink-2)}
+.got button:hover{color:var(--ink)}
+.side .got{margin:0}
+.side .got-n{margin:.375rem 0 1rem}
+/* "Undo", wherever a mark offers it: a tertiary button inside a one-line form. */
+.undo{display:flex;flex-wrap:wrap;align-items:baseline;gap:.25rem .5rem}
+.undo-f{display:inline;margin:0}
+.undo-f button.link{height:auto;padding:0;font-size:inherit}
+.status .undo-f button.link{font-size:.8125rem}
 .pk-b{padding:.75rem 1.5rem}
 .pk-b .meta{margin:.5rem 0 0}
 

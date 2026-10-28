@@ -14,7 +14,7 @@ import { runMapPreview, summarizeMapPreview, type MapPreviewDeps, type MapPrevie
 import { mergeCarrierPickup, runPickupCodes, type PickupCodeReport } from './pickup-code.js'
 import { adoptUpdateOutcome, maybeCheckForUpdate, type UpdateCheck, type UpdateCheckOptions } from './update.js'
 import { isDormant, isDue } from './backoff.js'
-import { appendEvents, recomputeParcelStatus } from '../db/events.js'
+import { appendEvents, recomputeParcelStatus, settleCarrierStatus, userMark } from '../db/events.js'
 import { UNATTRIBUTED, type Cause } from '../db/activity-log.js'
 import { recordIngest } from '../db/ingest-status.js'
 import { carrierHealth, recordHealth, type HealthOutcome, type HealthRow } from '../db/health.js'
@@ -380,7 +380,8 @@ function applyCarrier(
       for (const body of f.bodies) storeRaw(db, rawOwner(f.chunk), carrier, body, now)
       // Only a lone parcel is known to be the one that could not be read. A batch failure says
       // nothing about any single parcel, so their statuses are left exactly as they were.
-      if (f.error.kind === 'parse' && f.chunk.length === 1) {
+      // Nor is a parcel the user marked collected while this request was out: they have it.
+      if (f.error.kind === 'parse' && f.chunk.length === 1 && !userMark(db, f.chunk[0]!.id)) {
         const p = f.chunk[0]!
         updateParcelState(db, p.id, { status: 'unknown', statusRaw: p.statusRaw }, cause)
       }
@@ -444,8 +445,11 @@ function applyOk(
 
   let movedAt = p.lastChangedAt
   for (const e of inserted) if (!movedAt || e.occurredAt > movedAt) movedAt = e.occurredAt
+  // `p` was read before the request went out. A parcel the user marked collected meanwhile stays
+  // delivered (and is not logged as moving back to ready); the carrier's answer is kept under the mark.
+  const status = settleCarrierStatus(db, p.id, r.status)
   updateParcelState(db, p.id, {
-    status: r.status,
+    status,
     statusRaw: r.statusRaw,
     statusDetail: r.statusDetail,
     // Merged into the point as stored NOW (inside this transaction), not as read before the fetch: the

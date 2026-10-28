@@ -1,16 +1,20 @@
 import { postcodeRejected, type Parcel } from '../../db/parcels.js'
 import { isEmailOnlyCarrier, isTerminalStatus } from '../../core/types.js'
-import type { StoredEvent } from '../../db/events.js'
+import type { StoredEvent, UserMark } from '../../db/events.js'
+import { canMark, markKindFor } from '../../core/collected.js'
 import type { RawResponse } from '../queries.js'
 import {
   CARRIER_NAME, dayKey, formatClock, formatDateTime, formatDayHeading, isKnown, plural,
-  quietIndicator, statusIndicator, toneClass,
+  quietIndicator, statusIndicator, toneClass, userMarkIndicator,
 } from './format.js'
 import { STATUS_TITLE } from '../../notify/rules.js'
 import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
-import { mapsUrl, noDeadlineNote, parcelName, pickupClock, pickupCodeLine, pickupSummary, refreshBanner, type RefreshNote } from './index.js'
+import {
+  mapsUrl, markForm, noDeadlineNote, parcelName, pickupClock, pickupCodeLine, pickupSummary, refreshBanner, undoForm,
+  type RefreshNote,
+} from './index.js'
 import type { TileGrid } from '../../core/slippy.js'
 
 const RAW_SHOWN_CHARS = 20_000
@@ -31,7 +35,8 @@ const isTracked = (p: Parcel): boolean =>
  * row that is NOT part of the run above (an `unknown` row, say the carrier's "returned for expiry" directly
  * under "Delivered") is visibly outside it. `unknown` rows, coded or not (two carriers send prose with no
  * code, legitimately), are a plain dot and the carrier's own sentence: nothing that could read as an error.
- * A carrier's code is not shown; it is in a `title`.
+ * A carrier's code is not shown; it is in a `title`. The user's own "Collected — marked by you" event is a
+ * head without the word: its sentence already says it, and "Delivered" above it would claim the carrier did.
  */
 function timeline(events: StoredEvent[], ctx: PageCtx): Html {
   const shown = [...events].reverse()
@@ -50,7 +55,7 @@ function timeline(events: StoredEvent[], ctx: PageCtx): Html {
     return html`${heading}<li class="er${i === 0 ? raw(' now') : ''}${i === shown.length - 1 ? raw(' last') : ''}${bar ? html` bar ${toneClass(e.status)}` : ''}${head && joinedBelow ? raw(' top') : ''}${bar && !joinedBelow ? raw(' end') : ''}">
 <time datetime="${e.occurredAt.toISOString()}">${formatClock(e.occurredAt)}</time>
 <span class="gl ${head ? toneClass(e.status) : 't-3 dotg'}">${glyph(head ? e.status : 'unknown')}</span>
-<div class="tx"${e.code ? html` title="carrier code ${e.code}"` : ''}>${head ? html`<span class="w ${toneClass(e.status)}">${STATUS_TITLE[e.status]}</span>` : ''}${e.description}${e.location ? html` <span class="loc">· ${e.location}</span>` : ''}</div></li>`
+<div class="tx"${e.code ? html` title="carrier code ${e.code}"` : ''}>${head && !e.byUser ? html`<span class="w ${toneClass(e.status)}">${STATUS_TITLE[e.status]}</span>` : ''}${e.description}${e.location ? html` <span class="loc">· ${e.location}</span>` : ''}</div></li>`
   })}</ol>`
 }
 
@@ -145,7 +150,11 @@ function deleteSection(p: Parcel): Html {
  * with events shows nothing: the timeline's first row is the status. Without events, an archived parcel says so
  * and a live one says it has had no updates; never "yet" about a parcel that will not change.
  */
-function statusLine(p: Parcel, events: StoredEvent[]): Html {
+function statusLine(p: Parcel, events: StoredEvent[], mark?: UserMark): Html {
+  // The user's own word, said as theirs and with the way back beside it: "Collected — marked by you · Undo".
+  if (mark && p.status === 'delivered') {
+    return html`${userMarkIndicator(mark.kind)}<span class="meta">— marked by you ·</span>${undoForm(p)}`
+  }
   // A parcel waiting at a known place says so in the pickup panel's header; saying it twice is noise.
   if (p.status === 'ready_for_pickup' && pickupSummary(p)) return html``
   if (isKnown(p.status)) return statusIndicator(p.status)
@@ -154,6 +163,20 @@ function statusLine(p: Parcel, events: StoredEvent[]): Html {
     return quietIndicator(isEmailOnlyCarrier(p.carrier) ? 'Updates arrive by email' : 'No updates yet')
   }
   return html``
+}
+
+/**
+ * "Mark as collected" (or "as received", for a parcel that was not waiting at a pickup point: a shop's
+ * own delivery, or one the carrier never closes). Offered on every parcel still in flight, at the top of
+ * the side column, as a secondary button: it is the likeliest thing to do on this page once a parcel is
+ * in hand, but it asks nothing of anyone, so it gets no colour.
+ */
+function markSection(p: Parcel): Html {
+  if (!canMark(p)) return html``
+  const kind = markKindFor(p)
+  return html`<h3 class="sec">${kind === 'collected' ? 'Collected it?' : 'Received it?'}</h3>
+${markForm(p, kind === 'collected' ? 'Mark as collected' : 'Mark as received')}
+<p class="meta got-n">Moves it to History${kind === 'collected' ? ' and stops the reminders' : ''}. You can undo it.</p>`
 }
 
 /** The status line's box, or nothing at all when the line is empty: an empty box is a gap in the page. */
@@ -176,6 +199,7 @@ function timelineSection(p: Parcel, events: StoredEvent[], ctx: PageCtx): Html {
  */
 export function parcelPage(
   p: Parcel, events: StoredEvent[], raws: RawResponse[], ctx: PageCtx, note?: RefreshNote, map?: TileGrid, code?: string,
+  mark?: UserMark,
 ): Html {
   const last = events.at(-1)
   const plain = postcodeRejected(p) || p.needsPostcode !== undefined
@@ -183,7 +207,7 @@ export function parcelPage(
 <div class="cols"><div>
 <div class="head"><h1 class="big">${parcelName(p)}</h1>
   ${isTracked(p) ? html`<form class="inline" method="post" action="/refresh"><input type="hidden" name="parcel" value="${p.id}"><button>Refresh this parcel</button></form>` : ''}</div>
-${statusBox(statusLine(p, events))}
+${statusBox(statusLine(p, events, mark))}
 <p class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span>${p.merchant && p.merchant !== parcelName(p) ? html` · ${p.merchant}` : ''}${p.statusRaw ? html` · carrier says: ${p.statusRaw}` : ''}</p>${
   // Said on every email-only parcel, with or without events: it is why there is no refresh button and
   // why the timeline is whatever the mail said, which is not guessable from the page otherwise.
@@ -193,7 +217,7 @@ ${timelineSection(p, events, ctx)}
 ${rawSection(raws, ctx)}
 ${deleteSection(p)}
 </div>
-<aside class="side"><h3 class="sec">Name</h3>
+<aside class="side">${markSection(p)}<h3 class="sec">Name</h3>
 <form class="inl" method="post" action="/parcel/${p.id}/label">
   <input name="label" value="${p.label ?? ''}" placeholder="e.g. Shoes from Zalando" aria-label="Name"><button>Save name</button></form>
 ${plain ? '' : html`<h3 class="sec">Postcode <span class="meta">(used by GLS and DPD)</span></h3>${postcodeForm(p)}`}

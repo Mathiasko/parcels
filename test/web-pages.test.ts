@@ -1286,7 +1286,9 @@ describe('GET /: one card design, whatever the state or the carrier', () => {
     for (const n of ['A1', 'A2']) {
       inflight(db, { name: `Parcel ${n}`, number: n, status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
     }
-    const body = (await get(db, '/')).body
+    // Visually: the "Mark as collected" button carries its parcel's name for a screen reader only
+    // (`.vh`), so two such buttons on one card are not announced identically. That is not a printed name.
+    const body = (await get(db, '/')).body.replace(/<span class="vh">[^<]*<\/span>/g, '')
     for (const name of ['Rolling along', 'Parcel A1', 'Parcel A2', 'Z-BOX Hlavna 6']) {
       expect(body.match(new RegExp(name, 'g')), name).toHaveLength(1)
     }

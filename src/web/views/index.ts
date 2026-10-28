@@ -1,6 +1,6 @@
 import { isDormant } from '../../core/backoff.js'
 import { postcodeRejected, type Parcel } from '../../db/parcels.js'
-import type { StoredEvent } from '../../db/events.js'
+import type { StoredEvent, UserMark } from '../../db/events.js'
 import type { CanonicalStatus } from '../../core/types.js'
 import { isEmailOnlyCarrier } from '../../core/types.js'
 import {
@@ -122,6 +122,38 @@ export interface Entry { parcel: Parcel; last: StoredEvent | undefined; /** The 
 export function pickupCodeLine(code: string | undefined): Html {
   if (!code) return html``
   return html`<p class="code"><span class="code-l">Open the box with</span> <b class="mono sel">${code}</b></p>`
+}
+
+/**
+ * "Mark as collected", as a form because the page has no script. A quiet secondary button, never
+ * `--signal`: the chip already says the parcel is waiting on you, and blue on the button as well would be
+ * the second use that wears the colour out. Lifted above the card's stretched link (`.got`), so it takes
+ * its own click and the rest of the card still opens the parcel.
+ *
+ * `back=home` brings the click back to the dashboard with the Undo notice; from the parcel page it
+ * stays on the parcel page. The button's accessible name carries the parcel's name, because a card that
+ * groups several parcels has several of these and "Mark as collected" alone would not say which.
+ */
+export function markForm(p: Parcel, label: string, back?: 'home'): Html {
+  return html`<form class="got" method="post" action="/parcel/${p.id}/collected">${
+    back ? html`<input type="hidden" name="back" value="${back}">` : ''}<button>${label}<span class="vh">: ${parcelName(p)}</span></button></form>`
+}
+
+/** The small Undo form a mark offers: a POST, the page has no script. */
+export function undoForm(p: Parcel, back?: 'home'): Html {
+  return html`<form class="undo-f" method="post" action="/parcel/${p.id}/uncollected">${
+    back ? html`<input type="hidden" name="back" value="${back}">` : ''}<button class="link">Undo</button></form>`
+}
+
+/**
+ * What the dashboard says after a parcel was marked from it: it has just left the page, so the page says
+ * where it went and offers to put it back. The server shows this only for a parcel that really IS marked
+ * right now, recently, so a bookmarked `?collected=` can neither replay a stale notice nor offer to
+ * undo something that is no longer there.
+ */
+export function collectedNotice(c: { parcel: Parcel; mark: Pick<UserMark, 'kind'> } | undefined): Html {
+  if (!c) return html``
+  return notice('neutral', html`<div class="undo"><p>Marked <strong>${parcelName(c.parcel)}</strong> as ${c.mark.kind}. It is in <a href="/history">History</a>.</p>${undoForm(c.parcel, 'home')}</div>`, true)
 }
 
 /** The time that put a parcel where it is: the status change, else the newest event. */
@@ -296,7 +328,7 @@ function cardEntry(c: Card, e: Entry, ctx: PageCtx): Html {
 <span class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span></span>
 ${sentence}${pickupClock(e, ctx.now).out}${pickupCodeLine(e.code)}${postcodeRejected(p)
     ? html`<p class="meta t-warn">${glyph('problem')} Postcode needed: <a class="sel" href="/parcel/${p.id}">set one</a> to resume full tracking.</p>`
-    : ''}</li>`
+    : ''}${p.status === 'ready_for_pickup' ? markForm(p, 'Mark as collected', 'home') : ''}</li>`
 }
 
 /** The header: a place, said plainly, or the one parcel's name, which is then the card's link. */
@@ -391,6 +423,8 @@ const MAIL_SETUP = html`<p><strong>Gmail is not connected yet.</strong></p>
 export interface IndexOptions {
   /** Whether a mail account is saved. False shows the "connect Gmail" notice. Absent counts as set up. */
   mailConfigured?: boolean
+  /** A parcel just marked collected from this page: the notice with its Undo (see `collectedNotice`). */
+  collected?: { parcel: Parcel; mark: Pick<UserMark, 'kind'> }
 }
 
 export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote, opts: IndexOptions = {}): Html {
@@ -400,9 +434,10 @@ export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote, op
   const empty = mailOff
     ? html`<p class="empty">Nothing in flight. <a href="/add">Add a parcel</a> by its tracking number.</p>`
     : html`<p class="empty">Nothing in flight. Parcels appear here when a shipping email arrives, or when you <a href="/add">add one</a>.</p>`
+  const marked = collectedNotice(opts.collected)
   const body = entries.length === 0
-    ? empty
-    : html`<p class="lede">${indexLede(entries, ctx)}</p>${refreshBanner(note, ctx.now, REFRESH_DOES)}${
+    ? html`${marked}${empty}`
+    : html`<p class="lede">${indexLede(entries, ctx)}</p>${refreshBanner(note, ctx.now, REFRESH_DOES)}${marked}${
         cards.map(c => card(c, ctx))}`
   return layout('In flight', '/', html`
 <div class="col"><div class="head"><h1>In flight</h1>

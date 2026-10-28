@@ -122,6 +122,15 @@ export function statusIndicator(status: CanonicalStatus): Html {
 }
 
 
+/**
+ * A parcel the user marked as theirs: the `delivered` register and silhouette (it finished well, and asks
+ * nothing), under its own word, so "the carrier delivered it" and "you said you have it" never read as
+ * the same fact. `Collected` for a pickup, `Received` for anything else.
+ */
+export function userMarkIndicator(kind: 'collected' | 'received'): Html {
+  return html`<span class="st t-ok">${glyph('delivered')}${kind === 'collected' ? 'Collected' : 'Received'}</span>`
+}
+
 /** The 4px dot and a muted word, for "No updates yet" and "Archived". No hue: the absence of a mark. */
 export function quietIndicator(word: string): Html {
   return html`<span class="st t-3 quiet">${glyph('unknown')}${word}</span>`

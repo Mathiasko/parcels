@@ -51,6 +51,22 @@ CREATE TABLE IF NOT EXISTS events (
   UNIQUE (parcel_id, dedup_hash)
 );
 
+-- Parcels the user said they have ("Mark as collected" / "Mark as received"), one row per parcel. The
+-- mark itself is an ordinary `delivered` event in `events`, so the timeline, `delivered_at` and History
+-- all follow from it; this row is what tells that event apart from anything a carrier said, and what
+-- makes the mark undoable exactly:
+--   event_id        the event the mark added. Undo deletes exactly this row of `events`.
+--   kind            'collected' (it was waiting at a pickup point) | 'received' (anything else).
+--   carrier_status  what the carrier says, held under the mark: the status at the moment of marking,
+--                   kept current if a poll already in flight answers afterwards. Undo restores it.
+-- A table of its own, so an existing database gains it from the idempotent schema exec, no migration.
+CREATE TABLE IF NOT EXISTS user_marks (
+  parcel_id      INTEGER PRIMARY KEY REFERENCES parcels(id),
+  event_id       INTEGER NOT NULL UNIQUE REFERENCES events(id),
+  kind           TEXT NOT NULL,
+  carrier_status TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS messages (
   id           INTEGER PRIMARY KEY,
   message_id   TEXT UNIQUE,

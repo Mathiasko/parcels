@@ -350,6 +350,8 @@ export function setPostalCode(db: Database, id: number, postalCode: string): voi
 export function deleteParcel(db: Database, id: number, cause: Cause = UNATTRIBUTED): void {
   const parcel = getParcel(db, id)
   const orphaned = db.transaction((): string[] => {
+    // Before `events`: a user mark names one of the parcel's events.
+    db.prepare('DELETE FROM user_marks WHERE parcel_id = ?').run(id)
     db.prepare('DELETE FROM events WHERE parcel_id = ?').run(id)
     db.prepare('DELETE FROM raw_responses WHERE parcel_id = ?').run(id)
     db.prepare('DELETE FROM deadline_reminders WHERE parcel_id = ?').run(id)

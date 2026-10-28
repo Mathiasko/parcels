@@ -149,3 +149,22 @@ test('show prints the event timeline oldest-first', async () => {
   expect(missing.code).toBe(1)
   expect(missing.err).toMatch(/no parcel #999/)
 })
+
+test('collected marks a parcel in flight as collected, through the same function as the button', async () => {
+  const db = memDb()
+  const id = insertParcel(db, { carrier: 'posta', trackingNumber: 'RA123456785SK', label: 'Headphones', source: 'manual' })
+  updateParcelState(db, id, { status: 'ready_for_pickup' })
+
+  const r = await cli(db, 'collected', String(id))
+  expect(r.code).toBe(0)
+  expect(r.out).toBe(`#${id} marked collected (it was ready_for_pickup). Undo it on the parcel's page.`)
+  expect(findParcel(db, 'posta', 'RA123456785SK')!.status).toBe('delivered')
+  const logged = db.prepare("SELECT actor FROM activity_log WHERE kind = 'collected'").all()
+  expect(logged).toEqual([{ actor: 'cli' }])
+
+  const again = await cli(db, 'collected', String(id))
+  expect(again.code).toBe(1)
+  expect(again.err).toBe(`parcel #${id} is not in flight (it is delivered), so there is nothing to mark`)
+  expect((await cli(db, 'collected', '999')).err).toMatch(/no parcel #999/)
+  expect((await cli(db, 'collected')).err).toMatch(/usage: collected <id>/)
+})

@@ -16,6 +16,7 @@ import { listEvents } from './db/events.js'
 import { reprocessMessages } from './ingest/ingest.js'
 import { getParcel, listActive, listDelivered, type Parcel } from './db/parcels.js'
 import { addParcel } from './web/actions.js'
+import { markCollected } from './core/collected.js'
 
 export interface CliContext {
   db: Database
@@ -38,6 +39,7 @@ const USAGE = `usage: cli <command>
   add <number> [--carrier <id>] [--label <text>] [--zip <postcode>]
   list
   show <id>
+  collected <id>
   poll
   reprocess
   probe <carrier> <number> [--zip <postcode>]
@@ -120,6 +122,19 @@ function show(argv: string[], ctx: CliContext): void {
   for (const e of listEvents(ctx.db, id)) {
     ctx.out(`${e.occurredAtRaw} (${e.occurredAtTz})  ${e.status}  ${e.description}${e.location ? ` @ ${e.location}` : ''}`)
   }
+}
+
+/** "Mark as collected" from the shell: the same function as the button, attributed to the command line. */
+function collected(argv: string[], ctx: CliContext): void {
+  const id = Number(argv[0])
+  if (argv.length !== 1 || !Number.isInteger(id)) throw new CliError('usage: collected <id>')
+  const before = getParcel(ctx.db, id)
+  const r = markCollected(ctx.db, id, { actor: 'cli' })
+  if (!r.ok && r.reason === 'no_parcel') throw new CliError(`no parcel #${id}`)
+  if (!r.ok) {
+    throw new CliError(`parcel #${id} is not in flight (it is ${before?.archivedAt ? 'archived' : before?.status}), so there is nothing to mark`)
+  }
+  ctx.out(`#${id} marked ${r.mark.kind} (it was ${before?.status}). Undo it on the parcel's page.`)
 }
 
 async function poll(ctx: CliContext): Promise<void> {
@@ -222,6 +237,7 @@ export async function runCli(argv: string[], ctx: CliContext): Promise<number> {
       case 'add': add(rest, ctx); break
       case 'list': list(ctx); break
       case 'show': show(rest, ctx); break
+      case 'collected': collected(rest, ctx); break
       case 'poll': await poll(ctx); break
       case 'reprocess': await reprocess(ctx); break
       case 'probe': await probe(rest, ctx); break

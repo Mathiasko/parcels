@@ -95,6 +95,8 @@ export type ActivityKind =
   | 'settings_saved'
   | 'refresh'
   | 'update'
+  | 'collected'
+  | 'uncollected'
 
 /**
  * The settings the page can change, as names. The list is closed and is the ONLY thing ever recorded
@@ -155,6 +157,13 @@ export type Action =
    * already printed in full at the bottom of /health.
    */
   | { kind: 'update'; outcome: UpdateLogOutcome; from?: string; to?: string }
+  /**
+   * The user said they have the parcel ("Mark as collected", or "as received" for one that was not at a
+   * pickup point), and the status it was in; and the undo, with the carrier's status it went back to.
+   * `as` is which of the two words, a token of this app's own.
+   */
+  | { kind: 'collected'; as: 'collected' | 'received'; parcelId: number; carrier: CarrierId; from: CanonicalStatus }
+  | { kind: 'uncollected'; as: 'collected' | 'received'; parcelId: number; carrier: CarrierId; to: CanonicalStatus }
 
 /** One row, as a reader wants it. Absent fields are the columns that do not apply to the kind. */
 export interface ActivityEntry {
@@ -283,6 +292,10 @@ function insertFor(a: Action): Insert {
       return { kind: a.kind, count: a.fields.length, detail: a.fields.join(' ') }
     case 'refresh':
       return { kind: a.kind, count: a.count, detail: a.scope }
+    case 'collected':
+      return { kind: a.kind, parcelId: a.parcelId, carrier: a.carrier, from: a.from, to: 'delivered', detail: a.as }
+    case 'uncollected':
+      return { kind: a.kind, parcelId: a.parcelId, carrier: a.carrier, from: 'delivered', to: a.to, detail: a.as }
     case 'update':
       // Three tokens in one column: the outcome, then where it came from and where it ended up. A
       // column each would mean three migrations for one fact that is never read apart.
@@ -373,6 +386,8 @@ const FIELD_WORDS: Record<ActivityKind, string> = {
   settings_saved: 'settings saved',
   refresh: 'refresh pressed',
   update: 'update',
+  collected: 'marked collected',
+  uncollected: 'mark undone',
 }
 
 /** The word for a kind, for a page that groups rows by what happened. */
@@ -403,6 +418,10 @@ export function describeActivity(e: ActivityEntry): string {
       return `refresh pressed for ${e.detail === 'one' ? 'one parcel' : `all ${e.count ?? 0} due parcel(s)`}`
     case 'update':
       return describeUpdate(e.detail)
+    case 'collected':
+      return `${parcel} marked ${e.detail === 'received' ? 'received' : 'collected'} by you${e.from ? `, it was ${e.from}` : ''}`
+    case 'uncollected':
+      return `${parcel}: "marked ${e.detail === 'received' ? 'received' : 'collected'}" undone, back to ${e.to ?? '?'}`
     default:
       return e.kind
   }

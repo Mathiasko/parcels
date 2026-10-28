@@ -818,7 +818,8 @@ that would have made that incident self-diagnosing reads:
   said nothing; it is a line now.
 - **What you did.** Dismissing mail (how many, and whether it was one sender or the whole queue),
   deleting a parcel (and the status it was in), assigning an email to a parcel, saving settings,
-  pressing refresh, and the outcome of an **update** (including a rollback, and the commits it moved
+  pressing refresh, marking a parcel collected and undoing that (with the status it moved from and
+  back to), and the outcome of an **update** (including a rollback, and the commits it moved
   between). "Where did my parcel go" is answerable with *you deleted it on Tuesday*: the log
   holds **no foreign key** to `parcels`, precisely so that it outlives the row it talks about.
 - **Nothing in it is private.** Ids, counts, carriers, canonical statuses and words from this app's own
@@ -855,6 +856,39 @@ waiting, and the deadline if the carrier gave one.
   it fell inside is marked spent rather than repeating an hour later. The 15:30 one still arrives.
 - Sent slots are keyed by local date, so the rows expire by themselves and yesterday can never
   suppress today.
+
+### Mark as collected
+
+A parcel at a pickup point leaves the dashboard when the carrier reports it delivered, and that lags:
+you can be home with it while the page still says *Ready for pickup*, still shows the locker code, and
+the poller still sends *Still waiting for you* twice a day. Some parcels the carrier never closes at
+all (a shop's own delivery, a tracking number that went quiet), and the only way off the page used to be
+Delete, which throws their history away.
+
+**Mark as collected** says you have it. It is on every parcel waiting for collection on the dashboard
+(one per parcel on a card that groups several at one place), and on the parcel page of every parcel
+still in flight - there it reads **Mark as received** when the parcel was not at a pickup point.
+
+- **It is an event, not a status overwrite.** One `delivered` event at the moment you clicked, reading
+  `Collected — marked by you` (or `Received — …`), is added to the parcel's timeline, and a row in
+  `user_marks` names it so it can never be mistaken for something a carrier said. Status,
+  `delivered_at`, History and the timeline all follow from it through the same code that settles every
+  other status.
+- **Nothing puts it back.** A delivered parcel is never polled again, and mail that arrives for it later
+  (a late "ready for pickup" email, say) is filed under it without touching its status. A poll that was
+  already asking the carrier when you clicked keeps the parcel delivered and only remembers what the
+  carrier answered. A real "delivered" from the carrier afterwards changes nothing.
+- **It is silent.** You did it yourself, so no "Delivered" banner follows, and the reminders stop
+  because the parcel is no longer waiting.
+- **Undo** is in the notice the dashboard shows right after (`Marked engaro.sk as collected. Undo`, for
+  an hour) and on the parcel page for as long as the mark stands (`Collected — marked by you · Undo`).
+  It removes exactly that one event, so the parcel goes back to whatever the carrier says - usually
+  *Ready for pickup* - and back onto the dashboard, again without a banner.
+- **History** shows such a parcel as `Collected` (or `Received`), never `Delivered`, and the per-carrier
+  delivery-time medians leave it out: the moment you clicked is not when the carrier delivered.
+- Both actions are in the [activity log](#the-activity-log-what-changed-and-what-you-did). A parcel that
+  is already delivered, returned or archived cannot be marked, and the buttons are ordinary POST forms
+  behind the same Host and cross-site checks as every other write.
 
 ### The Z-BOX opening code
 
@@ -906,6 +940,7 @@ and go dormant.
 node dist/cli.js add <number> [--carrier <id>] [--label <text>] [--zip <postcode>]
 node dist/cli.js list
 node dist/cli.js show <id>
+node dist/cli.js collected <id>
 node dist/cli.js poll
 node dist/cli.js reprocess
 node dist/cli.js probe <carrier> <number> [--zip <postcode>]
@@ -924,6 +959,7 @@ Carrier ids: `posta`, `packeta`, `gls`, `sps`, `dpd`, `dhl`.
   first real parcel. It refuses `dhl`: an email-only carrier is never asked anything, so there is
   no request to show.
 - `reprocess` re-runs extraction over stored `.eml` files after a parser change.
+- `collected` is [Mark as collected](#mark-as-collected) from the shell; undo it on the parcel's page.
 
 ### Confirmations still owed (spec section 15)
 

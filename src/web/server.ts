@@ -5,7 +5,8 @@ import {
 } from '../core/config.js'
 import type { CarrierId } from '../core/types.js'
 import type { Database } from '../db/index.js'
-import { latestEvent, listEvents } from '../db/events.js'
+import { latestEvent, listEvents, userMark, userMarks } from '../db/events.js'
+import { markCollected, undoCollected } from '../core/collected.js'
 import { deleteParcel, getParcel, listActive, type Parcel } from '../db/parcels.js'
 import type { Carrier, HttpClient } from '../core/types.js'
 import { createHttpClient } from '../core/http.js'
@@ -161,6 +162,13 @@ const RELOAD_SECONDS = 3
 const RUNS_SHOWN = 20
 
 /**
+ * How long after a mark the dashboard still shows "Marked X as collected. Undo" for `?collected=<id>`.
+ * Long enough for a reload or a slow second look; short enough that a bookmark or a history entry does
+ * not resurface the notice days later. Undo stays on the parcel page for as long as the mark stands.
+ */
+const COLLECTED_NOTICE_MS = 60 * 60_000
+
+/**
  * How many activity entries the Health page shows. More than the runs, because these are what somebody
  * scrolls looking for the moment a parcel changed or the day they deleted one, and they are one line
  * each; far fewer than `ACTIVITY_LOG_KEPT`, because a page is not an archive.
@@ -299,8 +307,24 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const entries = active.map(parcel => ({ parcel, last: latestEvent(db, parcel.id), code: codes.get(parcel.id) }))
     const c = ctx()
     const r = runState(req.query as Record<string, unknown>, c.now, entries.length)
-    return send(reply, indexPage(entries, { ...c, reloadIn: r.reloadIn }, r.note, { mailConfigured: config.imap !== undefined }))
+    return send(reply, indexPage(entries, { ...c, reloadIn: r.reloadIn }, r.note, {
+      mailConfigured: config.imap !== undefined, collected: justCollected(req.query as Record<string, unknown>, c.now),
+    }))
   })
+
+  /**
+   * The parcel named by `?collected=<id>`, but only while it really is marked, recently, and not archived:
+   * the URL names which notice to show and never what it says, so a stale or hand-edited one shows
+   * nothing rather than an Undo for a mark that has gone.
+   */
+  const justCollected = (query: Record<string, unknown>, at: Date) => {
+    const id = one(query.collected)
+    const parcel = id === undefined ? undefined : parcelFor(id)
+    const mark = parcel && userMark(db, parcel.id)
+    if (!parcel || !mark || parcel.archivedAt !== undefined) return undefined
+    const age = at.getTime() - mark.at.getTime()
+    return age >= 0 && age <= COLLECTED_NOTICE_MS ? { parcel, mark } : undefined
+  }
 
   /**
    * The tile grid to draw for a parcel, or nothing. Three conditions, all of them cheap: the preview is
@@ -325,6 +349,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       parcel, listEvents(db, parcel.id), rawResponsesFor(db, parcel.id, parcel.carrier),
       { ...c, reloadIn: r.reloadIn }, r.note, mapFor(parcel),
       parcel.status === 'ready_for_pickup' ? getPickupCode(db, parcel.id) : undefined,
+      userMark(db, parcel.id),
     ))
   })
 
@@ -400,7 +425,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const parcels = listDelivered(db, {
       carrier: filters.carrier, q: filters.q, from: day(filters.from, false), to: day(filters.to, true),
     })
-    return send(reply, historyPage(parcels, deliveryStats(db), filters, ctx()))
+    return send(reply, historyPage(parcels, deliveryStats(db), filters, ctx(), userMarks(db)))
   })
 
   /** The checkout the Update section is about, and where that update's log and status file live. */
@@ -652,6 +677,32 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     if (!parcel) return notFound(reply, 'parcel')
     deleteParcel(db, parcel.id, acted())
     return reply.redirect('/', 303)
+  })
+
+  /**
+   * "Mark as collected" (or received) and its Undo. Ordinary POST routes, so the `onRequest` guard above
+   * refuses a foreign Host and a cross-site form like every other write. An unknown parcel is the 404
+   * page; a parcel that cannot be marked (already delivered or returned, or archived) or un-marked (no
+   * mark of the user's on it) is sent back where it came from with nothing changed - a stale page or a
+   * double click, not an error worth a page of its own.
+   *
+   * From the dashboard (`back=home`) a mark lands on the dashboard with the Undo notice, and an undo
+   * lands back on the dashboard, where the parcel has reappeared. From anywhere else, the parcel page.
+   */
+  app.post<{ Params: { id: string } }>('/parcel/:id/collected', async (req, reply) => {
+    const parcel = parcelFor(req.params.id)
+    if (!parcel) return notFound(reply, 'parcel')
+    const home = text(form(req).back) === 'home'
+    const r = markCollected(db, parcel.id, acted())
+    if (!r.ok) return reply.redirect(home ? '/' : `/parcel/${parcel.id}`, 303)
+    return reply.redirect(home ? `/?collected=${parcel.id}` : `/parcel/${parcel.id}`, 303)
+  })
+
+  app.post<{ Params: { id: string } }>('/parcel/:id/uncollected', async (req, reply) => {
+    const parcel = parcelFor(req.params.id)
+    if (!parcel) return notFound(reply, 'parcel')
+    undoCollected(db, parcel.id, acted())
+    return reply.redirect(text(form(req).back) === 'home' ? '/' : `/parcel/${parcel.id}`, 303)
   })
 
   // A real poll, run from this process. The click is the user saying "now", so the per-parcel backoff tier is
