@@ -345,7 +345,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const query = req.query as Record<string, unknown>
     const carrier = one(query.carrier)
     const filters = {
-      carrier: carrier !== undefined && carrier in CARRIER_NAME ? (carrier as CarrierId) : undefined,
+      carrier: carrier !== undefined && Object.hasOwn(CARRIER_NAME, carrier) ? (carrier as CarrierId) : undefined,
       q: one(query.q)?.trim().slice(0, 100) || undefined,
       from: one(query.from) || undefined,
       to: one(query.to) || undefined,

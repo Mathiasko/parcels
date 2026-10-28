@@ -511,6 +511,18 @@ describe('web pages: fix round 1', () => {
     expect((await get(db, '/?refreshed=1&refreshed=2&failures=3&failures=4')).statusCode).toBe(200)
   })
 
+  test('a carrier filter naming an inherited object key is ignored like any other unknown carrier', async () => {
+    const db = memDb()
+    delivered(db, { carrier: 'posta', number: 'P1', label: 'First' })
+    delivered(db, { carrier: 'gls', number: 'G1', label: 'Second' })
+    for (const key of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      const body = (await get(db, `/history?carrier=${key}`)).body
+      expect(body, key).toContain('First')
+      expect(body, key).toContain('Second')
+      expect(body, key).not.toContain('match these filters')
+    }
+  })
+
   test('POST /add validates auto-detection, and caps field lengths', async () => {
     const db = memDb()
     const undetected = await post(db, '/add', { number: 'garbage 123' })
