@@ -43,8 +43,8 @@ import {
 } from '../core/support.js'
 import { appVersion, repoRoot } from '../core/version.js'
 import {
-  adoptUpdateOutcome, checkForUpdate, readUpdateRun, startUpdate, updateOutcome, updateStatusPath,
-  type ScriptRunner, type SpawnFn,
+  adoptUpdateOutcome, checkForUpdateAsync, readUpdateRun, startUpdate, updateOutcome, updateStatusPath,
+  type AsyncScriptRunner, type SpawnFn,
 } from '../core/update.js'
 import { getUpdateCheck, recordUpdateCheck } from '../db/update-state.js'
 import { historyPage } from './views/history.js'
@@ -98,7 +98,7 @@ export interface WebDeps {
   update?: {
     root?: string
     dataDir?: string
-    run?: ScriptRunner
+    run?: AsyncScriptRunner
     spawn?: SpawnFn
     openLog?: (path: string) => number
     closeLog?: (fd: number) => void
@@ -691,11 +691,14 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    * support bundle and the mail test are POSTs: it reaches the network, and a page must not do that
    * because a browser prefetched or reloaded it.
    *
-   * Never fails: `checkForUpdate` turns a missing script, a timeout or a refusal into a `blocked`
+   * Never fails: `checkForUpdateAsync` turns a missing script, a timeout or a refusal into a `blocked`
    * result, which the page prints. The answer is stored, so the result survives the redirect.
+   *
+   * Awaited, not run synchronously: the fetch can take up to a minute, and the rest of the dashboard
+   * must keep answering while this one request waits for it.
    */
   app.post('/update/check', async (_req, reply) => {
-    recordUpdateCheck(db, checkForUpdate(deps.update?.run ?? undefined), now())
+    recordUpdateCheck(db, await checkForUpdateAsync(deps.update?.run ?? undefined), now())
     return reply.redirect('/health', 303)
   })
 

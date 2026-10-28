@@ -352,6 +352,24 @@ describe('POST /update/check', () => {
     expect((await app.inject({ method: 'POST', url: '/update/check', ...form() })).statusCode).toBe(303)
     expect((await app.inject({ method: 'GET', url: '/health' })).body).toContain('not a git checkout')
   })
+  test('the server keeps answering while a check is waiting on the network', async () => {
+    // A `git fetch` can take up to a minute. With a synchronous spawn the whole server stopped for
+    // that minute; the check must wait on its own, and every other page must still load meanwhile.
+    const db = memDb()
+    let finish!: (r: ScriptResult) => void
+    const pending = new Promise<ScriptResult>(resolve => { finish = resolve })
+    const app = buildServer({
+      db, config, now: () => NOW, version: '0.1.0 (ffa1f20)',
+      update: { root: '/opt/parcels', dataDir: dir, run: () => pending },
+    })
+    const check = app.inject({ method: 'POST', url: '/update/check', ...form() })
+    const meanwhile = await app.inject({ method: 'GET', url: '/' })
+    expect(meanwhile.statusCode).toBe(200)
+    expect(getUpdateCheck(db)).toBeUndefined()             // the check has not come back yet...
+    finish(BEHIND)
+    expect((await check).statusCode).toBe(303)
+    expect(getUpdateCheck(db)!.behind).toBe(2)             // ...and when it does, it is stored
+  })
 })
 
 describe('the support bundle shows the update', () => {

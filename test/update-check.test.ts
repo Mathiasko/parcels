@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
-  adoptUpdateOutcome, checkForUpdate, maybeCheckForUpdate, parseUpdateCheck, readUpdateRun,
+  adoptUpdateOutcome, checkForUpdate, checkForUpdateAsync, maybeCheckForUpdate, updateScriptRunnerAsync, parseUpdateCheck, readUpdateRun,
   startUpdate, updateLogPath, updateOutcome, updateStatusPath, UPDATE_CHECK_INTERVAL_MS,
   UPDATE_STALE_MS, writeRunningUpdate, type ScriptResult, type SpawnOptions,
 } from '../src/core/update.js'
@@ -133,6 +133,51 @@ describe('reading what scripts/update.sh --check reports', () => {
     const c = checkForUpdate(() => { throw new Error('ENOENT scripts/update.sh') })
     expect(c.state).toBe('blocked')
     expect(c.reason).toContain('ENOENT')
+  })
+
+  test('checkForUpdateAsync never rejects either, whether the runner throws or its promise rejects', async () => {
+    const thrown = await checkForUpdateAsync(() => { throw new Error('ENOENT scripts/update.sh') })
+    expect(thrown.state).toBe('blocked')
+    expect(thrown.reason).toContain('ENOENT')
+    const rejected = await checkForUpdateAsync(async () => { throw new Error('spawn EACCES') })
+    expect(rejected.state).toBe('blocked')
+    expect(rejected.reason).toContain('EACCES')
+    expect((await checkForUpdateAsync(async () => BEHIND)).state).toBe('behind')
+  })
+
+  test('the asynchronous runner really runs scripts/update.sh, and leaves the event loop free while it does', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'parcels-update-async-'))
+    try {
+      mkdirSync(join(root, 'scripts'))
+      const script = join(root, 'scripts/update.sh')
+      writeFileSync(script, '#!/bin/sh\nsleep 0.3\necho "state current"\necho "args $*"\n', { mode: 0o755 })
+      let ticks = 0
+      const timer = setInterval(() => { ticks += 1 }, 10)
+      const r = await updateScriptRunnerAsync(root)(['--check', '--porcelain'])
+      clearInterval(timer)
+      expect(r.status).toBe(0)
+      expect(r.stdout).toContain('state current')
+      expect(r.stdout).toContain('args --check --porcelain')
+      expect(ticks).toBeGreaterThan(5)                     // the loop kept turning while git "fetched"
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('the asynchronous runner gives up after its timeout, as a result rather than a hang', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'parcels-update-async-'))
+    try {
+      mkdirSync(join(root, 'scripts'))
+      writeFileSync(join(root, 'scripts/update.sh'), '#!/bin/sh\nexec sleep 5\n', { mode: 0o755 })
+      const r = await updateScriptRunnerAsync(root, 200)(['--check', '--porcelain'])
+      expect(r.status).toBeNull()
+      expect(parseUpdateCheck(r).state).toBe('blocked')
+      // A script that is not there is a result too, not a rejection.
+      const missing = await updateScriptRunnerAsync(join(root, 'nowhere'))(['--check'])
+      expect(missing.status).toBeNull()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   test('the check asks for --check and --porcelain, so it can never install anything', () => {

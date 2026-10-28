@@ -1,4 +1,4 @@
-import { spawn as nodeSpawn, spawnSync } from 'node:child_process'
+import { execFile, spawn as nodeSpawn, spawnSync } from 'node:child_process'
 import { closeSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Database } from '../db/index.js'
@@ -90,6 +90,13 @@ export interface ScriptResult {
 /** The seam every test substitutes, so nothing in the suite spawns git or touches a repository. */
 export type ScriptRunner = (args: readonly string[]) => ScriptResult
 
+/**
+ * The same seam for a caller that must not block: the web server. A `git fetch` can take the whole
+ * `UPDATE_CHECK_TIMEOUT_MS`, and a synchronous spawn inside a request handler stops every other page
+ * for that long. A synchronous runner is accepted too, so a test's stub serves both.
+ */
+export type AsyncScriptRunner = (args: readonly string[]) => ScriptResult | Promise<ScriptResult>
+
 const SHA = /^[0-9a-f]{4,40}$/
 /** A branch, an upstream or a version: git's own and package.json's, never free text. */
 const WORD = /^[A-Za-z0-9][A-Za-z0-9._@/+-]{0,79}$/
@@ -169,19 +176,55 @@ export const updateScriptRunner = (root: string): ScriptRunner => args => {
 }
 
 /**
+ * `scripts/update.sh` without blocking the event loop: what the web server's Check button uses. Never
+ * rejects - a missing script, a timeout or a non-zero exit all resolve to a result that
+ * `parseUpdateCheck` reads as `blocked`, exactly as the synchronous runner's do.
+ */
+export const updateScriptRunnerAsync = (
+  root: string, timeoutMs: number = UPDATE_CHECK_TIMEOUT_MS,
+): ((args: readonly string[]) => Promise<ScriptResult>) => args => new Promise(resolve => {
+  execFile(join(root, 'scripts/update.sh'), [...args], {
+    cwd: root, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 1024 * 1024,
+  }, (err, stdout, stderr) => {
+    if (!err) return resolve({ status: 0, stdout, stderr })
+    // A numeric `code` is the script's own exit status; anything else (ENOENT, a kill on timeout) means
+    // it did not run to an answer, which is what `status: null` says.
+    const code = (err as { code?: unknown }).code
+    if (typeof code === 'number') return resolve({ status: code, stdout, stderr })
+    resolve({ status: null, stdout: stdout ?? '', stderr: err.killed ? `timed out after ${timeoutMs} ms` : err.message })
+  })
+})
+
+const unrunnable = (err: unknown): UpdateCheck => ({
+  state: 'blocked',
+  behind: 0,
+  changes: [],
+  reason: `the update check could not be run: ${err instanceof Error ? err.message : String(err)}`.slice(0, REASON_MAX),
+})
+
+/**
  * One check. Never throws: a missing script, a timeout or a `git` that is not installed all come back
  * as `blocked` with the reason, because this is called from inside a poll and from a page.
+ *
+ * Synchronous, for the poller: it is its own short-lived process, so blocking it for a fetch costs
+ * nothing. The web server uses `checkForUpdateAsync`.
  */
 export function checkForUpdate(run: ScriptRunner = updateScriptRunner(repoRoot())): UpdateCheck {
   try {
     return parseUpdateCheck(run(['--check', '--porcelain']))
   } catch (err) {
-    return {
-      state: 'blocked',
-      behind: 0,
-      changes: [],
-      reason: `the update check could not be run: ${err instanceof Error ? err.message : String(err)}`.slice(0, REASON_MAX),
-    }
+    return unrunnable(err)
+  }
+}
+
+/** `checkForUpdate` for the web server: the fetch happens off the event loop. Never rejects. */
+export async function checkForUpdateAsync(
+  run: AsyncScriptRunner = updateScriptRunnerAsync(repoRoot()),
+): Promise<UpdateCheck> {
+  try {
+    return parseUpdateCheck(await run(['--check', '--porcelain']))
+  } catch (err) {
+    return unrunnable(err)
   }
 }
 
