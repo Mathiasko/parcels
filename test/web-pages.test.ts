@@ -104,7 +104,7 @@ describe('web pages', () => {
     expect(row).toContain('Returned')           // the Outcome column says so
     expect(body).toMatch(/1 returned/)          // and the lede counts it as returned
     expect(body).not.toMatch(/archived/i)       // never as archived
-    expect(body).toContain('no deliveries yet')
+    expect(body).not.toContain('n = ')           // and it times nothing
   })
 
   test('GET /history?carrier=posta filters by carrier', async () => {
@@ -129,28 +129,40 @@ describe('web pages', () => {
 
   test('GET /history reports a median delivery time per carrier', async () => {
     const db = memDb()
-    // posta: 6h, 12h, 100h -> median 12h. gls: 24h and 72h -> mean of the middle two, 48h = 2.0 days.
+    // posta: 6h, 12h, 100h -> median 12h. gls: 24h, 72h, 30h, 40h -> mean of the middle two, 35h.
     for (const [i, h] of [6, 12, 100].entries()) delivered(db, { carrier: 'posta', number: `P${i}`, spanHours: h })
-    for (const [i, h] of [24, 72].entries()) delivered(db, { carrier: 'gls', number: `G${i}`, spanHours: h })
+    for (const [i, h] of [24, 72, 30, 40].entries()) delivered(db, { carrier: 'gls', number: `G${i}`, spanHours: h })
     const body = (await get(db, '/history')).body
     const row = (name: string) => body.slice(body.indexOf(`data-carrier="${name}"`)).split('</tr>')[0]!
     expect(row('posta')).toContain('12 hours')
     expect(row('posta')).toContain('n = 3 of 3')
-    expect(row('gls')).toContain('2.0 days')
+    expect(row('gls')).toContain('35 hours')
   })
 
-  test('median: a carrier with no deliveries shows a dash, parcels without events are excluded and counted', async () => {
+  test('median: a carrier timed on fewer than 3 parcels is left out of the table, and the page says why', async () => {
+    // One or two deliveries say more about those parcels than about the carrier: "30 hours, n = 1" and
+    // "no deliveries yet" beside a carrier with dozens of archived parcels both mislead.
     const db = memDb()
     delivered(db, { carrier: 'packeta', number: 'K1', spanHours: 30 })
     delivered(db, { carrier: 'packeta', number: 'K2', spanHours: null })   // flipped to delivered with no event
+    for (const [i, h] of [6, 12, 100].entries()) delivered(db, { carrier: 'posta', number: `P${i}`, spanHours: h })
     const res = await get(db, '/history')
     expect(res.statusCode).toBe(200)
-    const row = (name: string) => res.body.slice(res.body.indexOf(`data-carrier="${name}"`)).split('</tr>')[0]!
-    expect(row('packeta')).toContain('30 hours')
-    expect(row('packeta')).toContain('n = 1 of 2')
-    expect(row('dpd')).toContain('—')
-    expect(row('dpd')).toContain('no deliveries yet')
-    expect(row('dpd')).not.toMatch(/\b0 hours\b/)
+    const median = res.body.slice(res.body.indexOf('<h2>Median delivery time</h2>'))
+    expect(median).toContain('data-carrier="posta"')
+    expect(median).not.toContain('data-carrier="packeta"')
+    expect(median).not.toContain('30 hours')
+    expect(median).not.toContain('data-carrier="dpd"')
+    expect(median).not.toContain('no deliveries yet')
+    expect(median).toMatch(/Not enough deliveries yet to time [^<]*Packeta[^<]*: a median needs at least 3/)
+  })
+
+  test('median: with no carrier timed on 3 parcels there is no table at all, only the sentence', async () => {
+    const db = memDb()
+    delivered(db, { carrier: 'packeta', number: 'K1', spanHours: 30 })
+    const median = (await get(db, '/history')).body.slice((await get(db, '/history')).body.indexOf('<h2>Median delivery time</h2>'))
+    expect(median).not.toContain('<table')
+    expect(median).toMatch(/Not enough deliveries yet/)
   })
 
   test('GET /history renders cleanly on an empty database', async () => {
@@ -636,6 +648,8 @@ describe('archived parcels from old mail', () => {
     expect(body).toMatch(/1 delivered/)
     const row = (name: string) => body.slice(body.indexOf(name)).split('</tr>')[0]!
     expect(row('OldShopA')).not.toMatch(/Delivered|Returned/)
+    // The Outcome cell is never blank: archived mail says so, in the quietest register there is.
+    expect(row('OldShopA')).toMatch(/<span class="st t-3 quiet">[\s\S]*Archived<\/span>/)
     expect(row('Delivered one')).toContain('Delivered')
   })
 
@@ -645,8 +659,9 @@ describe('archived parcels from old mail', () => {
     const home = (await get(db, '/')).body
     expect(home).not.toContain('OldShopA')
     const hist = (await get(db, '/history')).body
-    const row = hist.slice(hist.indexOf('data-carrier="packeta"')).split('</tr>')[0]!
-    expect(row).toContain('no deliveries yet')               // status stays unknown, so it is not a delivery
+    const median = hist.slice(hist.indexOf('<h2>Median delivery time</h2>'))
+    expect(median).not.toContain('data-carrier="packeta"')    // status stays unknown, so it is not a delivery
+    expect(median).not.toContain('n = ')
   })
 
   test('their status is never turned into "delivered"', async () => {
@@ -666,6 +681,12 @@ describe('archived parcels from old mail', () => {
     const body = (await get(db, `/history?from=${from}`)).body
     expect(body).toContain('OldShopB')
     expect(body).not.toContain('OldShopA')
+  })
+
+  test('both date filters say what they are', async () => {
+    const body = (await get(memDb(), '/history')).body
+    expect(body).toContain('<label>Date from<input type="date" name="from"')
+    expect(body).toContain('<label>Date to<input type="date" name="to"')
   })
 
   test('the empty state names both kinds', async () => {

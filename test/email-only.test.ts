@@ -227,9 +227,10 @@ describe('what the user is told about an email-only carrier', () => {
   test('the history delivery times do not promise DHL numbers that can never exist', async () => {
     const db = memDb()
     const body = (await get(db, '/history')).body
-    const row = body.slice(body.indexOf('data-carrier="dhl"')).split('</tr>')[0]!
-    expect(row).toMatch(/updates arrive by email/i)
-    expect(row).not.toContain('no deliveries yet')
+    const median = body.slice(body.indexOf('<h2>Median delivery time</h2>'))
+    expect(median).toMatch(/DHL is not timed: its updates arrive by email/)
+    expect(median).not.toContain('no deliveries yet')
+    expect(median).not.toMatch(/time [^<]*DHL[^<]*: a median needs/)   // not "not enough yet": never
   })
 
   test('both carrier pickers offer DHL', async () => {
