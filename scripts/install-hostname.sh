@@ -42,11 +42,9 @@ note() { echo "  $*"; }
 
 [ "$(id -u)" -eq 0 ] || die "must run as root:  sudo $0 ${1:-}"
 
-PORT=8787
-if [ -f "$PROJECT/config.json" ]; then
-  FOUND=$(sed -n 's/.*"port"[[:space:]]*:[[:space:]]*\([0-9]\{1,5\}\).*/\1/p' "$PROJECT/config.json" | head -1 || true)
-  [ -n "$FOUND" ] && PORT="$FOUND"
-fi
+# The top-level "port" only, never imap.port; 8787 when config.json has none. See lib/port.sh.
+. "$PROJECT/scripts/lib/port.sh"
+PORT="$(config_port "$PROJECT/config.json")"
 
 strip_block() {   # strip_block <file> - removes our sentinel block, leaving everything else alone
   local f="$1"
