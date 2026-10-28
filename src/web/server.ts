@@ -129,6 +129,12 @@ export async function startServer(app: FastifyInstance, port: number): Promise<v
   await app.listen({ host: BIND_HOST, port })
 }
 
+/**
+ * What a refresh covers: one parcel by id, or (the dashboard's button) every parcel `select` says yes to,
+ * asked once the run has read the mailbox. `pressed` is how many it covered when pressed, for the log.
+ */
+interface RefreshScope { parcelIds?: number[]; select?: (p: Parcel) => boolean; pressed?: number }
+
 /** An "Add to Calendar" submission the POST would not take, shown again on the page it came from. */
 interface Refused { parcelId: number; error: string; day: string; time: string }
 
@@ -908,17 +914,19 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   app.post('/refresh', async (req, reply) => {
     const target = text(form(req).parcel)
     let back = '/'
-    let parcelIds: number[]
+    let scope: RefreshScope
     if (target !== '') {
       const parcel = parcelFor(target)
       if (!parcel) return notFound(reply, 'parcel')
-      parcelIds = [parcel.id]
+      scope = { parcelIds: [parcel.id] }
       back = `/parcel/${parcel.id}`
     } else {
+      // A rule, not a list of ids: the run reads the mailbox before it polls, and a list taken now would
+      // leave out every parcel that mail creates - on a new install, all of them, which then sat at
+      // "unknown" until the hourly poll. Dormant parcels are left out by the run itself.
       const t = now().getTime()
-      parcelIds = listActive(db)
-        .filter(p => !isDormant(p, now()) && (p.lastAttemptedAt === undefined || t - p.lastAttemptedAt.getTime() > MIN_REFRESH_GAP_MS))
-        .map(p => p.id)
+      const select = (p: Parcel) => p.lastAttemptedAt === undefined || t - p.lastAttemptedAt.getTime() > MIN_REFRESH_GAP_MS
+      scope = { select, pressed: listActive(db).filter(p => !isDormant(p, now()) && select(p)).length }
     }
     // A double click must not poll twice. The second click is answered with the run already in flight,
     // so it lands on the spinner rather than on an error it can do nothing about.
@@ -928,7 +936,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     }
     refreshing = true
     try {
-      return await startRefresh(reply, target, parcelIds, back)
+      return await startRefresh(reply, target, scope, back)
     } catch (err) {
       // Anything that throws before the background run owns the guard (opening the run row, logging
       // the press, starting the poll) must hand it back here: nothing else ever would, and every later
@@ -939,7 +947,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   })
 
   /** Everything after the guard is taken. Once `work` exists, releasing the guard is its job. */
-  const startRefresh = async (reply: FastifyReply, target: string, parcelIds: number[], back: string) => {
+  const startRefresh = async (reply: FastifyReply, target: string, scope: RefreshScope, back: string) => {
     // Read the mailbox too, but only for the whole-dashboard refresh. This is what the button is for
     // on a new install: with no parcels yet, polling carriers can do nothing, and without this the
     // only way to turn mail into parcels was to wait for the next hourly run. A single-parcel
@@ -963,12 +971,13 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     // report, and without this there would be no record that it was ever pressed. The count is how many
     // parcels it actually covered, which is the other half of that answer.
     logAction(db, {
-      kind: 'refresh', count: parcelIds.length, scope: target === '' ? 'all' : 'one',
+      kind: 'refresh', count: scope.parcelIds?.length ?? scope.pressed ?? 0, scope: target === '' ? 'all' : 'one',
     }, { actor: 'web', runId, at: now() })
     let work: Promise<unknown>
     try {
       work = recordPollRun(db, runId, runPoll({
-        db, config, parcelIds, forceAll: true, ingest,
+        db, config, ...(scope.parcelIds ? { parcelIds: scope.parcelIds } : {}), ...(scope.select ? { select: scope.select } : {}),
+        forceAll: true, ingest,
         http: deps.http ?? createHttpClient(),
         adapters: deps.adapters ?? allAdapters(),
         notifier: deps.notifier ?? createNotifier(config.notifier),

@@ -1053,6 +1053,10 @@ describe('refresh reads the mailbox, not only the carriers', () => {
       })
       expect(refreshedRun(db, res).run).toMatchObject({ mailRead: 1, created: 1 })
       expect(listActive(db)).toHaveLength(1)
+      // And polled in that same run: the button chose its parcels when pressed, before the mail was
+      // read, so a parcel the mail created was left at "unknown" until the hourly poll.
+      expect(refreshedRun(db, res).run).toMatchObject({ polled: 1 })
+      expect(listActive(db)[0]!.status).toBe('ready_for_pickup')
       expect(fake.forbidden).toEqual([])            // still read-only against the mailbox
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })

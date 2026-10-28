@@ -47,6 +47,12 @@ export interface PollDeps {
   /** Restricts the run to these parcels (a single-parcel refresh). Every other rule still applies. */
   parcelIds?: number[]
   /**
+   * Restricts the run to the parcels this says yes to (the dashboard's refresh). Asked AFTER the mailbox
+   * is read, so - unlike a list of ids taken when the button was pressed - it can say yes to a parcel this
+   * run's own ingest just created. Every other rule still applies, dormancy included.
+   */
+  select?: (p: Parcel) => boolean
+  /**
    * When present, the mailbox is read first and any parcels it names are created before polling
    * starts, so a new parcel is polled in the very run that found it. Absent: no mail is touched.
    */
@@ -135,6 +141,7 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   const byCarrier = new Map<CarrierId, Parcel[]>()
   for (const p of listActive(db)) {
     if (deps.parcelIds && !deps.parcelIds.includes(p.id)) continue
+    if (deps.select && !deps.select(p)) continue
     // `forceAll` skips `isDue` entirely, and dormancy lives inside `isDue`. Without this, every long
     // sleep gap (every morning) would re-poll every dormant parcel. A parcel named in `parcelIds` is
     // the user's explicit "refresh this one" and is polled even when dormant.
