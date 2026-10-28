@@ -83,7 +83,7 @@ export function historyPage(parcels: Parcel[], stats: Map<CarrierId, CarrierDeli
 <h1>History</h1>
 ${parcels.length === 0 ? '' : html`<p class="lede">${lede(parcels, filtered)} Dates are delivery or return dates${hasArchived ? '; for archived mail, the day it first appeared' : ''}.</p>`}
 <form method="get" action="/history" class="toolbar">
-  <label class="grow">Search<input name="q" value="${f.q ?? ''}" placeholder="Merchant, label or number"></label>
+  <label class="grow">Search<input name="q" value="${f.q ?? ''}" placeholder="Shop, name or number"></label>
   <label>Carrier<select name="carrier"><option value="">All carriers</option>${carriers.map(id =>
     html`<option value="${id}"${f.carrier === id ? ' selected' : ''}>${CARRIER_NAME[id]}</option>`)}</select></label>
   <label>Date from<input type="date" name="from" value="${f.from ?? ''}"></label>

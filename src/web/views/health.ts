@@ -281,7 +281,7 @@ export function healthPage(
   // Mail not set up is a fact about this install, not a fault: no wash, and the way to set it up.
   const ingestBad = ingest.configured && ing !== undefined && ing.consecutiveFailures > 0
   const ingestLastOk = !ingest.configured
-    ? html`not set up<span class="meta why"><a href="/settings">Connect Gmail in Settings</a></span>`
+    ? html`never<span class="meta why"><a href="/settings">Connect Gmail in Settings</a></span>`
     : ing?.lastOkAt ? formatDateTime(ing.lastOkAt, ctx.now) : 'never'
   const pollState = !poller.lastPollAt ? state('nodata', 'no data') : poller.overdue ? state('attention', 'not running?') : state('ok', 'ok')
 
