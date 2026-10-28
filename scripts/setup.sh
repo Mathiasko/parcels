@@ -39,7 +39,7 @@ step() { printf '\n== %s\n' "$1"; }
 
 # --- 1. the machine ---------------------------------------------------------------------------------
 # macOS is not a preference: the scheduler is launchd, the notifications are macOS notifications, and
-# the hostname script edits /etc/hosts and pf. There is no other-platform path to fall back to.
+# the hostname script edits /etc/hosts. There is no other-platform path to fall back to.
 step "Checking the machine"
 [ "$(uname -s)" = Darwin ] || {
   echo "setup: this app runs on macOS only (it needs launchd and macOS notifications)." >&2

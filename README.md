@@ -60,13 +60,13 @@ These need a browser, a GUI prompt or a password, and the script lists them when
    Blocked Addresses → Import filters) and tick **Also apply filter to matching conversations**:
    import alone labels nothing that has already arrived. Then Settings → Labels → tick **Show in
    IMAP** for the `parcels` label. Add your own shops' domains to the filter while you are there.
-3. **The hostname** (optional), which edits `/etc/hosts` and `pf` and so needs a password:
+3. **The hostname** (optional), which edits `/etc/hosts` and so needs a password:
 
    ```sh
    sudo scripts/install-hostname.sh
    ```
 
-   That gives you <http://parcels.local:8787> instead of a port number.
+   That gives you <http://parcels.local:8787> instead of an IP address.
 4. **Notification approval** (optional, one-time). From a real Terminal window run
    `terminal-notifier -title x -message y` and approve the macOS prompt. Check which mechanism is
    live with `node dist/cli.js notify-test`.
