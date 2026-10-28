@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,7 +8,7 @@ import { getParcel, updateParcelState } from '../src/db/parcels.js'
 import { cachedGrid, MAX_GEOCODES_PER_RUN, MAX_TILE_POINTS_PER_RUN } from '../src/core/map-preview.js'
 import { GRID_SIZE, hasTile, readTile, storeTile, TILE_ZOOM, tileDirFor, tilePath, tileUrl } from '../src/core/tiles.js'
 import { tileGrid } from '../src/core/slippy.js'
-import type { BinaryFetch } from '../src/core/http.js'
+import { HttpTransportError, type BinaryFetch } from '../src/core/http.js'
 import type { Database } from '../src/db/index.js'
 import type { HttpClient, PickupPoint } from '../src/core/types.js'
 import { addParcel, config, failResult, memDb, NOW, stubAdapter } from './poll-helpers.js'
@@ -290,6 +290,23 @@ test('tile fetching is capped per run and paced, and a failure costs nothing but
   await poll(db, f, { tileDir: dir })
   expect(f.tileUrls).toHaveLength(MAX_TILE_POINTS_PER_RUN * GRID_SIZE * GRID_SIZE)
   expect(f.searches).toEqual([])
+})
+
+test('a failed tile is logged without its coordinates, which would place the reader to a few hundred metres', async () => {
+  const db = memDb()
+  ready(db, 'RA000000001SK', { ...POST, lat: LAT, lon: LON })
+  const f = fakes({ tile: url => new HttpTransportError(url, new Error('socket hang up')) })
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await poll(db, f)
+    const lines = logged.mock.calls.map(c => c.join(' '))
+    expect(lines.length).toBeGreaterThan(0)
+    const coords = tileGrid(LAT, LON, TILE_ZOOM)!.tiles.flatMap(t => [String(t.x), String(t.y)])
+    for (const line of lines) {
+      expect(line).toMatch(new RegExp(`zoom ${TILE_ZOOM}.*socket hang up`))
+      for (const c of coords) expect(line).not.toContain(c)
+    }
+  } finally { logged.mockRestore() }
 })
 
 test('a body that is not a PNG is never stored as a tile', async () => {

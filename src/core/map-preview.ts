@@ -2,7 +2,7 @@ import type { Database } from '../db/index.js'
 import { getGeocode, recordGeocode } from '../db/geocode-cache.js'
 import { listActive, setPickupCoords, type Parcel } from '../db/parcels.js'
 import { geocodeQuery, lookupPoint, retryDue } from './geocode.js'
-import type { BinaryFetch } from './http.js'
+import { HttpTransportError, type BinaryFetch } from './http.js'
 import { tileGrid, type TileGrid } from './slippy.js'
 import { GRID_SIZE, hasTile, isPng, storeTile, TILE_USER_AGENT, TILE_ZOOM, tileUrl } from './tiles.js'
 import type { HttpClient } from './types.js'
@@ -142,7 +142,11 @@ export async function runMapPreview(deps: MapPreviewDeps): Promise<MapPreviewRep
         if (storeTile(tileDir, t, res.bytes)) report.tiles++
       } catch (err) {
         report.failures++
-        console.error(`map preview: tile ${t.z}/${t.x}/${t.y} failed: ${describe(err)}`)
+        // The zoom, never x/y: at this zoom a tile's coordinates place the reader to a few hundred
+        // metres, and this line ends up in the log a support bundle is made from. The URL is the same
+        // coordinates again, so a transport error contributes its reason and not its message.
+        const why = err instanceof HttpTransportError ? `${err.name}: ${err.detail}` : describe(err)
+        console.error(`map preview: a zoom ${t.z} tile failed: ${why}`)
       }
     }
   }

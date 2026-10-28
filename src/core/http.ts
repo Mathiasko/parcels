@@ -2,11 +2,30 @@ import type { HttpClient, HttpResponse } from './types.js'
 
 export type { HttpClient, HttpResponse } from './types.js'
 
-/** The request never produced a response: DNS/connection failure, or the timeout fired. */
+/**
+ * The request never produced a response: DNS/connection failure, or the timeout fired.
+ *
+ * The message names the URL's origin and path only. It lands in the poll log and from there in the
+ * support bundle, and the query is where carriers put what identifies the user: DPD sends the postcode
+ * as `dataForVerification`. `detail` is the underlying reason alone, for a caller whose path is itself
+ * revealing (a map tile's path is its coordinates).
+ */
 export class HttpTransportError extends Error {
+  readonly detail: string
   constructor(url: string, cause: unknown) {
-    super(`transport error for ${url}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause })
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    super(`transport error for ${withoutQuery(url)}: ${detail}`, { cause })
     this.name = 'HttpTransportError'
+    this.detail = detail
+  }
+}
+
+function withoutQuery(url: string): string {
+  try {
+    const u = new URL(url)
+    return `${u.origin}${u.pathname}`
+  } catch {
+    return url.split(/[?#]/)[0]!
   }
 }
 

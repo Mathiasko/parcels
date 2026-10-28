@@ -1,6 +1,6 @@
 import { test, expect, vi, afterEach } from 'vitest'
 import type { HttpClient } from '../src/core/types.js'
-import { createHttpClient, captureBodies, HttpTransportError, MAX_CAPTURED_BODY_CHARS } from '../src/core/http.js'
+import { createBinaryFetch, createHttpClient, captureBodies, HttpTransportError, MAX_CAPTURED_BODY_CHARS } from '../src/core/http.js'
 
 afterEach(() => { vi.useRealTimers() })
 
@@ -56,6 +56,17 @@ test('rejects with a transport error after the timeout', async () => {
     }))
   const client = createHttpClient({ fetchImpl, timeoutMs: 20, retries: 0 })
   await expect(client('https://example.test/x')).rejects.toBeInstanceOf(HttpTransportError)
+})
+
+test('a transport error names the host and path but never the query, which carries postcodes', async () => {
+  // DPD sends the postcode as `dataForVerification`; this message ends up in the poll log.
+  const fetchImpl = vi.fn(async () => { throw new TypeError('fetch failed') })
+  const client = createHttpClient({ fetchImpl, retries: 0 })
+  const err = await client('https://api.example.test/track/1234?dataForVerification=81101&x=y').catch((e: unknown) => e)
+  expect(err).toBeInstanceOf(HttpTransportError)
+  expect((err as Error).message).toBe('transport error for https://api.example.test/track/1234: fetch failed')
+  const bytes = await createBinaryFetch({ fetchImpl })('https://tiles.example.test/a.png?key=81101').catch((e: unknown) => e)
+  expect((bytes as Error).message).not.toContain('81101')
 })
 
 test('returns the last response when retries are exhausted on a 5xx', async () => {
