@@ -907,3 +907,15 @@ The owner asked for three things: clicking should put the event into the calenda
 - **Settings** gets `Calendar for pickups` under Parcels: a native select whose first option names the default (`The first one (now “Home”)`). When Calendar cannot be asked, there is no select, only the sentence saying why.
 
 Rendered with fixture data, light and dark at 1100px: the dashboard closed, opened (a deadline card, a no-deadline card with an event already added), refused and after a success; the parcel page opened and with the permission failure; settings with the list and without it. Not rendered: Safari (the layout avoids `display` on `<details>`, which is the part browsers disagree on), and a real 375px window.
+
+## 19. A form lands where its answer is
+
+Every form here is a real navigation (there is no script), so a press loads a page, and a page loads at its top. For a form low on the page whose answer is printed beside it, that is a jump away from what was just asked: `Gather support bundle` put the bundle out of sight below the fold. The rule: **a form's `action` ends in the fragment of the place its answer appears**, and the browser scrolls there, after a direct render (a 400, the support bundle, the connection test) and after a 303 alike - a `Location` without a fragment inherits the request's.
+
+- Health: `Gather support bundle` → `#support`; `Check for updates` and `Update now` → `#update` (the `<meta refresh>` while an update runs reloads the same URL, so it stays there).
+- Settings: `Test connection` → `#test`, and its answer moved from the top of the page to under that heading. A **save** still answers at the top (`Saved.`, and the test a mail change triggers), and its form posts to the top, so nothing moves.
+- Attention: each email is `#m-<id>`. `Dismiss` lands on the email that takes its place (the one before, for the last; the top, for the only one), so clearing a long list does not start over from the top every time. A refused `Assign` comes back at its own email, open.
+- Add to Calendar: the form posts to `#cal-<id>`, so a refused time comes back at the open form; the redirect after a press goes to `#cal-result`, the notice that says what happened. That explicit fragment beats the inherited one.
+- Left at the top, on purpose: anything whose answer is at the top - `Refresh`, `Mark as collected` and its Undo notice, `Save name` (the name is the `<h1>`), adding and deleting a parcel, `Save settings`.
+
+`[id]` gets `scroll-margin-top: 1rem`, so a section that is landed on is not flush against the window's edge.
