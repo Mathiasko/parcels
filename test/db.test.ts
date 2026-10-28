@@ -9,7 +9,7 @@ import {
   type NewParcel,
 } from '../src/db/parcels.js'
 import { appendEvents } from '../src/db/events.js'
-import { storeMessage } from '../src/db/messages.js'
+import { linkMessage, storeMessage } from '../src/db/messages.js'
 
 let db: Database
 beforeEach(() => { db = openDb(':memory:') })
@@ -199,6 +199,25 @@ test('deleteParcel removes the parcel with its events, raw responses and deadlin
   expect(count(db, 'raw_responses WHERE parcel_id IS NULL')).toBe(1)
   // Nothing may be left pointing at the row that is gone.
   expect(db.pragma('foreign_key_check')).toEqual([])
+})
+
+test('linkMessage resolves a waiting message against a parcel: no note left saying why it was waiting', () => {
+  const id = insertParcel(db, base)
+  const insert = db.prepare(`
+    INSERT INTO messages (message_id, received_at, from_addr, subject, parsed_ok, parse_note, ignored)
+    VALUES (?, '2026-07-13T11:08:00.000Z', 'shop@example.com', 'Shipped', 0, ?, ?)
+  `)
+  const waiting = Number(insert.run('<m1@x>', 'no tracking number found in this message', 0).lastInsertRowid)
+  const ignored = Number(insert.run('<m2@x>', 'ignored: no sign of a parcel', 1).lastInsertRowid)
+
+  linkMessage(db, waiting, id)
+  linkMessage(db, ignored, id, 'a note of its own')
+
+  const rows = db.prepare('SELECT id, parsed_ok, parcel_id, parse_note, ignored FROM messages ORDER BY id').all()
+  expect(rows).toEqual([
+    { id: waiting, parsed_ok: 1, parcel_id: id, parse_note: null, ignored: 0 },
+    { id: ignored, parsed_ok: 1, parcel_id: id, parse_note: 'a note of its own', ignored: 0 },
+  ])
 })
 
 test('deleteParcel keeps the email ROWS, unlinked and parsed_ok = 1: no re-ingest, and not dumped into needs-attention', () => {

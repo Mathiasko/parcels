@@ -4,7 +4,7 @@ import type { Carrier, ParcelEvent } from '../core/types.js'
 import { isEmailOnlyCarrier } from '../core/types.js'
 import { findParcel, insertParcel, reviveArchived, setArchived } from '../db/parcels.js'
 import { appendEvents } from '../db/events.js'
-import { storeMessage } from '../db/messages.js'
+import { linkMessage, storeMessage } from '../db/messages.js'
 import { accountKey, getImapState, saveImapState, type ImapState } from '../db/imap-state.js'
 import { extract, type Extraction, type ParcelEvidence } from './extract.js'
 import { fetchMessages, type FetchDeps, type ImapConfig, type RawMessage } from './imap.js'
@@ -215,8 +215,7 @@ function placeOne(db: Database, it: Item, deps: ReprocessDeps, report: IngestRep
   // parcel has to be able to clear the flag again, not just raise it.
   const note = (text: string, ignored = false) =>
     db.prepare('UPDATE messages SET parse_note = ?, ignored = ? WHERE id = ?').run(text, ignored ? 1 : 0, it.id)
-  const link = (parcelId: number, text: string | null) =>
-    db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = ?, parse_note = ?, ignored = 0 WHERE id = ?').run(parcelId, text, it.id)
+  const link = (parcelId: number, text: string | null) => linkMessage(db, it.id, parcelId, text)
 
   // Oversize mail has no body to judge, so it is shown; `storeMessage` already noted why.
   if (it.oversize) { report.needsAttention++; return }

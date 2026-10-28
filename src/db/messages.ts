@@ -112,6 +112,17 @@ export function orphanParcelMessages(db: Database, parcelId: number): string[] {
 }
 
 /**
+ * Attaches a message to a parcel, as the ingest does for mail it placed and the attention page does for
+ * mail the user assigned by hand. Whatever said why the message was waiting (`no tracking number
+ * found ...`) or that it was `ignored` no longer applies, so both are reset; `note` is for the one
+ * caller with something to say about the link itself (a parcel archived on arrival).
+ */
+export function linkMessage(db: Database, messageId: number, parcelId: number, note: string | null = null): void {
+  db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = ?, parse_note = ?, ignored = 0 WHERE id = ?')
+    .run(parcelId, note, messageId)
+}
+
+/**
  * Dismisses a message the ingest could not place: junk mail (a verification notice with no tracking
  * number) that would otherwise sit on /attention as a permanent false alert.
  *
