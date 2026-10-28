@@ -216,13 +216,14 @@ cat <<EOF
 1. Open the dashboard:  http://127.0.0.1:$PORT
    It binds loopback only and has no password, by design.
 
-2. Finish Gmail on the Settings page, http://127.0.0.1:$PORT/settings
-   - Make an App Password at https://myaccount.google.com/apppasswords (2-step verification first).
-   - Fill in the imap fields there and Save, then press "Test mail connection". Read the answer:
-     it is the only thing that proves ingest works, rather than quietly reading an empty label.
-   - In Gmail, import gmail-filter.xml (Settings, Filters and Blocked Addresses, Import filters)
-     and tick "Also apply filter to matching conversations" - import alone labels nothing that has
-     already arrived. Then Settings, Labels, tick "Show in IMAP" for the parcels label.
+2. Connect Gmail, in this order:
+   a. In Gmail, import gmail-filter.xml (Settings, Filters and Blocked Addresses, Import filters)
+      and tick "Also apply filter to matching conversations" - import alone labels nothing that has
+      already arrived. Then in Settings, Labels, check the parcels label is there and tick
+      "Show in IMAP" for it.
+   b. Make an App Password at https://myaccount.google.com/apppasswords (2-step verification first).
+   c. Open http://127.0.0.1:$PORT/settings, enter your Gmail address and the App Password, and Save.
+      Saving tests the connection; read the one-line answer.
    Until that is done the app still works; you just add parcels by hand on /add.
 
 3. Optional, needs a password prompt in a real Terminal:

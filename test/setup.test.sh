@@ -96,6 +96,23 @@ check "the closing message uses the configured port"      bash -c "grep -q '127.
 check "the parcels.local URL uses it too"                 bash -c "grep -q 'parcels.local:9123' <<< \"\$1\"" _ "$out"
 check "no URL in the closing message says 8787"           bash -c "! grep -qE ':8787' <<< \"\$1\"" _ "$out"
 
+# First-run order. Saving the credentials tests them, and a label that is not there yet (filter not
+# imported, or not shown in IMAP) fails that test predictably - so the filter and the label come first,
+# then the App Password, then /settings. Checked in the closing message and in the README's copy of it.
+first_line() { grep -n -- "$1" | head -1 | cut -d: -f1; }
+in_order() { # in_order <text> <pattern...>  every pattern is present, each first appearing after the last
+  local text="$1" prev=0 n; shift
+  for p in "$@"; do
+    n="$(first_line "$p" <<< "$text")"
+    [ -n "$n" ] && [ "$n" -gt "$prev" ] || return 1
+    prev="$n"
+  done
+}
+README_TODO="$(sed -n '/^### What no script can do for you/,/^Updating an installed copy/p' "$ROOT/README.md")"
+CLOSING="$(awk '/^== (Installed|Config written)/ { p = 1 } p' <<< "$out")"
+check "closing message: filter, Show in IMAP, App Password, /settings" in_order "$CLOSING" gmail-filter.xml 'Show in IMAP' apppasswords /settings
+check "README: filter, Show in IMAP, App Password, /settings"          in_order "$README_TODO" gmail-filter.xml 'Show in IMAP' apppasswords /settings
+
 BAD="$TMP/bad.json"
 check "setup.sh refuses a postcode that is not five digits" bash -c "! PARCELS_CONFIG='$BAD' PARCELS_POSTCODE=not-a-code '$SETUP' --config-only </dev/null"
 check "and writes nothing when it refuses"                  test ! -e "$BAD"

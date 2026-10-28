@@ -52,22 +52,31 @@ A test asserts the script only ever *prints* that line, never runs it.
 
 These need a browser, a GUI prompt or a password, and the script lists them when it finishes.
 
-1. **Gmail credentials.** On the dashboard open `/settings`, paste an App Password from
-   <https://myaccount.google.com/apppasswords> (2-step verification must be on first), Save, then
-   press **Test mail connection**. That answer is the only thing that proves ingest works — a wrong
-   password or a label hidden from IMAP otherwise looks exactly like "no new mail".
-2. **The Gmail filter.** Import [`gmail-filter.xml`](gmail-filter.xml) (Settings → Filters and
-   Blocked Addresses → Import filters) and tick **Also apply filter to matching conversations**:
-   import alone labels nothing that has already arrived. Then Settings → Labels → tick **Show in
-   IMAP** for the `parcels` label. Add your own shops' domains to the filter while you are there.
-3. **The hostname** (optional), which edits `/etc/hosts` and so needs a password:
+Connect Gmail in this order — each step needs the one before it, and doing them the other way round
+makes the first connection test fail with "the mailbox is not there":
+
+1. **The Gmail filter and label.** Import [`gmail-filter.xml`](gmail-filter.xml) (Settings → Filters
+   and Blocked Addresses → Import filters) and tick **Also apply filter to matching conversations**:
+   import alone labels nothing that has already arrived. Then Settings → Labels: check the `parcels`
+   label is there and tick **Show in IMAP** for it. Add your own shops' domains to the filter while
+   you are there.
+2. **An App Password.** Make one at <https://myaccount.google.com/apppasswords> (2-step
+   verification must be on first).
+3. **The Settings page.** On the dashboard open `/settings`, enter your Gmail address and the App
+   Password, and Save. Saving tests the connection and answers in one line; that answer is the only
+   thing that proves ingest works — a wrong password or a hidden label otherwise looks exactly like
+   "no new mail".
+
+The rest is optional:
+
+4. **The hostname** (optional), which edits `/etc/hosts` and so needs a password:
 
    ```sh
    sudo scripts/install-hostname.sh
    ```
 
    That gives you <http://parcels.local:8787> instead of an IP address.
-4. **Notification approval** (optional, one-time). From a real Terminal window run
+5. **Notification approval** (optional, one-time). From a real Terminal window run
    `terminal-notifier -title x -message y` and approve the macOS prompt. Check which mechanism is
    live with `node dist/cli.js notify-test`.
 
@@ -180,9 +189,9 @@ sentence. It connects with the settings as **saved** (not as typed), opens the m
 | Answer | Means |
 |---|---|
 | `Connected — you@gmail.com, the label parcels has 79 messages` | Everything works. Ingest has all it needs. |
-| `Connected, nothing to read — the label exists, and it is empty` | Not a fault. The filter (step 2) is not matching anything yet. |
+| `Connected, nothing to read — the label exists, and it is empty` | Not a fault. The filter (step 1) is not matching anything yet. |
 | `Authentication failed` | The App Password is wrong or revoked. Make a new one; the page links to it. |
-| `The mailbox parcels is not there` | Step 3 was skipped: the label is not shown in IMAP (or the name is misspelled). |
+| `The mailbox parcels is not there` | Step 2 was skipped: the label is not shown in IMAP (or the name is misspelled). |
 | `Could not reach imap.gmail.com on port 993` | Network, DNS or TLS. Nothing was authenticated, so the password is not in question. |
 | `No mail account is configured` | There is no `imap` block. Not an error: parcels are added by hand. |
 
@@ -193,11 +202,7 @@ retyping it.
 
 Setup, in this order:
 
-1. **Turn on 2-step verification**, then create an App Password at
-   <https://myaccount.google.com/apppasswords>. Paste it into the App Password field on `/settings`
-   (or write it into `config.json` as `imap.pass`).
-   (IMAP is always on in Gmail; there is no enable toggle any more.)
-2. **Import [`gmail-filter.xml`](gmail-filter.xml)**, the filter that fills the label. In Gmail:
+1. **Import [`gmail-filter.xml`](gmail-filter.xml)**, the filter that fills the label. In Gmail:
    **Settings, Filters and Blocked Addresses, Import filters**, choose the file, and **tick "Also
    apply filter to matching conversations"** before you confirm it. Import by itself labels nothing
    that has *already* arrived — labels do apply retroactively, but only if you tick that box, and an
@@ -229,14 +234,18 @@ Setup, in this order:
    of the most-copied phishing templates in this region, and exempting a query this broad from the
    spam filter would be a bad trade. Mail this labels that is not a parcel is stored and then left
    alone; see [What reaches the attention page](#what-reaches-the-attention-page).
-3. **Make the label visible to IMAP. This is the step that catches everyone.** Gmail hides labels
-   from IMAP by default. Go to **Settings, Labels** and tick **Show in IMAP** for `parcels`.
-   If you skip this the app connects fine, authenticates fine, and reports an empty folder — which
-   is exactly what `Test mail connection` tells you apart from a real one.
+2. **Make the label visible to IMAP. This is the step that catches everyone.** Gmail hides labels
+   from IMAP by default. Go to **Settings, Labels**, check the `parcels` label is there (create
+   it if it is not), and tick **Show in IMAP** for it. If you skip this the app connects fine,
+   authenticates fine, and reports an empty folder — which is exactly what `Test mail connection`
+   tells you apart from a real one.
+3. **Turn on 2-step verification**, then create an App Password at
+   <https://myaccount.google.com/apppasswords>. (IMAP is always on in Gmail; there is no enable
+   toggle any more.)
 4. **Save the mail connection** on `/settings` (host `imap.gmail.com`, port 993, your address, the
-   label name), then **press Test mail connection** and read the answer. The file is written `0600`
-   for you. Writing the `imap` block into `config.json` by hand and `chmod 600 config.json` does the
-   same thing, with nothing to confirm that it worked.
+   App Password, the label name). Saving tests the connection; read the answer. The file is written
+   `0600` for you. Writing the `imap` block into `config.json` by hand and `chmod 600 config.json`
+   does the same thing, with nothing to confirm that it worked.
 
 Notes on behaviour:
 
