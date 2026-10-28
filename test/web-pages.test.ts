@@ -5,7 +5,7 @@ import { fakeImap } from './imap-fake.js'
 import { listActive } from '../src/db/parcels.js'
 import { describe, expect, test, vi } from 'vitest'
 import { buildServer, refreshIdle, type WebDeps } from '../src/web/server.js'
-import { getRun } from '../src/db/poll-runs.js'
+import { finishRun, getRun, startRun, type RunCounts } from '../src/db/poll-runs.js'
 import { appendEvents } from '../src/db/events.js'
 import { recordHealth } from '../src/db/health.js'
 import { recordIngest } from '../src/db/ingest-status.js'
@@ -954,9 +954,16 @@ describe('refresh reads the mailbox, not only the carriers', () => {
 })
 
 describe('what the refresh banner claims', () => {
+  /** A finished run with these counts, and the dashboard URL the refresh would have redirected to. */
+  const finished = (db: Database, counts: Partial<RunCounts> = {}): string => {
+    const id = startRun(db, 'web', NOW)
+    finishRun(db, id, { counts: { polled: 0, newEvents: 0, failures: 0, ...counts }, summary: '' }, NOW)
+    return `/?run=${id}`
+  }
+
   test('an empty dashboard is not told its parcels are paused', async () => {
     const db = memDb()
-    const body = (await server(db).inject({ method: 'GET', url: '/?refreshed=0&failures=0&active=0' })).body
+    const body = (await server(db).inject({ method: 'GET', url: finished(db) })).body
     expect(body).toContain('Nothing is in flight yet.')
     expect(body).not.toContain('each parcel here is paused')
   })
@@ -964,20 +971,32 @@ describe('what the refresh banner claims', () => {
   test('a dashboard that does have parcels still explains why none were polled', async () => {
     const db = memDb()
     insertParcel(db, { carrier: 'posta', trackingNumber: 'RR1', source: 'manual' })
-    const body = (await server(db).inject({ method: 'GET', url: '/?refreshed=0&failures=0&active=1' })).body
+    const body = (await server(db).inject({ method: 'GET', url: finished(db) })).body
     expect(body).toContain('each parcel here is paused')
   })
 
   test('mail that yielded nothing is reported as such, not as silence', async () => {
     const db = memDb()
-    const body = (await server(db).inject({ method: 'GET', url: '/?refreshed=0&failures=0&active=0&read=0&created=0' })).body
+    const body = (await server(db).inject({ method: 'GET', url: finished(db, { mailRead: 0, created: 0 }) })).body
     expect(body).toContain('No new mail.')
   })
 
   test('mail that became parcels is reported first', async () => {
     const db = memDb()
-    const body = (await server(db).inject({ method: 'GET', url: '/?refreshed=1&failures=0&active=1&read=3&created=2' })).body
+    insertParcel(db, { carrier: 'posta', trackingNumber: 'RR1', source: 'manual' })
+    const body = (await server(db).inject({ method: 'GET', url: finished(db, { polled: 1, mailRead: 3, created: 2 }) })).body
     expect(body).toContain('Read 3 new emails and added 2 parcels.')
+  })
+
+  test('the old result-in-the-URL links show no banner: nothing produces them, and a bookmark would replay one for ever', async () => {
+    const db = memDb()
+    insertParcel(db, { carrier: 'posta', trackingNumber: 'RR1', source: 'manual' })
+    for (const url of ['/?refreshed=1&failures=2', '/?refreshed=0&failures=0&active=0&read=3&created=2']) {
+      const body = (await server(db).inject({ method: 'GET', url })).body
+      expect(body, url).not.toContain('class="notice')
+      expect(body, url).not.toContain('Polled')
+      expect(body, url).not.toContain('carrier failure')
+    }
   })
 })
 

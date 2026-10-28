@@ -136,17 +136,14 @@ const one = (v: unknown): string | undefined => {
   return typeof first === 'string' ? first : undefined
 }
 
-/** Parses `?refreshed=N&failures=M&busy=1` (set by the refresh redirect) back into a note. */
+/**
+ * The one note a URL may carry by itself: `?busy=1`, which a second click gets when a refresh is
+ * already going but its run row cannot be found. A finished run's counts are never read from the URL
+ * (they come from its row, via `?run=N`): a result spelled out in a query string would replay itself
+ * from a bookmark or the history for ever.
+ */
 export function refreshNote(query: Record<string, unknown>): RefreshNote | undefined {
-  if (one(query.busy) === '1') return { polled: 0, failures: 0, busy: true }
-  const polled = one(query.refreshed)
-  if (polled === undefined) return undefined
-  const n = (v: string | undefined) => (v !== undefined && /^\d{1,6}$/.test(v) ? Number(v) : 0)
-  const opt = (v: string | undefined) => (v === undefined ? undefined : n(v))
-  return {
-    polled: n(polled), failures: n(one(query.failures)), busy: false,
-    read: opt(one(query.read)), created: opt(one(query.created)), active: opt(one(query.active)),
-  }
+  return one(query.busy) === '1' ? { polled: 0, failures: 0, busy: true } : undefined
 }
 
 /**
@@ -249,8 +246,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    * `reloadIn` is set only while the run is genuinely unfinished, so the reload loop ends on its own:
    * either the run completes (the counters replace the spinner) or it is reaped (the failure does).
    *
-   * No `run` in the query falls back to `?refreshed=N`, which is what a bookmarked or typed link from
-   * before this was asynchronous still carries.
+   * No `run` in the query falls back to `refreshNote`, which knows only `?busy=1`.
    */
   const runState = (
     query: Record<string, unknown>, now: Date, active?: number,

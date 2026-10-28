@@ -47,8 +47,7 @@ export function mapsUrl(p: Parcel): string | undefined {
 
 /**
  * What the page says about a poll run: one still going, one that ended badly, or the counts of one that
- * finished. The counts arrive either from the `poll_runs` row the refresh redirected to, or (for a link
- * typed or bookmarked from before) from the query string.
+ * finished. The counts come from the `poll_runs` row the refresh redirected to, never from the URL.
  */
 export interface RefreshNote {
   polled: number
