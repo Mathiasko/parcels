@@ -562,13 +562,21 @@ describe('web pages: fix round 1', () => {
     }
   })
 
-  test('every response, including a refusal, carries the CSP and nosniff headers', async () => {
+  test('every response, including a refusal and a 404, carries the CSP, nosniff, framing and resource-policy headers', async () => {
     const app = server(memDb())
     const ok = await app.inject({ method: 'GET', url: '/' })
     const refused = await app.inject({ method: 'GET', url: '/', headers: { host: 'evil.example' } })
-    for (const res of [ok, refused]) {
-      expect(res.headers['content-security-policy']).toBe("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'")
+    const missing = await app.inject({ method: 'GET', url: '/no/such/page' })
+    const tile = await app.inject({ method: 'GET', url: '/tile/16/1/1.png' })
+    for (const res of [ok, refused, missing, tile]) {
+      expect(res.headers['content-security-policy']).toBe(
+        "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
       expect(res.headers['x-content-type-options']).toBe('nosniff')
+      // No other site may frame a page (clickjacking the Delete or Update buttons)...
+      expect(res.headers['x-frame-options']).toBe('DENY')
+      // ...or embed a response: an <img src=".../tile/..."> elsewhere would learn from onload which
+      // tiles are cached, i.e. where this person collects their parcels.
+      expect(res.headers['cross-origin-resource-policy']).toBe('same-origin')
     }
   })
 
@@ -1118,7 +1126,7 @@ describe('GET /: one card design, whatever the state or the carrier', () => {
     inflight(db, { name: 'Waiting at the box', status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
     const res = await get(db, '/')
     expect(res.headers['content-security-policy'])
-      .toBe("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'")
+      .toBe("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
     expect(res.body).not.toContain('<script')
     expect(res.body).not.toContain('onclick')
   })

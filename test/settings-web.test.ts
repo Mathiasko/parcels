@@ -96,7 +96,7 @@ describe('GET /settings', () => {
     expect(res.body).not.toContain('<script')
     expect(res.body).not.toMatch(/\son[a-z]+=/)
     expect(res.headers['content-security-policy']).toBe(
-      "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'")
+      "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
   })
 
   test('the nav links to it from every page', async () => {

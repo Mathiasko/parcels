@@ -206,8 +206,16 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     // `img-src 'self'` is the one addition the map preview needs, and it is the narrowest one that
     // works: the tiles are served by this server from its own on-disk cache, so no third-party origin
     // appears here and the page still cannot load or run anything from anywhere else.
-    reply.header('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'")
+    //
+    // `frame-ancestors 'none'` (and X-Frame-Options for anything that predates it): no other page may
+    // frame this one, or it could lay a decoy over the Delete or Update button and borrow the click.
+    reply.header('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
     reply.header('X-Content-Type-Options', 'nosniff')
+    reply.header('X-Frame-Options', 'DENY')
+    // No other site may even EMBED a response. Without this a page could `<img src>` a map tile from
+    // this server and learn from `onload` which tiles are cached - which is where this person collects
+    // their parcels. Reading the body is already impossible (no CORS); this stops the side channel.
+    reply.header('Cross-Origin-Resource-Policy', 'same-origin')
     const host = req.headers.host ?? ''
     const refuse = () => reply.code(403).type('text/plain').send('forbidden')
     if (!LOCAL_HOST.test(host)) return refuse()

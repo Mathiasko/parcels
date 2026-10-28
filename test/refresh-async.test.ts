@@ -8,7 +8,7 @@ import { STYLE } from '../src/web/views/style.js'
 import { formatAgo, formatElapsed } from '../src/web/views/format.js'
 import { bodyHttp, config, ev, memDb, NOW, okResult, stubAdapter } from './poll-helpers.js'
 
-const CSP = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'"
+const CSP = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
 
 const form = (fields: Record<string, string>) => ({
   payload: new URLSearchParams(fields).toString(),
