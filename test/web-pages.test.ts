@@ -315,6 +315,35 @@ describe('web pages', () => {
     expect(dismissForm).not.toContain('name="number"') // and carries no assign field
   })
 
+  test('each email\'s assign form is folded away until asked for; Dismiss stays in sight', async () => {
+    // 57 emails each with a four-field form was a wall of inputs (85 KB). One line each, until opened.
+    const db = memDb()
+    const a = junkMail(db, '<a@x>', 'First junk')
+    const b = junkMail(db, '<b@x>', 'Second junk')
+    const body = (await get(db, '/attention')).body
+    for (const id of [a, b]) {
+      const fold = body.lastIndexOf('<details class="asg"><summary>Assign to a parcel…</summary>', body.indexOf(`action="/attention/${id}/assign"`))
+      expect(fold, String(id)).toBeGreaterThan(-1)
+      const closes = body.indexOf('</details>', fold)
+      expect(body.indexOf(`action="/attention/${id}/assign"`)).toBeLessThan(closes)       // the form is inside
+      expect(body.indexOf(`action="/attention/${id}/dismiss"`)).toBeGreaterThan(closes)   // Dismiss is not
+    }
+    expect(body).not.toContain('<details class="asg" open>')
+  })
+
+  test('an assign that was refused re-opens that email\'s form, with the error and what was typed', async () => {
+    const db = memDb()
+    const id = Number(db.prepare('INSERT INTO messages (message_id, subject, parsed_ok) VALUES (?, ?, 0)').run('<z@x>', 'Hi').lastInsertRowid)
+    junkMail(db, '<other@x>', 'Another')
+    const res = await post(db, `/attention/${id}/assign`, { number: 'garbage 123' })
+    expect(res.statusCode).toBe(400)
+    const open = res.body.indexOf('<details class="asg" open>')
+    expect(open).toBeGreaterThan(-1)
+    expect(res.body.indexOf(`action="/attention/${id}/assign"`)).toBeGreaterThan(open)
+    expect(res.body.match(/<details class="asg" open>/g)).toHaveLength(1)
+    expect(res.body).toContain('value="garbage 123"')
+  })
+
   test('POST /attention/:messageId/dismiss clears the item from the list and prunes its stored copy', async () => {
     const db = memDb()
     const id = junkMail(db)

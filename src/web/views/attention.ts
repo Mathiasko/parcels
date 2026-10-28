@@ -1,7 +1,7 @@
 import type { Parcel } from '../../db/parcels.js'
 import type { UnparsedMessage } from '../queries.js'
 import { formatDateTime } from './format.js'
-import { html, type Html } from './html.js'
+import { html, raw, type Html } from './html.js'
 import { layout, notice, scroller, type PageCtx } from './layout.js'
 import { parcelFields, type AddValues } from './add.js'
 import { parcelName } from './index.js'
@@ -64,6 +64,20 @@ function clearSection(messages: UnparsedMessage[]): Html {
 </details>`
 }
 
+/**
+ * The assign form, folded into one line until it is asked for. Rendered open for every email it was
+ * a four-field form apiece - 57 of them made an 85 KB wall of inputs in which the emails themselves
+ * were hard to find. Most of these are dismissed, not assigned, so Dismiss stays outside the fold.
+ * A refused assign comes back open, with its error and what was typed, because that is the one the
+ * reader was in the middle of.
+ */
+function assignFold(m: UnparsedMessage, error?: AttentionError): Html {
+  const mine = error?.messageId === m.id
+  return html`<details class="asg"${mine ? raw(' open') : ''}><summary>Assign to a parcel…</summary>
+  <form method="post" action="/attention/${m.id}/assign">${parcelFields(mine ? error.values : {})}
+  <p><button class="pri">Assign to a parcel</button></p></form></details>`
+}
+
 export function attentionPage(
   messages: UnparsedMessage[], dormant: Parcel[], ctx: PageCtx, error?: AttentionError,
 ): Html {
@@ -76,8 +90,7 @@ ${messages.map(m => html`<div class="item">
   <h3>${m.subject ?? '(no subject)'}</h3>
   <div class="meta">${m.from ?? 'unknown sender'}${m.receivedAt ? html` · ${formatDateTime(m.receivedAt, ctx.now)}` : ''}${m.note ? html` · ${m.note}` : ''}</div>
   ${error?.messageId === m.id ? notice('warn', html`<p>${error.message}</p>`, true) : ''}
-  <div class="acts"><form method="post" action="/attention/${m.id}/assign">${parcelFields(error?.messageId === m.id ? error.values : {})}
-  <p><button class="pri">Assign to a parcel</button></p></form>
+  <div class="acts">${assignFold(m, error)}
   <form method="post" action="/attention/${m.id}/dismiss"><button class="link">Dismiss<span class="vh"> ${m.subject ?? '(no subject)'}</span></button></form></div>
 </div>`)}`}</div>
 <h2>Dormant parcels</h2>

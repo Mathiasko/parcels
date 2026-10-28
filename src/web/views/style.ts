@@ -219,6 +219,8 @@ td .st{line-height:1.375rem}
 .acts{display:flex;gap:.5rem 1rem;align-items:flex-end;flex-wrap:wrap;margin-top:1rem}
 .acts form{margin:0}
 .acts p{margin:1rem 0 0}
+.acts .asg{margin:0}
+.acts .asg[open]{flex-basis:100%}
 
 /* The locker code: the one thing on the page that gets read off a screen at arm's length while
    standing at the box, so it is the largest text in the panel. Not blue - the pickup panel already
