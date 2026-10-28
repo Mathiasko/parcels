@@ -254,6 +254,57 @@ describe('web core: faithful rendering', () => {
     expect(res.body).toBe('forbidden')
   })
 
+  test('the parcel page calls its own name a name, not a label (the Gmail label is something else)', async () => {
+    const db = memDb()
+    const id = parcel(db, { label: 'Shoes' })
+    const body = (await get(db, `/parcel/${id}`)).body
+    expect(body).toContain('<h3 class="sec">Name</h3>')
+    expect(body).toMatch(/<input name="label" value="Shoes" placeholder="e\.g\. Shoes from Zalando" aria-label="Name">/)
+    expect(body).toContain('<button>Save name</button>')
+    expect(body).not.toContain('<h3 class="sec">Label</h3>')
+    // ...and the same word where a parcel is first named, on /add and on each email in /attention.
+    expect((await get(db, '/add')).body).toContain('<label>Name<input name="label"')
+  })
+
+  test('raw carrier responses are tucked under a closed "Technical details", and absent when there are none', async () => {
+    const db = memDb()
+    const id = parcel(db)
+    scan(db, id, [ev('a', 'in_transit')], 'in_transit')
+    expect((await get(db, `/parcel/${id}`)).body).not.toContain('Technical details')
+    db.prepare('INSERT INTO raw_responses (parcel_id, carrier, fetched_at, body) VALUES (?, ?, ?, ?)').run(id, 'posta', NOW.toISOString(), '{"x":1}')
+    const body = (await get(db, `/parcel/${id}`)).body
+    const tech = body.indexOf('<details class="tech"><summary>Technical details</summary>')
+    expect(tech).toBeGreaterThan(-1)
+    expect(body.indexOf('&quot;x&quot;')).toBeGreaterThan(tech)
+    expect(body).not.toContain('<h2>Raw carrier responses</h2>')
+    expect(tech).toBeLessThan(body.indexOf('<details class="del">'))   // still above Delete, but closed
+  })
+
+  test('a parcel whose status line has nothing to say leaves no empty status box', async () => {
+    const db = memDb()
+    const id = parcel(db, { carrier: 'packeta', number: 'Z123456789' })
+    scan(db, id, [ev('a', 'unknown', 1, 'Your parcel is on its way to you.')], 'unknown')
+    expect((await get(db, `/parcel/${id}`)).body).not.toContain('<div class="status"></div>')
+    const known = parcel(db, { number: 'RR000000002SK' })
+    scan(db, known, [ev('a', 'in_transit')], 'in_transit')
+    expect((await get(db, `/parcel/${known}`)).body).toMatch(/<div class="status"><span class="st/)
+  })
+
+  test('the pickup deadline is worded exactly as on the dashboard', async () => {
+    for (const days of [5, 2, 1, 0, -1]) {
+      const db = memDb()
+      const id = parcel(db, { label: 'Shoes' })
+      scan(db, id, [ev('x', 'ready_for_pickup')], 'ready_for_pickup',
+        { kind: 'post_office', name: 'Pošta Bratislava 1', street: 'Nám. SNP 35', city: 'Bratislava' },
+        new Date(NOW.getTime() + days * 86_400_000))
+      const app = buildServer({ db, config, now: () => NOW })
+      const clock = async (url: string) => /<p class="clock">[\s\S]*?<\/p>/.exec((await app.inject({ method: 'GET', url })).body)?.[0]
+      const onDashboard = await clock('/')
+      expect(onDashboard, String(days)).toBeDefined()
+      expect(await clock(`/parcel/${id}`), String(days)).toBe(onDashboard)
+    }
+  })
+
   test('requests with a foreign Host header are refused (DNS rebinding)', async () => {
     const app = buildServer({ db: memDb(), config })
     const bad = await app.inject({ method: 'GET', url: '/', headers: { host: 'evil.example' } })

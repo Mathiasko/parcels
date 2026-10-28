@@ -3,14 +3,14 @@ import { isEmailOnlyCarrier } from '../../core/types.js'
 import type { StoredEvent } from '../../db/events.js'
 import type { RawResponse } from '../queries.js'
 import {
-  calendarDaysBetween, CARRIER_NAME, dayKey, formatClock, formatDateTime, formatDay, formatDayHeading, isKnown, plural,
+  CARRIER_NAME, dayKey, formatClock, formatDateTime, formatDayHeading, isKnown, plural,
   quietIndicator, statusIndicator, toneClass,
 } from './format.js'
 import { STATUS_TITLE } from '../../notify/rules.js'
 import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
-import { mapsUrl, noDeadlineNote, parcelName, pickupCodeLine, pickupSummary, refreshBanner, sinceOf, type RefreshNote } from './index.js'
+import { mapsUrl, noDeadlineNote, parcelName, pickupClock, pickupCodeLine, pickupSummary, refreshBanner, type RefreshNote } from './index.js'
 import type { TileGrid } from '../../core/slippy.js'
 
 const RAW_SHOWN_CHARS = 20_000
@@ -100,24 +100,25 @@ function pickupPanel(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx, map
   if (!where) return html``
   const maps = mapsUrl(p)
   const ready = p.status === 'ready_for_pickup'
-  const since = sinceOf({ parcel: p, last })
-  const days = since ? Math.floor((ctx.now.getTime() - since.getTime()) / 86_400_000) : 0
-  const left = p.retainedTill ? calendarDaysBetween(ctx.now, p.retainedTill) : undefined
-  const clock = p.retainedTill
-    ? html`<p class="clock"><b class="due${left! <= 0 ? raw(' due-now') : ''}">Collect by ${formatDay(p.retainedTill, ctx.now)}</b> · <span class="t-2">${left! < 0 ? 'deadline passed' : left === 0 ? 'today' : left === 1 ? 'tomorrow' : `${left} days left`}</span></p>`
-    : ready && since
-      ? html`<p class="clock">Since ${formatDateTime(since, ctx.now)}${days >= 1 ? html` · <b>${plural(days, 'day')}</b>` : ''}</p>` : ''
+  // The dashboard's own clock line, so a deadline reads the same on both pages: a deadline whenever the
+  // carrier gave one, else how long it has waited - which is only true while it is waiting.
+  const { out: clock, urgency } = p.retainedTill || ready ? pickupClock({ parcel: p, last }, ctx.now) : { out: html``, urgency: 'none' }
   const note = ready ? noDeadlineNote([{ parcel: p, last }]) : ''
-  return html`<section class="pk" aria-label="Pickup point"><div class="pk-h${ready ? '' : raw(' plain')}${ready && left !== undefined && left <= 0 ? raw(' due-now') : ''}"><div class="where">${where}</div>${ready ? statusIndicator('ready_for_pickup') : html`<span class="meta">Pickup point</span>`}</div>
+  return html`<section class="pk" aria-label="Pickup point"><div class="pk-h${ready ? '' : raw(' plain')}${ready && urgency === 'now' ? raw(' due-now') : ''}"><div class="where">${where}</div>${ready ? statusIndicator('ready_for_pickup') : html`<span class="meta">Pickup point</span>`}</div>
 <div class="pk-b">${clock}${ready ? pickupCodeLine(code) : ''}${ready && map ? mapPanel(map, where) : ''}${note || maps ? html`<p class="meta">${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps ↗</a>` : ''}</p>` : ''}</div></section>`
 }
 
+/**
+ * What the carriers actually sent, for whoever is diagnosing a wrong status. Closed by default under
+ * "Technical details": an open heading of JSON above Delete told the owner it was something to read.
+ */
 function rawSection(raws: RawResponse[], ctx: PageCtx): Html {
   if (raws.length === 0) return html``
-  return html`<h2>Raw carrier responses</h2>${raws.map(r => html`<details>
+  return html`<details class="tech"><summary>Technical details</summary>
+<p class="meta">What the carrier sent back, newest first.</p>${raws.map(r => html`<details>
   <summary>${formatDateTime(r.fetchedAt, ctx.now)}${r.carrierLevel ? ' · carrier-level (a failed batch of several parcels, not specific to this one)' : ''}</summary>
   <pre tabindex="0">${r.body.length > RAW_SHOWN_CHARS ? `${r.body.slice(0, RAW_SHOWN_CHARS)}\n... (${r.body.length - RAW_SHOWN_CHARS} more characters)` : r.body}</pre>
-</details>`)}`
+</details>`)}</details>`
 }
 
 /**
@@ -156,6 +157,9 @@ function statusLine(p: Parcel, events: StoredEvent[]): Html {
   return html``
 }
 
+/** The status line's box, or nothing at all when the line is empty: an empty box is a gap in the page. */
+const statusBox = (line: Html): Html => (line.toString() === '' ? html`` : html`<div class="status">${line}</div>`)
+
 function timelineSection(p: Parcel, events: StoredEvent[], ctx: PageCtx): Html {
   if (events.length > 0) return html`<h2 class="sec">Timeline · ${plural(events.length, 'event')}</h2>${timeline(events, ctx)}`
   const why = p.archivedAt !== undefined
@@ -180,7 +184,7 @@ export function parcelPage(
 <div class="cols"><div>
 <div class="head"><h1 class="big">${parcelName(p)}</h1>
   ${isTracked(p) ? html`<form class="inline" method="post" action="/refresh"><input type="hidden" name="parcel" value="${p.id}"><button>Refresh this parcel</button></form>` : ''}</div>
-<div class="status">${statusLine(p, events)}</div>
+${statusBox(statusLine(p, events))}
 <p class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span>${p.merchant && p.merchant !== parcelName(p) ? html` · ${p.merchant}` : ''}${p.statusRaw ? html` · carrier says: ${p.statusRaw}` : ''}</p>${
   // Said on every email-only parcel, with or without events: it is why there is no refresh button and
   // why the timeline is whatever the mail said, which is not guessable from the page otherwise.
@@ -190,9 +194,9 @@ ${timelineSection(p, events, ctx)}
 ${rawSection(raws, ctx)}
 ${deleteSection(p)}
 </div>
-<aside class="side"><h3 class="sec">Label</h3>
+<aside class="side"><h3 class="sec">Name</h3>
 <form class="inl" method="post" action="/parcel/${p.id}/label">
-  <input name="label" value="${p.label ?? ''}" placeholder="Label" aria-label="Label"><button>Save label</button></form>
+  <input name="label" value="${p.label ?? ''}" placeholder="e.g. Shoes from Zalando" aria-label="Name"><button>Save name</button></form>
 ${plain ? '' : html`<h3 class="sec">Postcode <span class="meta">(used by GLS and DPD)</span></h3>${postcodeForm(p)}`}
 </aside></div>`, ctx)
 }

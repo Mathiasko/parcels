@@ -127,14 +127,16 @@ const newestFirst = (a: Entry, b: Entry): number => stamp(b) - stamp(a) || b.par
 
 // --- the pickup clock ------------------------------------------------------------------------------
 
-type Urgency = 'none' | 'soon' | 'now'
+export type Urgency = 'none' | 'soon' | 'now'
 
 /**
  * The line that tells you how long you have. Only Slovenská pošta ever sends a deadline, so for most parcels
  * this is the age of the pickup ("Since Mon 26 Oct, 17:19 · 3 days"), which is all we know. Relative counts
  * are never printed without the absolute date beside them: the page cannot refresh itself.
+ *
+ * The parcel page prints this same line, so a deadline is worded one way wherever it appears.
  */
-function pickupClock(e: Entry, now: Date): { out: Html; urgency: Urgency } {
+export function pickupClock(e: Entry, now: Date): { out: Html; urgency: Urgency } {
   const p = e.parcel
   if (p.retainedTill) {
     const d = calendarDaysBetween(now, p.retainedTill)

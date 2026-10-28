@@ -11,7 +11,7 @@ export function parcelFields(v: AddValues = {}): Html {
 <label>Tracking number<input name="number" value="${v.number ?? ''}" class="mono" required></label>
 <label>Carrier<select name="carrier"><option value="">Detect from number</option>${(Object.keys(CARRIER_NAME) as CarrierId[]).map(id =>
     html`<option value="${id}"${v.carrier === id ? ' selected' : ''}>${CARRIER_NAME[id]}</option>`)}</select></label>
-<label>Label<input name="label" value="${v.label ?? ''}"></label>
+<label>Name<input name="label" value="${v.label ?? ''}" placeholder="e.g. Shoes from Zalando"></label>
 <label>Postcode<input name="postcode" value="${v.postcode ?? ''}" size="8" placeholder="default"><span class="meta hint">Used by GLS and DPD.</span></label></div>`
 }
 
