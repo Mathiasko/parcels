@@ -10,12 +10,13 @@
   The whole query is ONE property, `hasTheWord`, and that is the entire point of this file.
   Gmail's filter FORM has separate From / Subject / Has-the-words boxes and it ANDs them together,
   so a filter built as From: the carriers AND Subject: a dispatch word matches nothing: no single
-  message satisfies both. The query below is one OR-expression in one field, and uses no `from:` or
-  `subject:` operator at all. Bare terms match anywhere in the message, headers included, so a
-  carrier domain still matches mail from that carrier - and also matches an e-shop that merely names
-  the carrier, which is wanted here.
+  message satisfies both. The query below is one OR-expression in one field, with the `from:` and
+  `subject:` operators grouped INSIDE it: mail from a carrier; or mail from a listed shop whose
+  subject also uses shipping wording; or any mail whose subject uses the narrower dispatch wording.
+  Bare terms were tried first and matched whole bodies - a GDPR paragraph saying "odoslanie" was
+  enough - so every term is now tied to the sender or the subject.
 
-  It covers the five carriers and e-shop dispatch wording, because the shop's own "your order has
+  It covers the carriers and e-shop dispatch wording, because the shop's own "your order has
   been dispatched" mail is often the FIRST notice of a parcel, days before the carrier writes, and
   sometimes the only one. Gmail ignores diacritics (odoslana matches odoslaná) but does not stem, so
   the word forms are listed one by one.

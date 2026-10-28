@@ -321,7 +321,7 @@ describe('the notification is raised once per new version', () => {
     recordUpdateCheck(db, parseUpdateCheck(BEHIND), NOW)
     const n = buildNotifications(db, [], NOW, 8787).find(x => /update is available/i.test(x.title))!
     expect(n.url).toBe('http://127.0.0.1:8787/health')
-    expect(n.message).toContain('3')
+    expect(n.message).toMatch(/Update now/)
   })
 })
 

@@ -353,11 +353,11 @@ Parcels   In flight   History   Attention   Health                Add parcel
 
 Every page has an `h1` (22/28) and optionally a **lede**: one line, 15px, ink-2, that is the *answer*, computed on the server from data it already has. The index lede is built from clauses; each shows only when it is true, in this order:
 
-1. `N ready for pickup` (parcels, not locations), then `N out for delivery`, then `N need attention` (`failed_attempt` + `problem`).
+1. `N in flight`, carrying as a clause the parcels that want something: `N ready for pickup` (parcels, not locations), `N out for delivery`, `N need attention` (`failed_attempt` + `problem`). *(Rev 4: these are counted INSIDE the total — `2 in flight, both ready for pickup.` — because the earlier `2 ready for pickup. 2 in flight.` was read as four parcels.)*
 2. `N has no status; read its latest message.` for each in-flight parcel that has events but an uncoded status (§2.4). **This is the clause that stops the lede lying.**
-3. `N in flight.`
+3. *(Rev 4: merged into clause 1.)*
 4. `Packeta is failing, so this may be out of date.` if a carrier serving an in-flight parcel is `failing` or `needs attention`.
-5. *(Rev 3)* **States that are actionable but are not statuses**, because the poller will never ask about those parcels again, or has stopped asking about all of them: `N needs a postcode.` (a carrier-rejected postcode: `core/poll.ts` skips the parcel for ever), `N is no longer polled (see Attention).` (dormant), and `The poller has not run lately, so this may be out of date (see Health).`
+5. *(Rev 3)* **States that are actionable but are not statuses**, because the poller will never ask about those parcels again, or has stopped asking about all of them: `N needs a postcode.` (a carrier-rejected postcode: `core/poll.ts` skips the parcel for ever), `N is no longer polled (see Attention).` (dormant), and `Not checked since 09:00, so this may be out of date — see Health.` *(Rev 4: the time, not the word "poller")*
 
 and the one sentence that must be earned:
 
@@ -367,11 +367,11 @@ Real examples, with the data as it is today:
 
 | In flight | Lede |
 |---|---|
-| #35 ready (Z-BOX), #36 no events, #1 registered | `1 ready for pickup. 3 in flight.` |
+| #35 ready (Z-BOX), #36 no events, #1 registered | `3 in flight, 1 ready for pickup.` |
 | as above, but #35 is still prose-only | `3 in flight. 1 has no status; read its latest message.` |
 | all parcels classified, none urgent, carriers healthy | `2 in flight. Nothing needs you.` |
 | same, but Packeta is failing | `2 in flight. Packeta is failing, so this may be out of date.` |
-| six pickups at three places, one out for delivery | `6 ready for pickup, 1 out for delivery. 9 in flight.` |
+| six pickups at three places, one out for delivery | `9 in flight, 6 ready for pickup and 1 out for delivery.` |
 | zero | **no lede.** The empty state says `Nothing in flight. Parcels appear here when an email arrives or when you add one.` (not "0 in flight" above it) |
 
 A parcel with **no events** at all (a brand-new GLS parcel) does *not* block "Nothing needs you": there is nothing that could be waiting.
@@ -514,7 +514,7 @@ Wed 21 Oct
 
 ### 6.5 Table (history)
 
-> **[Rev 2]** Alex S4, S1, S10, plus the real data. The third column is now a defined **Outcome** (`Delivered`, `Returned`, or empty); names are underlined at `--edge` (they are the only way into a parcel from this page); the year groups use the **real** distribution (2026: 14, 2025: 18, 2023: 1; the page shows 34 rows and my count of those three is 33, so one row has a first-seen year I did not reconcile); and **I dropped the ellipsis** (see below). I rendered it with the real rows.
+> **[Rev 2]** Alex S4, S1, S10, plus the real data. The third column is now a defined **Outcome** (`Delivered`, `Returned`, or *(Rev 4)* a quiet `Archived` — empty read as missing data on a page that is mostly archived rows); names are underlined at `--edge` (they are the only way into a parcel from this page); the year groups use the **real** distribution (2026: 14, 2025: 18, 2023: 1; the page shows 34 rows and my count of those three is 33, so one row has a first-seen year I did not reconcile); and **I dropped the ellipsis** (see below). I rendered it with the real rows.
 
 ```
 34 finished parcels: 1 delivered, 32 archived. Dates are delivery or return dates;
