@@ -14,7 +14,7 @@ import { parseTile } from '../core/slippy.js'
 import { readTile, tileDirFor } from '../core/tiles.js'
 import { isDormant } from '../core/backoff.js'
 import { recordPollRun, runPoll, type PollDeps } from '../core/poll.js'
-import { failRun, getRun, listRuns, reapStaleRuns, runningRun, startRun, type PollRun } from '../db/poll-runs.js'
+import { claimRun, failRun, getRun, listRuns, reapStaleRuns, runningRun, type PollRun } from '../db/poll-runs.js'
 import { allAdapters } from '../carriers/registry.js'
 import { createNotifier } from '../notify/send.js'
 import type { Notifier } from '../notify/types.js'
@@ -22,7 +22,7 @@ import { listDelivered, setLabel, setPostalCode } from '../db/parcels.js'
 import { carrierHealth } from '../db/health.js'
 import { getIngestStatus } from '../db/ingest-status.js'
 import { getPickupCode, pickupCodesFor } from '../db/pickup-codes.js'
-import { dismissMessage, dismissMessages } from '../db/messages.js'
+import { dismissMessage, dismissMessages, linkMessage } from '../db/messages.js'
 import { listActivity, logAction, type Cause } from '../db/activity-log.js'
 import { addParcel, cleanPostcode, MAX_LABEL } from './actions.js'
 import { applySettings, changedSettingFields, settingsValues, submittedSettings, type SettingsValues } from './settings.js'
@@ -561,7 +561,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     if (!message) return notFound(reply, 'email')
     const f = form(req)
     const values = { number: text(f.number), carrier: text(f.carrier), label: text(f.label), postcode: text(f.postcode) }
-    const link = (parcelId: number) => db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = ? WHERE id = ?').run(parcelId, messageId)
+    const link = (parcelId: number) => linkMessage(db, messageId, parcelId)
     const result = db.transaction(() => {
       const r = addParcel(db, config, { ...values, source: 'email', sourceMessageId: message.messageId })
       // The email is about a parcel we already track: resolve it against that parcel rather than leave it waiting.
@@ -699,7 +699,14 @@ export function buildServer(deps: WebDeps): FastifyInstance {
           ...(deps.ingestClient ? { client: deps.ingestClient } : {}),
         }
       : undefined
-    const runId = startRun(db, 'web', now())
+    // Claimed, not just started: the hourly poller is another process and the in-process guard cannot
+    // see it. If it is mid-run, this click joins that run's spinner instead of starting a second one.
+    const claim = claimRun(db, 'web', now())
+    if (!claim.claimed) {
+      refreshing = false
+      return reply.redirect(`${back}?run=${claim.live.id}`, 303)
+    }
+    const runId = claim.id
     // The press itself is an entry, not only its effects: "nothing changed when I pressed refresh" is a
     // report, and without this there would be no record that it was ever pressed. The count is how many
     // parcels it actually covered, which is the other half of that answer.
