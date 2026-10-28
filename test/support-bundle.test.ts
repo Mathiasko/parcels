@@ -515,3 +515,43 @@ describe('the Support section on /health and the download route', () => {
     }
   })
 })
+
+describe('redaction keeps pace with the carriers', () => {
+  /**
+   * The redaction pass restates every carrier's number shape. That knowledge lives in the adapters,
+   * so the two can drift - and the drift is silent and one-directional: a widened shape stops being
+   * redacted and the bundle starts carrying real numbers. GLS widened from 11 digits to 10-12 during
+   * this project, so this is a thing that happens rather than a thing that might.
+   *
+   * Every registered carrier is asked for a number it claims, and the redactor must hide it.
+   */
+  const SAMPLES: Record<string, string[]> = {
+    posta: ['RA123456785SK'],
+    packeta: ['Z1234567890'],
+    gls: ['1234567890', '123456789012'],          // the 10 and the 12, both ends of the range
+    sps: ['70312345678901', 'SKABCDE12ABCDEFGHJ'],
+    dpd: ['01234567890123', '01234567890123X'],
+    dhl: ['JJD0099999999', 'JVGL9999999999', '3SBCC000123456', '0001234567890123'],
+  }
+
+  test('every shape a registered carrier claims is redacted out of a bundle', async () => {
+    const { allAdapters } = await import('../src/carriers/registry.js')
+    const ids = allAdapters().map(a => a.id)
+    expect(ids.length).toBeGreaterThan(0)
+    for (const id of ids) {
+      const samples = SAMPLES[id]
+      // A carrier added without a sample here is the drift this test exists to catch.
+      expect(samples, `no redaction sample for carrier "${id}"`).toBeDefined()
+      for (const n of samples!) {
+        expect(allAdapters().some(a => a.matches(n)), `${id} should claim ${n}`).toBe(true)
+        expect(redactSensitive(`carrier said: ${n} failed`)).not.toContain(n)
+      }
+    }
+  })
+
+  test('a number embedded in a log line is redacted, not just a bare one', () => {
+    const line = '2026-10-27T18:06:00Z polled 3 parcel(s), 2 carrier failure(s) (gls: transport for 1930144672)'
+    expect(redactSensitive(line)).not.toContain('1930144672')
+    expect(redactSensitive(line)).toContain(REDACTED_NUMBER)
+  })
+})
