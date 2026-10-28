@@ -50,6 +50,16 @@ export interface Parcel {
   archivedAt?: Date
 }
 
+/** What a parcel is called wherever it is shown: the user's name for it, else the shop, else its number. */
+export const parcelName = (p: Parcel): string => p.label ?? p.merchant ?? p.trackingNumber
+
+/** `Z-BOX, Hlavna 12, Zilina`: commas throughout, the same in a banner as on the page. */
+export function pickupSummary(p: Parcel): string | undefined {
+  if (!p.pickup) return undefined
+  const place = [p.pickup.name, p.pickup.street].filter(Boolean).join(', ')
+  return [place, p.pickup.city].filter(Boolean).join(', ') || undefined
+}
+
 /**
  * `status`, `statusRaw` and `statusDetail` always overwrite (undefined clears the raw/detail
  * columns so a stale detail never outlives its status). `pickup`, when supplied, replaces the

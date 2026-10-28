@@ -11,16 +11,11 @@ import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
 
-export const parcelName = (p: Parcel): string => p.label ?? p.merchant ?? p.trackingNumber
+export { parcelName, pickupSummary } from '../../db/parcels.js'
+import { parcelName, pickupSummary } from '../../db/parcels.js'
 
 /** What the dashboard's "Refresh now" does, said while it is doing it. */
 const REFRESH_DOES = 'Checking for new mail and asking the carriers for updates.'
-
-export function pickupSummary(p: Parcel): string | undefined {
-  if (!p.pickup) return undefined
-  const place = [p.pickup.name, p.pickup.street].filter(Boolean).join(', ')
-  return [place, p.pickup.city].filter(Boolean).join(', ') || undefined
-}
 
 /**
  * A Maps link for the pickup point. Coordinates are a pin and win when present, but only Packeta ever

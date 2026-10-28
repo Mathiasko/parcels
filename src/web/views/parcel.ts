@@ -1,5 +1,5 @@
 import { postcodeRejected, type Parcel } from '../../db/parcels.js'
-import { isEmailOnlyCarrier } from '../../core/types.js'
+import { isEmailOnlyCarrier, isTerminalStatus } from '../../core/types.js'
 import type { StoredEvent } from '../../db/events.js'
 import type { RawResponse } from '../queries.js'
 import {
@@ -21,8 +21,7 @@ const RAW_SHOWN_CHARS = 20_000
  * button would start a run that asks nobody anything and come back saying it had refreshed.
  */
 const isTracked = (p: Parcel): boolean =>
-  p.archivedAt === undefined && p.status !== 'delivered' && p.status !== 'returned'
-  && !isEmailOnlyCarrier(p.carrier)
+  p.archivedAt === undefined && !isTerminalStatus(p.status) && !isEmailOnlyCarrier(p.carrier)
 
 /**
  * The timeline, newest first. The query returns oldest first (ties by id), so reversing it gives

@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon'
 import type { Database } from '../db/index.js'
 import type { CanonicalStatus, CarrierId, NewEvent } from '../core/types.js'
-import { getParcel, markAnnounced, type Parcel } from '../db/parcels.js'
+import { getParcel, markAnnounced, parcelName, pickupSummary, type Parcel } from '../db/parcels.js'
 import { carrierHealth, markCarrierNotified, type HealthRow } from '../db/health.js'
 import { getIngestStatus, markIngestNotified } from '../db/ingest-status.js'
 import { getUpdateCheck, markUpdateNotified } from '../db/update-state.js'
@@ -33,15 +33,6 @@ export const CARRIER_NAME: Record<CarrierId, string> = {
   posta: 'Slovenská pošta', packeta: 'Packeta', gls: 'GLS', sps: 'SPS', dpd: 'DPD', dhl: 'DHL',
 }
 
-const parcelName = (p: Parcel): string => p.label ?? p.merchant ?? p.trackingNumber
-
-/** `Z-BOX, Hlavna 12, Zilina`: commas throughout, the way the dashboard writes the same place. */
-function pickupLine(p: Parcel): string | undefined {
-  if (!p.pickup) return undefined
-  const place = [p.pickup.name, p.pickup.street].filter(Boolean).join(', ')
-  return [place, p.pickup.city].filter(Boolean).join(', ') || undefined
-}
-
 const collectBy = (d: Date): string =>
   `collect by ${DateTime.fromJSDate(d, { zone: DISPLAY_ZONE }).setLocale('en').toFormat('ccc d LLL')}`
 
@@ -66,9 +57,8 @@ function waitingDay(p: Parcel, now: Date): string {
  * The facts come from durable state, not from this run alone:
  * - A status transition is `parcels.status` differing from `last_announced_status`. It therefore
  *   needs no new event (Packeta and SPS change status with prose-only events), survives a run that
- *   had no notifier, and a transient `unknown` is not a transition. Never from the events table's `notified_at`:
- *   every appended event is marked notified at append time so a newly added parcel's backfilled
- *   history cannot fire a burst of stale banners.
+ *   had no notifier, and a transient `unknown` is not a transition. Never from individual events: a
+ *   newly added parcel's backfilled history must not fire a burst of stale banners.
  * - `newEvents` (this run's inserted events) is used only for a repeat failed attempt, where the
  *   status does not change but a new attempt happened.
  *
@@ -116,7 +106,7 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
 
       const showPickup = p.status === 'ready_for_pickup' || newPickup
       const parts = [
-        showPickup ? pickupLine(p) : undefined,
+        showPickup ? pickupSummary(p) : undefined,
         p.status === 'ready_for_pickup' && p.retainedTill && p.retainedTill > now ? collectBy(p.retainedTill) : undefined,
       ].filter((s): s is string => s !== undefined)
       if (parts.length === 0) {
