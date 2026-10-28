@@ -827,8 +827,9 @@ that would have made that incident self-diagnosing reads:
 ### Reminders while a parcel is waiting
 
 A parcel left at a pickup point is mentioned again **twice a day, at 08:00 and 15:30** local, until
-it is collected or its status changes. The banner says where it is waiting, and the deadline if the
-carrier gave one.
+it is collected or its status changes. The banner says which day of waiting it is (`Still waiting for
+you · day 3`, the day it arrived being day 1, counted in calendar days in Bratislava), where it is
+waiting, and the deadline if the carrier gave one.
 
 - The poller's launchd schedule carries a **15:30 slot** on top of the hourly runs for exactly this
   reason; without it the afternoon reminder would arrive at 16:00, since every other run is on the

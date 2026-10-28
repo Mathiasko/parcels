@@ -3,6 +3,9 @@ import { buildNotifications } from '../src/notify/rules.js'
 import { runPoll } from '../src/core/poll.js'
 import { carrierHealth, recordHealth } from '../src/db/health.js'
 import { markAnnounced, updateParcelState, getParcel, type ParcelStateUpdate } from '../src/db/parcels.js'
+import { recordIngest } from '../src/db/ingest-status.js'
+import { recordUpdateCheck } from '../src/db/update-state.js'
+import { parseUpdateCheck } from '../src/core/update.js'
 import type { Database } from '../src/db/index.js'
 import type { CanonicalStatus, CarrierId, NewEvent, ParcelEvent } from '../src/core/types.js'
 import type { Notification, Notifier } from '../src/notify/types.js'
@@ -63,8 +66,8 @@ test('the first appearance of a pickup location notifies with the address in the
   updateParcelState(db, id, { status: 'ready_for_pickup', pickup: ZBOX })
   const [n, ...rest] = build(db)
   expect(rest).toEqual([])
-  expect(n!.message).toContain('Z-BOX')
-  expect(n!.message).toContain('Hlavna 12, Zilina')
+  // Name, street and city each separated by a comma, exactly as the dashboard writes the place.
+  expect(n!.message).toContain('Z-BOX, Hlavna 12, Zilina')
   // Nothing new the next time round: the pickup point is no longer "first seen".
   expect(build(db)).toEqual([])
 })
@@ -441,4 +444,78 @@ test('a parcel that is no longer waiting stops being nudged', () => {
   expect(out).toHaveLength(1)
   expect(out[0]!.title).toMatch(/^Delivered — /)                 // the transition, not a nudge
   expect(build(db, [], new Date('2026-10-28T08:00:00Z'))).toEqual([])
+})
+
+
+test('a reminder says which day of waiting it is, counted in calendar days in Bratislava', () => {
+  const db = memDb()
+  // Ready on Sunday 25 Oct at 23:30 local (22:30Z): Sunday is day 1, however late in the day it was.
+  parcelIn(db, 'ready_for_pickup', { pickup: ZBOX, lastChangedAt: new Date('2026-10-25T22:30:00Z') })
+  const tuesday = build(db, [], new Date('2026-10-27T08:00:00Z'))   // 09:00 local on Tuesday
+  expect(tuesday.map(n => n.title)).toEqual(['Still waiting for you · day 3 — RA000000001SK'])
+})
+
+test('a reminder for a parcel with no known arrival time says nothing about how long', () => {
+  const db = memDb()
+  parcelIn(db, 'ready_for_pickup', { pickup: ZBOX })
+  expect(build(db, [], new Date('2026-10-27T08:00:00Z')).map(n => n.title)).toEqual(['Still waiting for you — RA000000001SK'])
+})
+
+// --- copy a non-technical reader can act on -------------------------------------------------------
+
+test('a summary puts the parcels waiting for pickup first, so the length cap cannot cut them off', () => {
+  const db = memDb()
+  fiveTransitions(db, 5)   // ids 1..5 go out for delivery...
+  const ready = parcelIn(db, 'in_transit', {}, 'posta', 'RA000000099SK')
+  updateParcelState(db, ready, { status: 'ready_for_pickup', pickup: ZBOX })   // ...and the last one is ready
+  const [summary] = build(db)
+  expect(summary!.title).toBe('6 parcel updates')
+  expect(summary!.message).toMatch(/^Ready for pickup — RA000000099SK; Out for delivery — /)
+})
+
+test('the update banner says what to do, not how many commits there are', () => {
+  const db = memDb()
+  recordUpdateCheck(db, parseUpdateCheck({
+    status: 0,
+    stdout: 'state behind\nversion 0.1.0\nbranch main\nlocal aaaaaaa\nupstream origin/main\nremote bbbbbbb\nbehind 3\n',
+    stderr: '',
+  }), NOW)
+  const n = build(db).find(x => x.groupKey === 'update')!
+  expect(n.message).toBe('A new version is ready — open Health and press Update now.')
+  expect(n.message).not.toMatch(/commit|origin/)
+})
+
+test('a broken carrier is explained as tracking not working, likely needing an app update', () => {
+  const db = memDb()
+  recordHealth(db, 'gls', 'gated', 'gated for 123', NOW)
+  const n = build(db).find(x => x.groupKey === 'carrier-gls')!
+  expect(n.message).toBe("Tracking for GLS isn't working right now. It probably needs an app update.")
+  expect(n.message).not.toMatch(/adapter/)
+})
+
+function failIngest(db: Database, error: string): void {
+  for (const h of [0, 1, 2]) recordIngest(db, { ok: false, error }, new Date(NOW.getTime() + h * HOUR))
+}
+
+test.each([
+  'Error: Invalid credentials (Failure)',
+  'Error: [AUTHENTICATIONFAILED] Invalid credentials (Failure)',
+  'AuthenticationFailure: Authentication failed',
+])('a mail failure that looks like a rejected password says to re-enter it in Settings (%s)', error => {
+  const db = memDb()
+  failIngest(db, error)
+  const n = build(db, [], new Date(NOW.getTime() + 2 * HOUR)).find(x => x.groupKey === 'ingest')!
+  expect(n.title).toBe('Mail ingest is failing')
+  expect(n.message).toMatch(/App Password was probably revoked or changed/)
+  expect(n.message).toMatch(/Settings/)
+  expect(n.url).toBe(`http://127.0.0.1:${PORT}/settings`)
+})
+
+test('any other mail failure keeps the generic message and points at Health', () => {
+  const db = memDb()
+  failIngest(db, 'Error: getaddrinfo ENOTFOUND imap.gmail.com')
+  const n = build(db, [], new Date(NOW.getTime() + 2 * HOUR)).find(x => x.groupKey === 'ingest')!
+  expect(n.message).not.toMatch(/App Password/)
+  expect(n.message).toMatch(/3 runs in a row/)
+  expect(n.url).toBe(`http://127.0.0.1:${PORT}/health`)
 })

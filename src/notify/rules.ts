@@ -35,14 +35,27 @@ export const CARRIER_NAME: Record<CarrierId, string> = {
 
 const parcelName = (p: Parcel): string => p.label ?? p.merchant ?? p.trackingNumber
 
+/** `Z-BOX, Hlavna 12, Zilina`: commas throughout, the way the dashboard writes the same place. */
 function pickupLine(p: Parcel): string | undefined {
   if (!p.pickup) return undefined
-  const place = [p.pickup.name, p.pickup.street].filter(Boolean).join(' ')
+  const place = [p.pickup.name, p.pickup.street].filter(Boolean).join(', ')
   return [place, p.pickup.city].filter(Boolean).join(', ') || undefined
 }
 
 const collectBy = (d: Date): string =>
   `collect by ${DateTime.fromJSDate(d, { zone: DISPLAY_ZONE }).setLocale('en').toFormat('ccc d LLL')}`
+
+/**
+ * `· day 3`: which calendar day (in Bratislava) of waiting this is, the day it arrived being day 1.
+ * Counted from `lastChangedAt`, the newest carrier event - for a parcel sitting at a pickup point that
+ * is its arrival there, and it is what the dashboard's "Since ..." shows. Without it, nothing is said.
+ */
+function waitingDay(p: Parcel, now: Date): string {
+  if (!p.lastChangedAt) return ''
+  const day = (d: Date) => DateTime.fromJSDate(d, { zone: DISPLAY_ZONE }).startOf('day')
+  const n = Math.round(day(now).diff(day(p.lastChangedAt), 'days').days) + 1
+  return n >= 1 ? ` · day ${n}` : ''
+}
 
 /**
  * Decides what to announce now, as the notifications to send, and RECORDS that it did. Despite the
@@ -72,7 +85,8 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
   const dueSlot = slots.at(-1)
 
   const { parcelUpdates, alarms } = db.transaction(() => {
-    const parcelUpdates: Notification[] = []
+    // `waiting` marks a parcel ready for pickup: those lead a summary (see below).
+    const parcelUpdates: Array<Notification & { waiting: boolean }> = []
 
     const candidates = new Set((db.prepare(`
       SELECT id FROM parcels WHERE archived_at IS NULL AND (
@@ -111,12 +125,13 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
 
       const headline = transitioned || failedAttempt || newPickup
         ? STATUS_TITLE[p.status]
-        : deadlineDue ? 'Pickup deadline approaching' : 'Still waiting for you'
+        : deadlineDue ? 'Pickup deadline approaching' : `Still waiting for you${waitingDay(p, now)}`
       parcelUpdates.push({
         groupKey: `parcel-${id}`,
         title: `${headline} — ${parcelName(p)}`,
         message: parts.join(' · '),
         url: `${base}/parcel/${id}`,
+        waiting: p.status === 'ready_for_pickup',
       })
       markAnnounced(db, id, p.status, p.pickup !== undefined)
       if (deadlineDue) sent.run(id, now.toISOString())
@@ -132,7 +147,7 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
       return { groupKey: `carrier-${health.carrier}`, title, message, url: `${base}/health` }
     })
     const ingest = ingestAlarm(db, health, now)
-    if (ingest) alarms.push({ groupKey: 'ingest', ...ingest, url: `${base}/health` })
+    if (ingest) alarms.push({ groupKey: 'ingest', title: ingest.title, message: ingest.message, url: `${base}${ingest.page}` })
     const away = stalePollAlarm(db, now)
     if (away) alarms.push({ groupKey: 'poller', ...away, url: `${base}/health` })
     const update = updateAlarm(db)
@@ -140,11 +155,15 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
     return { parcelUpdates, alarms }
   })()
 
-  if (parcelUpdates.length <= SUMMARY_ABOVE) return [...parcelUpdates, ...alarms]
+  const updates = parcelUpdates.map(({ waiting: _, ...n }) => n)
+  if (updates.length <= SUMMARY_ABOVE) return [...updates, ...alarms]
+  // The banner text is capped (see send.ts), so what leads is what survives: parcels waiting to be
+  // collected go first, because they are the ones that ask the reader to do something.
+  const waitingFirst = [...parcelUpdates.filter(n => n.waiting), ...parcelUpdates.filter(n => !n.waiting)]
   return [{
     groupKey: 'summary',
-    title: `${parcelUpdates.length} parcel updates`,
-    message: parcelUpdates.map(n => n.title).join('; '),
+    title: `${updates.length} parcel updates`,
+    message: waitingFirst.map(n => n.title).join('; '),
     url: `${base}/`,
   }, ...alarms]
 }
@@ -162,16 +181,31 @@ function everyoneFailedThisRun(rows: HealthRow[], now: Date): boolean {
  * revoked App Password otherwise stops parcels appearing without a word). Like a stale carrier, it is held
  * back when every carrier failed in this same run, which is the Mac being offline.
  */
-function ingestAlarm(db: Database, rows: HealthRow[], now: Date): { title: string; message: string } | undefined {
+function ingestAlarm(db: Database, rows: HealthRow[], now: Date): { title: string; message: string; page: string } | undefined {
   const s = getIngestStatus(db)
   if (!s || s.consecutiveFailures < STALE_AFTER_FAILURES || s.notifiedAt) return undefined
   if (everyoneFailedThisRun(rows, now)) return undefined
   markIngestNotified(db, now)
+  if (s.lastError !== undefined && AUTH_FAILURE.test(s.lastError)) {
+    return {
+      title: 'Mail ingest is failing',
+      message: `Gmail has refused the login for ${s.consecutiveFailures} runs in a row: the App Password was probably revoked or changed. Make a new one and enter it in Settings.`,
+      page: '/settings',
+    }
+  }
   return {
     title: 'Mail ingest is failing',
     message: `Mail ingest has failed for ${s.consecutiveFailures} runs in a row; new parcels may not appear. See Health.`,
+    page: '/health',
   }
 }
+
+/**
+ * What a rejected password looks like in the stored error text: Gmail's `[AUTHENTICATIONFAILED] Invalid
+ * credentials`, imapflow's `AuthenticationFailure` (its class name, which the stored text starts with),
+ * and the wording other servers use. Text, because text is all `ingest_status.last_error` keeps.
+ */
+const AUTH_FAILURE = /AUTHENTICATIONFAILED|AuthenticationFailure|invalid credentials|authentication failed|bad credentials|login failed/i
 
 /**
  * A new version of the app, announced once per version.
@@ -196,7 +230,7 @@ function updateAlarm(db: Database): { title: string; message: string } | undefin
     markUpdateNotified(db, c.remoteSha)
     return {
       title: 'A parcels update is available',
-      message: `${c.behind} new commit(s) on ${c.upstream ?? 'the upstream branch'}. Open Health and press Update to install it.`,
+      message: 'A new version is ready — open Health and press Update now.',
     }
   } catch {
     return undefined
@@ -218,7 +252,7 @@ function carrierAlarms(rows: HealthRow[], now: Date): Array<{ health: HealthRow;
     if (h.consecutiveFailures <= 0 || h.notifiedAt) continue
     const name = CARRIER_NAME[h.carrier]
     if (h.lastErrorKind === 'gated') {
-      out.push({ health: h, title: `${name} tracking is broken`, message: `${name} is refusing requests; its adapter needs attention.` })
+      out.push({ health: h, title: `${name} tracking is broken`, message: `Tracking for ${name} isn't working right now. It probably needs an app update.` })
     } else if (h.lastErrorKind && h.consecutiveFailures >= STALE_AFTER_FAILURES && !everyoneFailed) {
       out.push(h.lastErrorKind === 'transport'
         ? { health: h, title: `${name} tracking is stale`, message: `${name} has not answered for ${h.consecutiveFailures} runs in a row; its parcels are not updating.` }
