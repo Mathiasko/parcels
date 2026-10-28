@@ -295,6 +295,9 @@ describe('the Add to Calendar link', () => {
 
   test('the link sits above a card\'s stretched link, and keeps a visible focus ring', () => {
     expect(STYLE).toMatch(/\.cal\{[^}]*position:relative;z-index:1/)
-    expect(STYLE).toMatch(/\.card-l a\.cal:focus-visible\{outline:2px solid var\(--ink\)/)
+    // Only the parcel's NAME trades its outline for the card-wide overlay ring; every other link in a
+    // card (this one, "set one" for a postcode) keeps the site's own focus ring.
+    expect(STYLE).not.toMatch(/\.card-l a:focus-visible\{outline:none/)
+    expect(STYLE).toMatch(/\.card-l \.who a:focus-visible\{outline:none/)
   })
 })

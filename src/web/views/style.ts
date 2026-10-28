@@ -117,8 +117,8 @@ form.inline{display:inline}
 .card-l .who{display:inline;font-size:.9375rem;line-height:1.4667;overflow-wrap:break-word}
 .card-l .who a{color:inherit;text-decoration:none}
 .card-l .who a::after{content:"";position:absolute;inset:0}
-.card-l a:focus-visible{outline:none}
-.card-l a:focus-visible::after{outline:2px solid var(--ink);outline-offset:-2px}
+.card-l .who a:focus-visible{outline:none}
+.card-l .who a:focus-visible::after{outline:2px solid var(--ink);outline-offset:-2px}
 .card-l .who+.meta{margin-left:.5rem}
 .card-l .ev{margin:.125rem 0 0;color:var(--ink-2);overflow-wrap:break-word}
 .card-l .ev.prose{color:var(--ink)}
@@ -138,10 +138,8 @@ form.inline{display:inline}
 .clock .due{color:var(--signal)}
 .clock .due-now{color:var(--warn)}
 /* The calendar link belongs to the deadline, so it rides on the deadline line, one per parcel, at the size
-   of the Maps link; lifted above a card's stretched link like the tracking number, with its own ring
-   because the card's rule hides every other link's outline in favour of the overlay's. */
+   of the Maps link; lifted above a card's stretched link like the tracking number. */
 .cal{position:relative;z-index:1;font-size:.8125rem}
-.card-l a.cal:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .pk-b{padding:.75rem 1.5rem}
 .pk-b .meta{margin:.5rem 0 0}
 
