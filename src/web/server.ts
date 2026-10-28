@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import {
@@ -687,6 +688,20 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     .type('text/plain; charset=utf-8')
     .header('content-disposition', `attachment; filename="${supportBundleFilename(now())}"`)
     .send(supportBundle()))
+
+  /**
+   * The Gmail filter, as a download for the guide on /settings: Gmail's Import filters wants a file
+   * chosen from disk, and Downloads is where anyone can find one. Read per request from the checkout -
+   * the one copy, the file the README points at - and the ordinary 404 if it is not there.
+   */
+  app.get('/gmail-filter.xml', async (_req, reply) => {
+    let xml: string
+    try { xml = readFileSync(join(repoRoot(), 'gmail-filter.xml'), 'utf8') } catch { return notFound(reply) }
+    return reply.code(200)
+      .type('application/xml; charset=utf-8')
+      .header('content-disposition', 'attachment; filename="gmail-filter.xml"')
+      .send(xml)
+  })
 
   const attention = (reply: FastifyReply, error?: AttentionError, status = 200) =>
     send(reply, attentionPage(

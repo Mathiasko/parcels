@@ -50,6 +50,43 @@ export function calendarListWhy(err: unknown): string {
 }
 
 const APP_PASSWORDS = 'https://myaccount.google.com/apppasswords'
+const TWO_STEP = 'https://myaccount.google.com/signinoptions/twosv'
+// Straight to the tab, not to the inbox: `u/0` is the first signed-in account, which is why the guide
+// says to check the address before importing.
+const GMAIL_FILTERS = 'https://mail.google.com/mail/u/0/#settings/filters'
+const GMAIL_LABELS = 'https://mail.google.com/mail/u/0/#settings/labels'
+
+/**
+ * How to connect Gmail, click by click, on the page where the result is typed in. Open until a mail
+ * account is saved, folded after. Every button is named as Gmail and Google name it, in bold, in the
+ * order they appear, and every page is a direct link - the person following this has never seen the
+ * Filters tab, and "Settings, Filters and Blocked Addresses" is three clicks they would have to find.
+ * The filter itself is a download from this server, so "Choose File" finds it in Downloads.
+ *
+ * The order matters: the label must exist and be visible to IMAP before the first test, or that test
+ * says the mailbox is not there.
+ */
+function gmailGuide(v: SettingsValues): Html {
+  return html`<details class="guide"${v.imapConfigured ? '' : raw(' open')}><summary>How to connect Gmail — three steps, about five minutes</summary>
+<ol class="steps">
+<li><strong>Label your shipping emails.</strong>
+<ol>
+<li>Download the filter: <a href="/gmail-filter.xml" download>gmail-filter.xml</a>. It goes to your Downloads folder.</li>
+<li>Open <a href="${GMAIL_FILTERS}">Gmail’s filter settings</a> (in Gmail: the gear icon → <strong>See all settings</strong> → <strong>Filters and Blocked Addresses</strong>). Signed in to more than one Google account? Check the address at the top right is the one you will enter below.</li>
+<li>At the bottom of the page, click <strong>Import filters</strong>.</li>
+<li>Click <strong>Choose File</strong>, pick <strong>gmail-filter.xml</strong> in Downloads, then click <strong>Open file</strong>.</li>
+<li>Gmail shows the filter it found. Tick <strong>Apply new filters to existing email</strong> — without it only mail that arrives from now on is labelled — then click <strong>Create filters</strong>.</li>
+<li>Open <a href="${GMAIL_LABELS}">Gmail’s label settings</a>, find <strong>parcels</strong> under Labels, and make sure <strong>Show in IMAP</strong> is ticked.</li>
+</ol></li>
+<li><strong>Make an App Password</strong>, which lets this app read that label without your Google password.
+<ol>
+<li><a href="${TWO_STEP}">2-Step Verification</a> has to be on. If it is off, turn it on first.</li>
+<li>Open <a href="${APP_PASSWORDS}">App passwords</a>, type a name such as <strong>Parcels</strong>, and click <strong>Create</strong>.</li>
+<li>Google shows a 16-letter password once. Copy it.</li>
+</ol></li>
+<li><strong>Paste it here.</strong> Enter your Gmail address and the App Password below and click <strong>Save settings</strong>. Saving tests the connection, and the answer appears at the top of this page.</li>
+</ol></details>`
+}
 
 /** The notifier choices, said as what they do. Only under Advanced; "Automatic" is right for everyone. */
 const NOTIFIER_LABEL: Record<string, string> = {
@@ -80,7 +117,7 @@ function testResult(r: ImapProbeResult): Html {
       return r.messages === 0
         ? notice('neutral', html`<p class="st t-3">${glyph('pre_transit')}Connected, nothing to read</p>
 <p><strong>${r.user}</strong> — the label <strong>${r.mailbox}</strong> exists, and it is empty.</p>
-<p class="meta">The connection, the password and the label are all fine, so this is not a fault: a Gmail filter that matches nothing looks exactly like this. Check that the filter's action is <strong>Apply the label: ${r.mailbox}</strong>, and that <strong>Also apply filter to matching conversations</strong> was ticked when you made it, which is what back-fills the label with mail you already have.</p>`, true)
+<p class="meta">The connection, the password and the label are all fine, so this is not a fault: a Gmail filter that matches nothing looks exactly like this. Check that the filter's action is <strong>Apply the label: ${r.mailbox}</strong>, and that <strong>Apply new filters to existing email</strong> was ticked when you imported it (<strong>Also apply filter to matching conversations</strong>, on a filter made by hand), which is what fills the label with mail you already have.</p>`, true)
         : notice('neutral', html`<p class="st t-ok">${glyph('delivered')}Connected</p>
 <p><strong>${r.user}</strong> — the label <strong>${r.mailbox}</strong> has <strong>${r.messages}</strong> ${r.messages === 1 ? 'message' : 'messages'}.</p>
 <p class="meta">Signed in, the label is visible, and its emails can be read. Everything is in place: new shipping emails become parcels at the next hourly check.</p>`, true)
@@ -91,7 +128,7 @@ function testResult(r: ImapProbeResult): Html {
 
     case 'mailbox':
       return notice('warn', html`<p><strong>The mailbox <span class="mono">${r.mailbox}</span> is not there.</strong></p>
-<p>Connected and authenticated, so the account is fine. Gmail hides a label from IMAP until you say otherwise, and this is the step that catches everyone: <strong>Gmail, Settings, Labels</strong>, find <strong>${r.mailbox}</strong>, tick <strong>Show in IMAP</strong>. Then test again.</p>
+<p>Connected and authenticated, so the account is fine. Gmail hides a label from IMAP until you say otherwise, and this is the step that catches everyone: open <a href="${GMAIL_LABELS}">Gmail’s label settings</a>, find <strong>${r.mailbox}</strong>, tick <strong>Show in IMAP</strong>. Then test again.</p>
 <p class="meta">If it is already ticked, check the name: it is case-sensitive, and a nested label is written <span class="mono">parent/child</span>.</p>${why(r.detail)}`, true)
 
     case 'network':
@@ -164,6 +201,7 @@ ${state.test && state.saved ? testResult(state.test) : ''}
 <form method="post" action="/settings">
 <h2>Gmail</h2>
 <p class="meta">The app reads the emails Gmail files under one label, signing in with an App Password rather than your Google password. To stop reading mail, clear these fields and the mail server under Advanced.</p>
+${gmailGuide(v)}
 <div class="fields">
 <label class="wide">Gmail address<input type="email" name="imapUser" value="${v.imapUser}" autocomplete="username" placeholder="you@gmail.com" autocapitalize="off" spellcheck="false"></label>
 <label class="wide">App Password <span class="meta">${v.passSet ? '(set)' : '(not set)'}</span><input type="password" name="imapPass" autocomplete="new-password" spellcheck="false">${

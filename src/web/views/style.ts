@@ -151,6 +151,13 @@ form.inline{display:inline}
 .cline .sep:has(+ .calf){display:none}
 /* A form that lands on its own section (#support, #test, #m-12, #cal-50): a little air above it. */
 [id]{scroll-margin-top:1rem}
+/* The Gmail guide on /settings: a disclosure, open until mail is set up, of numbered steps. */
+.guide{margin:0 0 1.25rem;padding:.75rem 1rem;background:var(--surface);border:1px solid var(--rule-s);border-radius:8px}
+.guide summary{font-size:.875rem;font-weight:600;color:var(--ink);padding:0}
+.steps{margin:.75rem 0 0;padding-left:1.25rem}
+.steps>li{margin:0 0 .75rem}
+.steps ol{margin:.375rem 0 0;padding-left:1.25rem;list-style:lower-alpha}
+.steps ol li{margin:0 0 .3rem}
 .calf{position:relative;z-index:1;margin:0;font-size:.8125rem;line-height:1.3846}
 .calf[open]{flex-basis:100%}
 .calf summary{width:fit-content;padding:0;font-size:inherit;list-style:none;border-radius:6px}

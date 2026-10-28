@@ -108,6 +108,34 @@ describe('GET /settings', () => {
 })
 
 describe('the settings page speaks to the person setting up Gmail', () => {
+  test('a click-by-click guide, open until mail is set up, naming every button as Gmail names it', async () => {
+    const fresh = (await harness({ imap: undefined }).get('/settings')).body
+    expect(fresh).toContain('<details class="guide" open>')
+    const guide = /<details class="guide"[\s\S]*?<\/details>/.exec(fresh)![0]
+    // In the order they are clicked.
+    const order = ['/gmail-filter.xml', 'Import filters', 'Choose File', 'Open file', 'Apply new filters to existing email',
+      'Create filters', 'Show in IMAP', 'App passwords', '<strong>Create</strong>', 'Save settings']
+    const at = order.map(w => guide.indexOf(w))
+    expect(at.every(i => i > -1), JSON.stringify(at)).toBe(true)
+    expect([...at].sort((x, y) => x - y)).toEqual(at)
+    // Straight to the pages, not to "find Settings, then the tab".
+    expect(guide).toContain('href="https://mail.google.com/mail/u/0/#settings/filters"')
+    expect(guide).toContain('href="https://mail.google.com/mail/u/0/#settings/labels"')
+    expect(guide).toContain('href="https://myaccount.google.com/apppasswords"')
+    // It sits before the fields it ends by sending you to, and folds away once mail is saved.
+    expect(fresh.indexOf('<details class="guide"')).toBeLessThan(fresh.indexOf('name="imapUser"'))
+    const done = (await harness().get('/settings')).body
+    expect(done).toContain('<details class="guide"><summary>')
+  })
+
+  test('the filter it tells you to import is a download from this server, the very file in the checkout', async () => {
+    const res = await harness().get('/gmail-filter.xml')
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toContain('application/xml')
+    expect(res.headers['content-disposition']).toBe('attachment; filename="gmail-filter.xml"')
+    expect(res.body).toBe(readFileSync(join(import.meta.dirname, '..', 'gmail-filter.xml'), 'utf8'))
+  })
+
   test('the account field is a Gmail address that a password manager understands', async () => {
     const body = (await harness().get('/settings')).body
     expect(body).toContain('Gmail address<input type="email" name="imapUser"')
