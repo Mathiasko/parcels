@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util'
 import { loadRuntimeConfig, type Config } from './core/config.js'
 import { captureBodies, createHttpClient } from './core/http.js'
 import { recordPollRun, runPoll, summarize } from './core/poll.js'
-import { startRun } from './db/poll-runs.js'
+import { claimRun } from './db/poll-runs.js'
 import type { Carrier, CarrierAdapter, CarrierId, HttpClient } from './core/types.js'
 import { isPollable } from './core/types.js'
 import { buildPollDeps, initRuntime } from './core/runtime.js'
@@ -120,8 +120,13 @@ async function poll(ctx: CliContext): Promise<void> {
   // stores the very status changes the hourly run would have announced, so it announces them too.
   // Recorded in `poll_runs` like every other poll: the activity log on the Health page is of the app's
   // activity, so a run started by hand belongs in it exactly as the hourly one does.
+  // Claimed, not just started: the hourly poller or a "Refresh now" may be mid-run in another process.
   const startedAt = new Date()
-  const runId = startRun(ctx.db, 'cli', startedAt)
+  const claim = claimRun(ctx.db, 'cli', startedAt)
+  if (!claim.claimed) {
+    throw new CliError(`a poll is already running (run ${claim.live.id}, ${claim.live.trigger}, started ${claim.live.startedAt.toISOString()}); not starting another`)
+  }
+  const runId = claim.id
   const report = await recordPollRun(ctx.db, runId, runPoll(buildPollDeps(ctx.db, ctx.config, {
     // A poll run by hand is the command line acting, not the poller; the activity log says which.
     cause: { actor: 'cli', runId, at: startedAt },

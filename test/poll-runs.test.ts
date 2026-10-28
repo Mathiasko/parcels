@@ -3,17 +3,24 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import { openDb } from '../src/db/index.js'
 import {
-  POLL_RUNS_KEPT, RUN_STALE_MS, failRun, finishRun, getRun, listRuns, reapStaleRuns, runningRun, startRun,
+  POLL_RUNS_KEPT, RUN_STALE_MS, claimRun, failRun, finishRun, getRun, listRuns, reapStaleRuns, runningRun, startRun,
 } from '../src/db/poll-runs.js'
+import { runPoller } from '../src/poll.js'
 import { recordPollRun, runCounts, runPoll, summarize } from '../src/core/poll.js'
 import { insertParcel } from '../src/db/parcels.js'
 import { runCli } from '../src/cli.js'
 import { bodyHttp, config, ev, memDb, NOW, okResult, stubAdapter } from './poll-helpers.js'
 
 const at = (ms: number) => new Date(NOW.getTime() + ms)
+
+/** The id of a run `claimRun` started; fails the test when it declined to. */
+const claimedId = (c: ReturnType<typeof claimRun>): number => {
+  if (!c.claimed) throw new Error(`expected a claimed run, got live run ${c.live.id}`)
+  return c.id
+}
 
 test('startRun opens a run that is in progress, and finishRun records what it did', () => {
   const db = memDb()
@@ -76,6 +83,54 @@ test('a reaped run that does finish after all has its verdict corrected', () => 
   finishRun(db, id, { counts: { polled: 2, newEvents: 0, failures: 0 }, summary: 'polled 2 parcel(s)' }, at(1000))
   expect(getRun(db, id)!.error).toBeUndefined()
   expect(getRun(db, id)!.polled).toBe(2)
+})
+
+test('claimRun starts a run only when none is live, across connections as across processes', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'parcels-claim-'))
+  const poller = openDb(join(dir, 'p.db'))
+  const web = openDb(join(dir, 'p.db'))
+  try {
+    const first = claimedId(claimRun(poller, 'poller', NOW))
+    // The web's own in-process flag knows nothing about the poller; the table does.
+    const second = claimRun(web, 'web', at(1000))
+    expect(second).toEqual({ claimed: false, live: getRun(web, first) })
+    expect(listRuns(web, 10)).toHaveLength(1)
+
+    finishRun(poller, first, { counts: { polled: 0, newEvents: 0, failures: 0 }, summary: 'x' }, at(2000))
+    const third = claimedId(claimRun(web, 'web', at(3000)))
+    expect(getRun(web, third)).toMatchObject({ trigger: 'web', startedAt: at(3000) })
+  } finally {
+    poller.close(); web.close()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('claimRun reaps an abandoned run first, so a killed process cannot block every run after it', () => {
+  const db = memDb()
+  const killed = startRun(db, 'poller', at(-RUN_STALE_MS - 1000))
+  const claim = claimedId(claimRun(db, 'poller', NOW))
+  expect(getRun(db, killed)!.error).toMatch(/did not finish/)
+  expect(runningRun(db)!.id).toBe(claim)
+})
+
+test('the poller does not start a second run while another process has one live', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'parcels-poller-busy-'))
+  const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+  try {
+    const configPath = join(dir, 'config.json')
+    writeFileSync(configPath, JSON.stringify({ defaultPostalCode: '81101', dbPath: 'parcels.db', mapPreview: false }))
+    const db = openDb(join(dir, 'parcels.db'))
+    const live = startRun(db, 'web', new Date())
+    try {
+      await runPoller(configPath)
+      expect(listRuns(db, 10).map(r => r.id)).toEqual([live])        // no row of its own
+      expect(db.prepare('SELECT COUNT(*) n FROM last_poll').get()).toEqual({ n: 0 })   // and no poll recorded
+      expect(log.mock.calls.flat().join('\n')).toMatch(new RegExp(`run ${live} .*already in progress`))
+    } finally { db.close() }
+  } finally {
+    log.mockRestore()
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test('the run log is bounded: only the newest POLL_RUNS_KEPT rows are kept, newest first', () => {
@@ -147,6 +202,21 @@ test('cli poll records the run, so the log covers the command line too', async (
   expect(runs).toHaveLength(1)
   expect(runs[0]).toMatchObject({ trigger: 'cli', polled: 1, newEvents: 1 })
   expect(runs[0]!.finishedAt).toBeDefined()
+})
+
+test('cli poll refuses to start beside a live run, rather than polling everything twice', async () => {
+  const db = memDb()
+  const live = startRun(db, 'poller', new Date())
+  const adapter = stubAdapter('posta', inputs => inputs.map(i => okResult(i.number, [])), 100)
+  const errors: string[] = []
+  const code = await runCli(['poll'], {
+    db, config: { ...config, mapPreview: false }, out: () => {}, err: l => errors.push(l),
+    http: bodyHttp(), adapters: [adapter], notifier: { send: async () => {} },
+  })
+  expect(code).toBe(1)
+  expect(errors.join('\n')).toMatch(new RegExp(`already running \\(run ${live}`))
+  expect(adapter.calls).toEqual([])
+  expect(listRuns(db, 10).map(r => r.id)).toEqual([live])
 })
 
 /**

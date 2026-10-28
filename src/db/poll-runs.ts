@@ -120,6 +120,24 @@ export function reapStaleRuns(db: Database, now: Date, staleMs: number = RUN_STA
   }
 }
 
+/**
+ * Starts a run unless one is already live, as one decision: reap the abandoned runs, look for a live
+ * one, and only then open a row - all inside a single IMMEDIATE transaction, which takes SQLite's write
+ * lock up front. The poller and the web server are separate processes sharing this table, so an
+ * in-process flag cannot stop them overlapping; two read-then-insert steps would let both see "nothing
+ * running" and both start. Here the second one waits for the lock and then finds the first one's row.
+ */
+export function claimRun(
+  db: Database, trigger: RunTrigger, now: Date,
+): { claimed: true; id: number } | { claimed: false; live: PollRun } {
+  return db.transaction(() => {
+    reapStaleRuns(db, now)
+    const live = runningRun(db)
+    if (live) return { claimed: false as const, live }
+    return { claimed: true as const, id: startRun(db, trigger, now) }
+  }).immediate()
+}
+
 /** The run in progress, if any. Ask `reapStaleRuns` first, or an abandoned run answers here for ever. */
 export function runningRun(db: Database): PollRun | undefined {
   const r = db.prepare('SELECT * FROM poll_runs WHERE finished_at IS NULL ORDER BY id DESC LIMIT 1').get() as Row | undefined
