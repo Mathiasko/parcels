@@ -1,4 +1,4 @@
-import { simpleParser } from 'mailparser'
+import { simpleParser, type ParsedMail } from 'mailparser'
 import type { CarrierId, PickupPoint } from '../core/types.js'
 import { isEmailOnlyCarrier } from '../core/types.js'
 import { normalizeNumber } from '../carriers/registry.js'
@@ -351,6 +351,23 @@ const MERCHANT: Partial<Record<CarrierId, RegExp[]>> = {
 }
 
 /**
+ * The readable text of a parsed message: its text part, or its html flattened when it has none, capped
+ * (both before and after flattening) so a huge message costs a bounded amount of regex work.
+ */
+function bodyText(mail: ParsedMail): string {
+  return (mail.text || (typeof mail.html === 'string' ? htmlToText(mail.html.slice(0, MAX_HTML)) : '')).slice(0, MAX_TEXT)
+}
+
+/**
+ * `bodyText` of a raw message, for a reader that wants nothing else from it (the pickup-code pass reads
+ * stored mail through this, so it gets the same text, and the same caps, as extraction did). Throws
+ * what the parser throws.
+ */
+export async function mailText(raw: Buffer): Promise<string> {
+  return bodyText(await simpleParser(raw))
+}
+
+/**
  * Pulls carrier, tracking number and merchant out of one raw message. Never throws: a message that
  * cannot be read is simply one with no number, which the caller sends to needs-attention.
  */
@@ -358,7 +375,7 @@ export async function extract(raw: Buffer): Promise<Extraction> {
   try {
     const mail = await simpleParser(raw)
     const subject = mail.subject ?? ''
-    const text = (mail.text || (typeof mail.html === 'string' ? htmlToText(mail.html.slice(0, MAX_HTML)) : '')).slice(0, MAX_TEXT)
+    const text = bodyText(mail)
     // Not a single readable byte: no subject AND no body. mailparser does not throw on arbitrary
     // bytes, it just yields nothing, so this is the same case as the catch below - and a message
     // nobody could read is no grounds for deciding it is not a parcel.

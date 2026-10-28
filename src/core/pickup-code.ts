@@ -1,9 +1,8 @@
 import { readFileSync } from 'node:fs'
-import { simpleParser } from 'mailparser'
 import type { Database } from '../db/index.js'
 import { listActive, setMailPickup, type Parcel } from '../db/parcels.js'
 import { needsPickupCodeCheck, recordPickupCode } from '../db/pickup-codes.js'
-import { extractPickupCode, htmlToText, pickupFromMail, type MailPickupPoint } from '../ingest/extract.js'
+import { extractPickupCode, mailText, pickupFromMail, type MailPickupPoint } from '../ingest/extract.js'
 import type { PickupPoint } from './types.js'
 
 export interface PickupCodeDeps {
@@ -20,8 +19,6 @@ export interface PickupCodeReport {
   /** Parcels that gained a pickup point, or the detail of one, from their own mail. */
   points: number
 }
-
-const MAX_HTML = 1_000_000
 
 /** How much of what the carrier should have said about the pickup point is still missing. */
 type PickupGap = 'none' | 'missing' | 'thin' | 'postcode'
@@ -64,8 +61,7 @@ export async function runPickupCodes(deps: PickupCodeDeps): Promise<PickupCodeRe
     for (const m of mails) {
       let text: string
       try {
-        const mail = await simpleParser(read(m.raw_path))
-        text = mail.text || (typeof mail.html === 'string' ? htmlToText(mail.html.slice(0, MAX_HTML)) : '')
+        text = await mailText(read(m.raw_path))
       } catch {
         continue   // an unreadable file must not stop the parcel's other mail being tried
       }
