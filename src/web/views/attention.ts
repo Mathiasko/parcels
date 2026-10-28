@@ -74,8 +74,17 @@ function clearSection(messages: UnparsedMessage[]): Html {
 function assignFold(m: UnparsedMessage, error: AttentionError | undefined, defaultPostcode: string | undefined): Html {
   const mine = error?.messageId === m.id
   return html`<details class="asg"${mine ? raw(' open') : ''}><summary>Assign to a parcel…</summary>
-  <form method="post" action="/attention/${m.id}/assign">${parcelFields(mine ? error.values : {}, { defaultPostcode })}
+  <form method="post" action="/attention/${m.id}/assign#m-${String(m.id)}">${parcelFields(mine ? error.values : {}, { defaultPostcode })}
   <p><button class="pri">Assign to a parcel</button></p></form></details>`
+}
+
+/**
+ * Where the page lands after dismissing the email at `i`: the one that takes its place, else the one
+ * before it, else the top. Without it every Dismiss in a long list started over from the top.
+ */
+function afterDismiss(messages: UnparsedMessage[], i: number): string {
+  const next = messages[i + 1] ?? messages[i - 1]
+  return next ? `#m-${next.id}` : ''
 }
 
 export function attentionPage(
@@ -86,12 +95,12 @@ export function attentionPage(
 <div class="col"><h2>Emails that did not yield a parcel</h2>
 ${messages.length === 0 ? html`<p class="empty">Nothing waiting.</p>` : html`<p class="meta">Assign one to a parcel, or dismiss it as junk. Dismissing takes it off this list and deletes the stored copy of the email; the mail in your mailbox is untouched.</p>
 ${messages.length > 1 ? clearSection(messages) : ''}
-${messages.map(m => html`<div class="item">
+${messages.map((m, i) => html`<div class="item" id="m-${String(m.id)}">
   <h3>${m.subject ?? '(no subject)'}</h3>
   <div class="meta">${m.from ?? 'unknown sender'}${m.receivedAt ? html` · ${formatDateTime(m.receivedAt, ctx.now)}` : ''}${m.note ? html` · ${m.note}` : ''}</div>
   ${error?.messageId === m.id ? notice('warn', html`<p>${error.message}</p>`, true) : ''}
   <div class="acts">${assignFold(m, error, defaultPostcode)}
-  <form method="post" action="/attention/${m.id}/dismiss"><button class="link">Dismiss<span class="vh"> ${m.subject ?? '(no subject)'}</span></button></form></div>
+  <form method="post" action="/attention/${m.id}/dismiss${afterDismiss(messages, i)}"><button class="link">Dismiss<span class="vh"> ${m.subject ?? '(no subject)'}</span></button></form></div>
 </div>`)}`}</div>
 <h2>Dormant parcels</h2>
 <p class="meta">No tracking event for over 30 days, so they are no longer polled.</p>

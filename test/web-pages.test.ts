@@ -297,12 +297,26 @@ describe('web pages', () => {
     expect((await post(db, '/attention/999/assign', { number: 'RA123456785SK' })).statusCode).toBe(404)
   })
 
+  test('Dismiss lands on the email that takes its place (or the one before the last), not back at the top', async () => {
+    const db = memDb()
+    for (const n of [1, 2, 3]) junkMail(db, `<junk${n}@x>`, `Junk ${n}`)
+    const body = (await get(db, '/attention')).body
+    const order = [...body.matchAll(/<div class="item" id="m-(\d+)">/g)].map(m => m[1]!)
+    expect(order).toHaveLength(3)
+    const lands = (id: string) => new RegExp(`action="/attention/${id}/dismiss([^"]*)"`).exec(body)![1]
+    expect(order.map(lands)).toEqual([`#m-${order[1]}`, `#m-${order[2]}`, `#m-${order[1]}`])
+    // The one email left: nothing to land on, so the top.
+    const one = memDb()
+    const only = junkMail(one)
+    expect((await get(one, '/attention')).body).toContain(`action="/attention/${only}/dismiss">`)
+  })
+
   test('GET /attention offers Dismiss in a form of its own, secondary to Assign', async () => {
     const db = memDb()
     const id = junkMail(db)
     const body = (await get(db, '/attention')).body
-    const assign = body.indexOf(`action="/attention/${id}/assign"`)
-    const dismiss = body.indexOf(`action="/attention/${id}/dismiss"`)
+    const assign = body.indexOf(`action="/attention/${id}/assign#m-${id}"`)
+    const dismiss = body.indexOf(`action="/attention/${id}/dismiss`)
     expect(assign).toBeGreaterThan(-1)
     expect(dismiss).toBeGreaterThan(-1)
     // A second button INSIDE the assign form would submit the assign fields, so the dismiss form
@@ -322,11 +336,11 @@ describe('web pages', () => {
     const b = junkMail(db, '<b@x>', 'Second junk')
     const body = (await get(db, '/attention')).body
     for (const id of [a, b]) {
-      const fold = body.lastIndexOf('<details class="asg"><summary>Assign to a parcel…</summary>', body.indexOf(`action="/attention/${id}/assign"`))
+      const fold = body.lastIndexOf('<details class="asg"><summary>Assign to a parcel…</summary>', body.indexOf(`action="/attention/${id}/assign#m-${id}"`))
       expect(fold, String(id)).toBeGreaterThan(-1)
       const closes = body.indexOf('</details>', fold)
-      expect(body.indexOf(`action="/attention/${id}/assign"`)).toBeLessThan(closes)       // the form is inside
-      expect(body.indexOf(`action="/attention/${id}/dismiss"`)).toBeGreaterThan(closes)   // Dismiss is not
+      expect(body.indexOf(`action="/attention/${id}/assign#m-${id}"`)).toBeLessThan(closes)       // the form is inside
+      expect(body.indexOf(`action="/attention/${id}/dismiss`)).toBeGreaterThan(closes)   // Dismiss is not
     }
     expect(body).not.toContain('<details class="asg" open>')
   })
@@ -339,7 +353,7 @@ describe('web pages', () => {
     expect(res.statusCode).toBe(400)
     const open = res.body.indexOf('<details class="asg" open>')
     expect(open).toBeGreaterThan(-1)
-    expect(res.body.indexOf(`action="/attention/${id}/assign"`)).toBeGreaterThan(open)
+    expect(res.body.indexOf(`action="/attention/${id}/assign#m-${id}"`)).toBeGreaterThan(open)
     expect(res.body.match(/<details class="asg" open>/g)).toHaveLength(1)
     expect(res.body).toContain('value="garbage 123"')
   })

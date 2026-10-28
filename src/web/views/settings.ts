@@ -159,7 +159,7 @@ ${state.configError ? notice('warn', html`<p><strong>The saved settings cannot b
 <p class="meta">Parcels are not being checked until this is fixed. Correcting the fields below and saving puts things right.</p>`) : ''}
 ${state.error ? notice('warn', html`<p>${state.error}</p><p class="meta">Nothing was saved.</p>`, true) : ''}
 ${state.saved ? notice('neutral', html`<p>Saved.</p>`, true) : ''}
-${state.test ? testResult(state.test) : ''}
+${state.test && state.saved ? testResult(state.test) : ''}
 
 <form method="post" action="/settings">
 <h2>Gmail</h2>
@@ -200,8 +200,9 @@ ${calendarField(v, state.calendars)}
 <p><button class="pri">Save settings</button></p>
 </form>
 
-<h2>Test the Gmail connection</h2>
+<h2 id="test">Test the Gmail connection</h2>
+${state.test && !state.saved ? testResult(state.test) : ''}
 ${testTarget(v)}
-<form method="post" action="/settings/test"><button>${state.test ? 'Test again' : 'Test connection'}</button></form>
+<form method="post" action="/settings/test#test"><button>${state.test ? 'Test again' : 'Test connection'}</button></form>
 </div>`, ctx)
 }

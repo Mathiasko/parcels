@@ -63,9 +63,9 @@ export function calendarForm(p: Parcel, now: Date, state: CalendarFormState = {}
   const radio = (field: 'day' | 'time', value: string, label: string, checked: boolean) =>
     html`<label class="pick"><input type="radio" name="${field}" value="${value}"${checked ? raw(' checked') : ''}> ${label}</label>`
 
-  return html`<details class="calf"${state.error !== undefined ? raw(' open') : ''}><summary><span class="calf-b">${CAL_ICON}${
+  return html`<details class="calf" id="cal-${String(p.id)}"${state.error !== undefined ? raw(' open') : ''}><summary><span class="calf-b">${CAL_ICON}${
     stored ? html`${stored} · <span class="calf-c">Change</span>` : 'Add to Calendar'}</span><span class="vh">: ${name}</span></summary>
-<form method="post" action="/parcel/${p.id}/calendar">${back ? html`<input type="hidden" name="back" value="${back}">` : ''}${
+<form method="post" action="/parcel/${p.id}/calendar#cal-${String(p.id)}">${back ? html`<input type="hidden" name="back" value="${back}">` : ''}${
     state.error !== undefined ? html`<p class="calf-err" role="alert">${glyph('problem')}<span>${state.error}</span></p>` : ''}
 <fieldset><legend>Day</legend><div class="picks">${slots.days.map(d => radio('day', d.date, d.label, d.date === day))}</div></fieldset>
 <fieldset><legend>Time</legend><div class="picks">${times.map(t => radio('time', t, timeLabel(t), t === time))}${
@@ -127,8 +127,8 @@ export function calendarNotice(o: CalendarOutcome | undefined, p: Parcel | undef
   const name = parcelName(p)
   if (o.ok) {
     return notice('neutral', html`<p>Added <strong>${name}</strong> to Calendar “${o.calendar}”: ${formatSlot(o.startsAt, now)}${
-      o.replaced ? ', in place of the one added before' : ''}.</p><p class="meta">With an alert at that time. Not the calendar you wanted? Choose it in ${SETTINGS}.</p>`, true)
+      o.replaced ? ', in place of the one added before' : ''}.</p><p class="meta">With an alert at that time. Not the calendar you wanted? Choose it in ${SETTINGS}.</p>`, true, 'cal-result')
   }
   return notice('warn', html`${failure(o, name)}
-<p><a href="/parcel/${p.id}/calendar.ics?day=${o.day}&amp;time=${o.time}">Download the event instead</a> <span class="meta">— the same event as a file, for Calendar to open.</span></p>`, true)
+<p><a href="/parcel/${p.id}/calendar.ics?day=${o.day}&amp;time=${o.time}">Download the event instead</a> <span class="meta">— the same event as a file, for Calendar to open.</span></p>`, true, 'cal-result')
 }

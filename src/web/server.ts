@@ -506,7 +506,9 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       }
     }
     const id = remember(outcome)
-    return reply.redirect(back ? `/?calendar=${id}` : `/parcel/${parcel.id}?calendar=${id}`, 303)
+    // To the notice: a Location without a fragment would inherit the form's `#cal-<id>`, and the result is
+    // said in the notice, not in the form.
+    return reply.redirect(back ? `/?calendar=${id}#cal-result` : `/parcel/${parcel.id}?calendar=${id}#cal-result`, 303)
   })
 
   /**

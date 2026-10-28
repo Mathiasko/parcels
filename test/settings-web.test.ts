@@ -129,7 +129,7 @@ describe('the settings page speaks to the person setting up Gmail', () => {
     expect(save).toBeGreaterThan(body.indexOf('name="imapPass"'))
     expect(save).toBeGreaterThan(body.indexOf('name="defaultPostalCode"'))
     // The connection test is still there, as a secondary button after Save.
-    const test = body.indexOf('<form method="post" action="/settings/test"><button>')
+    const test = body.indexOf('<form method="post" action="/settings/test#test"><button>')
     expect(test).toBeGreaterThan(save)
   })
 
@@ -315,6 +315,13 @@ describe('POST /settings/test', () => {
     expect(res.body).toContain('you@gmail.com')
     expect(res.body).toContain('79')
     expect(res.body).toContain('parcels')
+  })
+
+  test('the answer is under its own heading, where the form posts to (#test), not at the top of the page', async () => {
+    const { res } = await resultOf(fakeImap([], { exists: 79 }))
+    const heading = res.body.indexOf('<h2 id="test">Test the Gmail connection</h2>')
+    expect(heading).toBeGreaterThan(-1)
+    expect(res.body.indexOf('<div class="notice')).toBeGreaterThan(heading)
   })
 
   test('an empty label is its own answer: the filter may simply not be matching yet', async () => {

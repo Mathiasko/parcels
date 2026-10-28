@@ -149,6 +149,8 @@ form.inline{display:inline}
 .cline{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:.375rem;margin:.125rem 0 0}
 .cline .clock{margin:0}
 .cline .sep:has(+ .calf){display:none}
+/* A form that lands on its own section (#support, #test, #m-12, #cal-50): a little air above it. */
+[id]{scroll-margin-top:1rem}
 .calf{position:relative;z-index:1;margin:0;font-size:.8125rem;line-height:1.3846}
 .calf[open]{flex-basis:100%}
 .calf summary{width:fit-content;padding:0;font-size:inherit;list-style:none;border-radius:6px}

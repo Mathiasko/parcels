@@ -141,9 +141,9 @@ function activityPanel(entries: ActivityEntry[], ctx: PageCtx): Html {
  * somebody else: they get to read it first, in full, before there is anything to send.
  */
 function supportPanel(bundle: string | undefined): Html {
-  return html`<h2>Support</h2>
+  return html`<h2 id="support">Support</h2>
 <p class="meta">If something here looks wrong, this gathers what the author needs to work out why: the versions, whether the background jobs are loaded, the counts, and the end of the logs. Your parcels themselves are left out — no tracking numbers, parcel names, shops, addresses, locker codes, mail subjects or senders, and never your mail address or your App Password. You can read the whole file below before you send it.</p>
-<form method="post" action="/support"><button>Gather support bundle</button></form>${bundle === undefined ? '' : html`
+<form method="post" action="/support#support"><button>Gather support bundle</button></form>${bundle === undefined ? '' : html`
 <p>Select the text below and copy it, or <a href="/support.txt">download it as a file</a>, and send it to whoever is helping you.</p>
 <pre class="sel bundle" id="support-bundle">${bundle}</pre>`}`
 }
@@ -235,13 +235,13 @@ function updateState(check: StoredUpdateCheck | undefined, ctx: PageCtx): Html {
 function updatePanel(version: string, u: UpdateView | undefined, ctx: PageCtx): Html {
   const view = u ?? {}
   const behind = view.check?.state === 'behind'
-  return html`<h2>Update</h2>
+  return html`<h2 id="update">Update</h2>
 <p class="meta">Where this copy of the app stands against the one it was installed from. Updating fetches the newer code, reinstalls its dependencies, rebuilds, and restarts the two background jobs; it takes a minute or two. If the new code does not build, the previous version is put back and rebuilt, so the dashboard always comes back.</p>
 ${updateResult(view, ctx)}
 <p>Running <b class="mono sel">${version}</b>.</p>
 ${updateState(view.check, ctx)}
-<div class="toolbar">${updateBusy(view) ? '' : html`<form method="post" action="/update/check"><button>Check for updates</button></form>${
-    behind ? html`<form method="post" action="/update"><button>Update now</button></form>` : ''}`}</div>`
+<div class="toolbar">${updateBusy(view) ? '' : html`<form method="post" action="/update/check#update"><button>Check for updates</button></form>${
+    behind ? html`<form method="post" action="/update#update"><button>Update now</button></form>` : ''}`}</div>`
 }
 
 export function healthPage(

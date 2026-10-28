@@ -95,8 +95,8 @@ describe('the form on the dashboard', () => {
     const id = seed(h.db, { name: 'Bratiska', number: 'Z1172430119', pickup: ZBOX, retainedTill: AT_SIX })
     const [card] = cards((await h.get('/')).body)
     const line = /<div class="cline">[\s\S]*?<\/details><\/div>/.exec(card!)![0]
-    expect(line).toMatch(/^<div class="cline"><p class="clock"><b class="due">Collect by Thu 29 Oct<\/b> · <span class="t-2">3 days left<\/span><\/p><span class="sep" aria-hidden="true">·<\/span><details class="calf"><summary><span class="calf-b"><svg class="g" width="14" height="14"[^>]*>.*?<\/svg>Add to Calendar<\/span><span class="vh">: Bratiska<\/span><\/summary>/)
-    expect(line).toContain(`<form method="post" action="/parcel/${id}/calendar"><input type="hidden" name="back" value="home">`)
+    expect(line).toMatch(/^<div class="cline"><p class="clock"><b class="due">Collect by Thu 29 Oct<\/b> · <span class="t-2">3 days left<\/span><\/p><span class="sep" aria-hidden="true">·<\/span><details class="calf" id="cal-\d+"><summary><span class="calf-b"><svg class="g" width="14" height="14"[^>]*>.*?<\/svg>Add to Calendar<\/span><span class="vh">: Bratiska<\/span><\/summary>/)
+    expect(line).toContain(`<form method="post" action="/parcel/${id}/calendar#cal-${id}"><input type="hidden" name="back" value="home">`)
     expect(line).not.toContain('<details class="calf" open')
     expect(line).toContain('<button>Add to Calendar<span class="vh">: Bratiska</span></button>')
   })
@@ -152,7 +152,7 @@ describe('the form on the dashboard', () => {
     const h = harness()
     seed(h.db, { name: 'Open-ended', number: 'Z2', pickup: ZBOX })
     const [card] = cards((await h.get('/')).body)
-    expect(card).toMatch(/<div class="cline"><p class="clock">Since Mon 26 Oct, 06:00<\/p><span class="sep" aria-hidden="true">·<\/span><details class="calf">/)
+    expect(card).toMatch(/<div class="cline"><p class="clock">Since Mon 26 Oct, 06:00<\/p><span class="sep" aria-hidden="true">·<\/span><details class="calf" id="cal-\d+">/)
     const footer = card!.split('<p class="card-f meta">')[1]!.split('</p>')[0]!
     expect(footer).toMatch(/^Packeta did not give a pickup deadline\. <a href="https:\/\/maps\.apple\.com\/[^"]+">Open in Apple Maps/)
     expect(footer).not.toContain('calf')
@@ -164,8 +164,8 @@ describe('the form on the dashboard', () => {
     const b = seed(h.db, { name: 'Parcel B', number: 'Z200', pickup: ZBOX })
     const [shared] = cards((await h.get('/')).body)
     const byName = (n: string) => blocks(shared!).find(x => x.includes(`>${n}</a></h3>`))!
-    expect(forms(byName('Parcel A')).map(f => /action="([^"]+)"/.exec(f)![1])).toEqual([`/parcel/${a}/calendar`])
-    expect(forms(byName('Parcel B')).map(f => /action="([^"]+)"/.exec(f)![1])).toEqual([`/parcel/${b}/calendar`])
+    expect(forms(byName('Parcel A')).map(f => /action="([^"]+)"/.exec(f)![1])).toEqual([`/parcel/${a}/calendar#cal-${a}`])
+    expect(forms(byName('Parcel B')).map(f => /action="([^"]+)"/.exec(f)![1])).toEqual([`/parcel/${b}/calendar#cal-${b}`])
     expect(forms(shared!)).toHaveLength(2)
   })
 
@@ -216,7 +216,7 @@ describe('the form on the parcel page', () => {
     const body = (await h.get(`/parcel/${id}`)).body
     expect(forms(body)).toHaveLength(1)
     expect(body).toMatch(/<div class="pk-b"><div class="cline"><p class="clock">/)
-    expect(forms(body)[0]).toContain(`<form method="post" action="/parcel/${id}/calendar">`)
+    expect(forms(body)[0]).toContain(`<form method="post" action="/parcel/${id}/calendar#cal-${id}">`)
     expect(forms(body)[0]).not.toContain('name="back"')
   })
 
@@ -236,7 +236,7 @@ describe('POST /parcel/:id/calendar', () => {
     recordPickupCode(h.db, id, '004467', 1, NOW)
     const res = await h.post(`/parcel/${id}/calendar`, { day: '2026-10-28', time: '13:00', back: 'home' })
     expect(res.statusCode).toBe(303)
-    expect(location(res)).toMatch(/^\/\?calendar=[0-9a-f]{12}$/)
+    expect(location(res)).toMatch(/^\/\?calendar=[0-9a-f]{12}#cal-result$/)
 
     expect(h.cal.adds).toHaveLength(1)
     const [call] = h.cal.adds
@@ -264,7 +264,7 @@ describe('POST /parcel/:id/calendar', () => {
     const id = seed(h.db, { name: 'Bratiska', number: 'Z1', pickup: ZBOX, retainedTill: AT_SIX })
     const res = await h.post(`/parcel/${id}/calendar`, { day: '2026-10-29', time: '09:00' })
     expect(h.cal.adds[0]!.calendar).toBe('Work')
-    expect(location(res)).toMatch(new RegExp(`^/parcel/${id}\\?calendar=[0-9a-f]{12}$`))
+    expect(location(res)).toMatch(new RegExp(`^/parcel/${id}\\?calendar=[0-9a-f]{12}#cal-result$`))
     expect(noticeOf((await h.get(location(res))).body)).toContain('to Calendar “Work”: Thu 29 Oct, 9:00.')
   })
 
@@ -329,7 +329,7 @@ describe('POST /parcel/:id/calendar', () => {
     const res = await h.post(`/parcel/${id}/calendar`, { day: '2026-10-28', time: '13:00', back: 'home' })
     expect(res.statusCode).toBe(303)
     const n = noticeOf((await h.get(location(res))).body)
-    expect(n).toMatch(/^<div class="notice warn" role="status">/)
+    expect(n).toMatch(/^<div class="notice warn" id="cal-result" role="status">/)
     expect(n).toMatch(says)
     expect(n).toContain(`<a href="/parcel/${id}/calendar.ics?day=2026-10-28&amp;time=13:00">Download the event instead</a>`)
     expect(getCalendarEvent(h.db, id)).toBeUndefined()
@@ -353,13 +353,13 @@ describe('POST /parcel/:id/calendar', () => {
       expect(res.statusCode).toBe(400)
       expect(h.cal.adds).toEqual([])
       const [form] = forms(res.body)
-      expect(form).toMatch(/^<details class="calf" open>/)
+      expect(form).toMatch(/^<details class="calf" id="cal-\d+" open>/)
       expect(form).toContain('<p class="calf-err" role="alert">')
       expect(form).toContain('<span>9:00 today has already passed. Choose a later time or another day.</span>')
       expect(checked(form!, 'day')).toEqual(['2026-10-26'])
       expect(checked(form!, 'time')).toEqual(['09:00'])
       // Only that parcel's form opens.
-      expect(res.body.match(/<details class="calf" open>/g)).toHaveLength(1)
+      expect(res.body.match(/<details class="calf" id="cal-\d+" open>/g)).toHaveLength(1)
     })
 
     test('from the parcel page, the parcel page comes back', async () => {
@@ -368,7 +368,7 @@ describe('POST /parcel/:id/calendar', () => {
       const res = await h.post(`/parcel/${id}/calendar`, { day: '2026-10-30', time: '09:00' })
       expect(res.statusCode).toBe(400)
       expect(res.body).toContain('<h1 class="big">Bratiska</h1>')
-      expect(forms(res.body)[0]).toMatch(/^<details class="calf" open>/)
+      expect(forms(res.body)[0]).toMatch(/^<details class="calf" id="cal-\d+" open>/)
       expect(forms(res.body)[0]).toContain('That day cannot be chosen. Choose one of the days listed.')
     })
 

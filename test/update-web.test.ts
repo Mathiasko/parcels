@@ -91,7 +91,7 @@ describe('the Update section on /health', () => {
     const body = await health(memDb())
     expect(body).toContain('Update')
     expect(body).toMatch(/not been checked|never been checked/i)
-    expect(body).toContain('action="/update/check"')
+    expect(body).toContain('action="/update/check#update"')
   })
 
   test('an up-to-date checkout is reported as up to date, with no Update button', async () => {
@@ -99,7 +99,7 @@ describe('the Update section on /health', () => {
     recordUpdateCheck(db, parseUpdateCheck(CURRENT), NOW)
     const body = await health(db)
     expect(body).toMatch(/up to date/i)
-    expect(body).not.toContain('action="/update"')
+    expect(body).not.toContain('action="/update#update"')
   })
 
   test('a checkout behind its upstream says how far behind, and lists what changed', async () => {
@@ -109,14 +109,14 @@ describe('the Update section on /health', () => {
     expect(body).toMatch(/2 commits behind/i)
     expect(body).toContain('show the pickup code on the dashboard')
     expect(body).toContain('fix the GLS DELIVEREDPS mapping')
-    expect(body).toContain('action="/update"')
+    expect(body).toContain('action="/update#update"')
   })
 
   test('the button is absent when the checkout is not a git repo, and the reason is printed', async () => {
     const db = memDb()
     recordUpdateCheck(db, parseUpdateCheck(NOT_A_REPO), NOW)
     const body = await health(db)
-    expect(body).not.toContain('action="/update"')
+    expect(body).not.toContain('action="/update#update"')
     expect(body).toContain('not a git checkout')
   })
 
@@ -282,7 +282,7 @@ describe('the page follows the update while it runs', () => {
       finishedAt: new Date(NOW.getTime() - 5_000).toISOString(), from: 'ffa1f20', to: '9f8e7d6',
     })
     const body = await health(db)
-    expect(body).not.toContain('action="/update"')
+    expect(body).not.toContain('action="/update#update"')
     expect(body).not.toMatch(/commits? behind/)
     expect(body).toMatch(/up to date/)
   })
@@ -313,7 +313,7 @@ describe('the page follows the update while it runs', () => {
     const db = memDb()
     recordUpdateCheck(db, parseUpdateCheck(BEHIND), NOW)
     statusFile({ state: 'running', startedAt: new Date(NOW.getTime() - 10_000).toISOString() })
-    expect(await health(db)).not.toContain('action="/update"')
+    expect(await health(db)).not.toContain('action="/update#update"')
   })
 
   test('opening the page records the outcome in the activity log, once', async () => {

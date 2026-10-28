@@ -461,7 +461,7 @@ describe('the Support section on /health and the download route', () => {
     const res = await server(loadedDb(), dataDir()).inject({ method: 'GET', url: '/health' })
     expect(res.statusCode).toBe(200)
     expect(res.body).toContain('Support')
-    expect(res.body).toContain('action="/support"')
+    expect(res.body).toContain('action="/support#support"')
     expect(res.body).not.toContain('id="support-bundle"')
   })
 
