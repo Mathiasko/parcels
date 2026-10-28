@@ -24,7 +24,7 @@ a:hover{text-decoration-color:var(--ink)}
 .col{max-width:42rem}
 header{max-width:42rem;margin-bottom:2rem}
 nav{display:flex;flex-wrap:wrap;gap:0 1.5rem;align-items:baseline}
-nav b{font-weight:600;margin-right:.5rem}
+nav a.brand{color:var(--ink);font-weight:600;margin-right:.5rem}
 nav a{display:inline-flex;flex-direction:column;align-items:flex-start;white-space:nowrap;color:var(--ink-3);text-decoration:none;padding:.25rem 0}
 /* the bold current item would widen by a few px and nudge its neighbours: reserve its bold width on every item */
 nav a::after{content:attr(data-t);font-weight:600;height:0;overflow:hidden;visibility:hidden}

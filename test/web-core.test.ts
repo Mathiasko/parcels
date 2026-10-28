@@ -345,6 +345,18 @@ describe('web core: faithful rendering', () => {
     }
   })
 
+  test('every nav label is the heading of the page it opens, and the brand goes home', async () => {
+    const db = memDb()
+    const home = (await get(db, '/')).body
+    expect(home).toContain('<nav aria-label="Main"><a class="brand" href="/">Parcels</a>')
+    const links = [...home.matchAll(/<a (?:class="add" )?href="(\/[a-z]*)" data-t="([^"]+)"/g)].map(m => [m[1]!, m[2]!] as const)
+    expect(links.map(([href]) => href)).toEqual(['/', '/history', '/attention', '/health', '/settings', '/add'])
+    for (const [href, label] of links) {
+      const page = (await get(db, href)).body
+      expect(/<h1[^>]*>([^<]*)<\/h1>/.exec(page)?.[1], href).toBe(label)
+    }
+  })
+
   test('requests with a foreign Host header are refused (DNS rebinding)', async () => {
     const app = buildServer({ db: memDb(), config })
     const bad = await app.inject({ method: 'GET', url: '/', headers: { host: 'evil.example' } })

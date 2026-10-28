@@ -82,7 +82,7 @@ export function attentionPage(
   messages: UnparsedMessage[], dormant: Parcel[], ctx: PageCtx, error?: AttentionError, defaultPostcode?: string,
 ): Html {
   return layout('Attention', '/attention', html`
-<h1>Needs attention</h1>
+<h1>Attention</h1>
 <div class="col"><h2>Emails that did not yield a parcel</h2>
 ${messages.length === 0 ? html`<p class="empty">Nothing waiting.</p>` : html`<p class="meta">Assign one to a parcel, or dismiss it as junk. Dismissing takes it off this list and deletes the stored copy of the email; the mail in your mailbox is untouched.</p>
 ${messages.length > 1 ? clearSection(messages) : ''}

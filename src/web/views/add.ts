@@ -29,8 +29,8 @@ export function parcelFields(v: AddValues = {}, o: FieldOptions = {}): Html {
 }
 
 export function addPage(ctx: PageCtx, error?: string, values?: AddValues, defaultPostcode?: string): Html {
-  return layout('Add a parcel', '/add', html`
-<div class="col"><h1>Add a parcel</h1>
+  return layout('Add parcel', '/add', html`
+<div class="col"><h1>Add parcel</h1>
 <p class="lede">Paste a tracking number. The carrier is detected from its shape unless you choose one.</p>
 ${error ? notice('warn', html`<p>${error}</p>`, true) : ''}
 <form method="post" action="/add">${parcelFields(values, { defaultPostcode, autofocus: true })}

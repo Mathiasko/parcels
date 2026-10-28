@@ -39,7 +39,7 @@ export function layout(title: string, current: string, body: Html, ctx: PageCtx)
 ${ctx.reloadIn ? html`<meta http-equiv="refresh" content="${ctx.reloadIn}">` : ''}<title>${title} - Parcels</title>
 <style>${raw(STYLE)}</style></head>
 <body>${SPRITE}<div class="frame">
-<header><nav aria-label="Main"><b>Parcels</b>${NAV.map(([href, label]) =>
+<header><nav aria-label="Main"><a class="brand" href="/">Parcels</a>${NAV.map(([href, label]) =>
     html`<a href="${href}" data-t="${label}"${href === current ? raw(' aria-current="page"') : ''}>${label}${href === '/health' && trouble ? html`<span class="dot"></span><span class="vh"> carrier problem</span>` : ''}</a>`)
   }<a class="add" href="/add" data-t="Add parcel"${current === '/add' ? raw(' aria-current="page"') : ''}>Add parcel</a></nav></header>
 <main>${body}</main></div></body></html>
