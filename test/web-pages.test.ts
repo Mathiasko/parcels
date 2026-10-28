@@ -954,6 +954,34 @@ describe('refresh reads the mailbox, not only the carriers', () => {
   })
 })
 
+describe('the dashboard on a first run', () => {
+  const IMAP = { host: 'imap.gmail.com', port: 993, user: 'you@gmail.com', pass: 'p', mailbox: 'parcels' }
+  const dashboard = async (db: Database, imap?: Config['imap']) =>
+    (await buildServer({ db, config: { ...config, imap }, now: () => NOW, notifier: { send: async () => {} } })
+      .inject({ method: 'GET', url: '/' })).body
+  const emptyLine = (body: string) => /<p class="empty">([\s\S]*?)<\/p>/.exec(body)?.[1] ?? ''
+
+  test('the empty state links to adding a parcel', async () => {
+    expect(emptyLine(await dashboard(memDb(), IMAP))).toContain('<a href="/add">')
+    expect(emptyLine(await dashboard(memDb()))).toContain('<a href="/add">')
+  })
+
+  test('with Gmail not connected, the dashboard says so and links to Settings', async () => {
+    for (const db of [memDb(), (() => { const d = memDb(); insertParcel(d, { carrier: 'posta', trackingNumber: 'RR1', source: 'manual' }); return d })()]) {
+      const body = await dashboard(db)
+      const notice = /<div class="notice" id="mail-setup">[\s\S]*?<\/div><\/div>/.exec(body)?.[0] ?? ''
+      expect(notice).toMatch(/Gmail is not connected yet/)
+      expect(notice).toContain('<a href="/settings">')
+    }
+    // ...and an empty state that does not promise mail that cannot arrive.
+    expect(emptyLine(await dashboard(memDb()))).not.toMatch(/email arrives/)
+  })
+
+  test('with Gmail connected, there is no such notice', async () => {
+    expect(await dashboard(memDb(), IMAP)).not.toContain('id="mail-setup"')
+  })
+})
+
 describe('what the refresh banner claims', () => {
   /** A finished run with these counts, and the dashboard URL the refresh would have redirected to. */
   const finished = (db: Database, counts: Partial<RunCounts> = {}): string => {
@@ -994,7 +1022,7 @@ describe('what the refresh banner claims', () => {
     insertParcel(db, { carrier: 'posta', trackingNumber: 'RR1', source: 'manual' })
     for (const url of ['/?refreshed=1&failures=2', '/?refreshed=0&failures=0&active=0&read=3&created=2']) {
       const body = (await server(db).inject({ method: 'GET', url })).body
-      expect(body, url).not.toContain('class="notice')
+      expect(body, url).not.toContain('role="status"')
       expect(body, url).not.toContain('Polled')
       expect(body, url).not.toContain('carrier failure')
     }

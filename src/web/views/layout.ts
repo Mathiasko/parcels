@@ -51,9 +51,9 @@ ${ctx.reloadIn ? html`<meta http-equiv="refresh" content="${ctx.reloadIn}">` : '
  * place on the site anything moves, and is otherwise a neutral notice - a run in progress is progress,
  * not a demand, so it gets no colour at all. `role="status"` so a result is announced.
  */
-export function notice(tone: 'neutral' | 'warn' | 'busy', content: Html, status = false): Html {
+export function notice(tone: 'neutral' | 'warn' | 'busy', content: Html, status = false, id?: string): Html {
   const mark = tone === 'warn' ? glyph('problem') : tone === 'busy' ? raw('<span class="spin"></span>') : ''
-  return html`<div class="notice${tone === 'warn' ? raw(' warn') : ''}"${status ? raw(' role="status"') : ''}>${mark}<div>${content}</div></div>`
+  return html`<div class="notice${tone === 'warn' ? raw(' warn') : ''}"${id ? html` id="${id}"` : ''}${status ? raw(' role="status"') : ''}>${mark}<div>${content}</div></div>`
 }
 
 /** A table that scrolls sideways on a narrow window instead of widening the page; focusable so a keyboard can scroll it. */

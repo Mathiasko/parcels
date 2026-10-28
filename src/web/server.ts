@@ -298,7 +298,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const entries = active.map(parcel => ({ parcel, last: latestEvent(db, parcel.id), code: codes.get(parcel.id) }))
     const c = ctx()
     const r = runState(req.query as Record<string, unknown>, c.now, entries.length)
-    return send(reply, indexPage(entries, { ...c, reloadIn: r.reloadIn }, r.note))
+    return send(reply, indexPage(entries, { ...c, reloadIn: r.reloadIn }, r.note, { mailConfigured: config.imap !== undefined }))
   })
 
   /**

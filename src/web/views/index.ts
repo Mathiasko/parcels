@@ -340,14 +340,32 @@ export function indexLede(entries: Entry[], ctx: PageCtx): string {
   return parts.join(' ')
 }
 
-export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote): Html {
+/**
+ * Said on the dashboard for as long as no mail account is saved: on a fresh install this is the one
+ * step between "an empty page" and "parcels arrive by themselves", and the dashboard is where the
+ * friend will be looking when they wonder why nothing has appeared.
+ */
+const MAIL_SETUP = html`<p><strong>Gmail is not connected yet.</strong></p>
+<p>Once it is, parcels are added by themselves from your shipping emails. Connect it in <a href="/settings">Settings</a>; until then you can add parcels by their tracking number.</p>`
+
+export interface IndexOptions {
+  /** Whether a mail account is saved. False shows the "connect Gmail" notice. Absent counts as set up. */
+  mailConfigured?: boolean
+}
+
+export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote, opts: IndexOptions = {}): Html {
   const cards = buildCards(entries).sort(byUrgency)
+  const mailOff = opts.mailConfigured === false
+  // "When an email arrives" is a promise only a connected mailbox can keep.
+  const empty = mailOff
+    ? html`<p class="empty">Nothing in flight. <a href="/add">Add a parcel</a> by its tracking number.</p>`
+    : html`<p class="empty">Nothing in flight. Parcels appear here when a shipping email arrives, or when you <a href="/add">add one</a>.</p>`
   const body = entries.length === 0
-    ? html`<p class="empty">Nothing in flight. Parcels appear here when an email arrives or when you add one.</p>`
+    ? empty
     : html`<p class="lede">${indexLede(entries, ctx)}</p>${refreshBanner(note, ctx.now, REFRESH_DOES)}${
         cards.map(c => card(c, ctx))}`
   return layout('In flight', '/', html`
 <div class="col"><div class="head"><h1>In flight</h1>
   <form class="inline" method="post" action="/refresh"><button>Refresh now</button></form></div>
-${entries.length === 0 ? refreshBanner(note, ctx.now, REFRESH_DOES) : ''}${body}</div>`, ctx)
+${mailOff ? notice('neutral', MAIL_SETUP, false, 'mail-setup') : ''}${entries.length === 0 ? refreshBanner(note, ctx.now, REFRESH_DOES) : ''}${body}</div>`, ctx)
 }
