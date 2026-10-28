@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS events (
   location        TEXT,
   dedup_hash      TEXT NOT NULL,
   first_seen_at   TEXT NOT NULL,
-  notified_at     TEXT,
+  notified_at     TEXT,              -- no longer written or read: announcements key on parcels.last_announced_status
   UNIQUE (parcel_id, dedup_hash)
 );
 

@@ -86,9 +86,3 @@ export function recomputeParcelStatus(
     status, deliveredAt?.toISOString() ?? null, parcelId,
   )
 }
-
-export function markNotified(db: Database, eventIds: number[], at: Date): void {
-  const mark = db.prepare('UPDATE events SET notified_at = ? WHERE id = ?')
-  const iso = at.toISOString()
-  db.transaction(() => { for (const id of eventIds) mark.run(iso, id) })()
-}

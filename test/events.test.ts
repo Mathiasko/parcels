@@ -2,7 +2,7 @@ import { test, expect, beforeEach } from 'vitest'
 import { openDb, type Database } from '../src/db/index.js'
 import { insertParcel, findParcel } from '../src/db/parcels.js'
 import {
-  appendEvents, latestEvent, recomputeParcelStatus, markNotified,
+  appendEvents, latestEvent, recomputeParcelStatus,
 } from '../src/db/events.js'
 import { dedupHash } from '../src/core/dedup.js'
 import type { ParcelEvent } from '../src/core/types.js'
@@ -110,12 +110,4 @@ test('stored events round-trip through latestEvent with all fields', () => {
   expect(got).toMatchObject(e)
   expect(got.location).toBe('Praha')
   expect(got.code).toBeUndefined()
-})
-test('markNotified stamps exactly the events it is given', () => {
-  appendEvents(db, parcelId, three)
-  const unnotified = () => (db.prepare('SELECT id FROM events WHERE notified_at IS NULL ORDER BY id').all() as { id: number }[]).map(r => r.id)
-  const all = unnotified()
-  expect(all).toHaveLength(3)
-  markNotified(db, all.slice(0, 2), new Date('2026-04-29T15:00:00.000Z'))
-  expect(unnotified()).toEqual([all[2]])
 })

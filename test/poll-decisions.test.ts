@@ -1,5 +1,5 @@
-// Behaviours the orchestrator must have beyond the brief's listed tests: chunking, notified
-// bookkeeping, raw-response pruning, and containment of a carrier whose result cannot be stored.
+// Behaviours the orchestrator must have beyond the brief's listed tests: chunking, raw-response
+// pruning, and containment of a carrier whose result cannot be stored.
 import { test, expect, describe } from 'vitest'
 import { runPoll } from '../src/core/poll.js'
 import { deleteParcel, findParcel, setNeedsPostcode, updateParcelState } from '../src/db/parcels.js'
@@ -18,21 +18,6 @@ test('chunks a carrier\'s parcels by adapter.batchSize', async () => {
 
   expect(posta.calls.map(c => c.length)).toEqual([100, 100, 50])
   expect(report.polled).toBe(250)
-})
-
-test('marks every appended event notified, including a new parcel\'s whole history, with no notifier', async () => {
-  const db = memDb()
-  addParcel(db, 'posta', 'RA000000001SK')
-  const history = [
-    ev('2026-09-01 09:00:00', 'pre_transit', 55 * 24), ev('2026-09-03 09:00:00', 'in_transit', 50 * 24),
-    ev('2026-10-26 08:00:00', 'out_for_delivery', 3),
-  ]
-  const posta = stubAdapter('posta', ins => ins.map(i => okResult(i.number, history)), 100)
-
-  const report = await runPoll({ db, http: bodyHttp(), adapters: [posta], config, now: NOW })
-
-  expect(report.newEvents).toHaveLength(3)
-  expect(db.prepare('SELECT COUNT(*) AS n FROM events WHERE notified_at IS NULL').get()).toEqual({ n: 0 })
 })
 
 test('a not_found answer stamps the poll and nothing else, so it cannot undo a change made meanwhile', async () => {

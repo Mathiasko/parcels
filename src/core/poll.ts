@@ -2,7 +2,7 @@ import { dirname } from 'node:path'
 import type { Database } from '../db/index.js'
 import type { Config } from './config.js'
 import type {
-  Carrier, CarrierAdapter, CarrierId, FetchResult, HttpClient, NewEvent, ParcelEvent,
+  Carrier, CarrierAdapter, CarrierId, FetchResult, HttpClient, NewEvent,
 } from './types.js'
 import { isPollable } from './types.js'
 import type { Notifier } from '../notify/types.js'
@@ -13,8 +13,7 @@ import { runMapPreview, summarizeMapPreview, type MapPreviewDeps, type MapPrevie
 import { mergeCarrierPickup, runPickupCodes, type PickupCodeReport } from './pickup-code.js'
 import { adoptUpdateOutcome, maybeCheckForUpdate, type UpdateCheck, type UpdateCheckOptions } from './update.js'
 import { isDormant, isDue, slotFor } from './backoff.js'
-import { dedupHash } from './dedup.js'
-import { appendEvents, markNotified, recomputeParcelStatus } from '../db/events.js'
+import { appendEvents, recomputeParcelStatus } from '../db/events.js'
 import { UNATTRIBUTED, type Cause } from '../db/activity-log.js'
 import { recordIngest } from '../db/ingest-status.js'
 import { carrierHealth, recordHealth, type HealthOutcome, type HealthRow } from '../db/health.js'
@@ -284,9 +283,8 @@ function ingestOutcome(report: IngestReport): { ok: true } | { ok: false; error:
 }
 
 /**
- * Delivery is best-effort: the events were marked notified when they were appended, and the rules
- * record what they announce before anything is sent, so a notifier that throws loses a banner and
- * nothing else. A run with no notifier announces nothing and loses nothing: the status changes it
+ * Delivery is best-effort: the rules record what they announce before anything is sent, so a
+ * notifier that throws loses a banner and nothing else. A run with no notifier announces nothing and loses nothing: the status changes it
  * stored are still unannounced and the next run with a notifier picks them up. It must never turn a completed poll into a failed run.
  */
 async function notify(
@@ -432,7 +430,6 @@ function applyOk(
   db: Database, p: Parcel, r: Extract<FetchResult, { ok: true }>, now: Date, cause: Cause,
 ): NewEvent[] {
   const inserted = appendEvents(db, p.id, r.events)
-  markAppendedNotified(db, p.id, inserted, now)
 
   let movedAt = p.lastChangedAt
   for (const e of inserted) if (!movedAt || e.occurredAt > movedAt) movedAt = e.occurredAt
@@ -450,18 +447,6 @@ function applyOk(
   recomputeParcelStatus(db, p.id, r.status, now)
   storeRaw(db, p.id, p.carrier, JSON.stringify(r.raw), now)
   return inserted.map(e => ({ ...e, parcelId: p.id }))
-}
-
-/**
- * Every event appended in a run is marked notified here, before any notifier runs, whether or not it
- * produces a notification (the rules work from the run's `newEvents`, never from the table). A new
- * parcel's first poll appends its entire history, and leaving that unmarked would later fire a banner
- * for every scan from weeks ago.
- */
-function markAppendedNotified(db: Database, parcelId: number, appended: ParcelEvent[], now: Date): void {
-  const find = db.prepare('SELECT id FROM events WHERE parcel_id = ? AND dedup_hash = ?')
-  const ids = appended.map(e => (find.get(parcelId, dedupHash(e)) as { id: number }).id)
-  markNotified(db, ids, now)
 }
 
 /** A body from a multi-parcel chunk belongs to no single parcel, so it is stored with a null parcel. */
