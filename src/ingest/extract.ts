@@ -201,7 +201,10 @@ function namedBareNumbers(haystack: string): { c: CarrierId; n: string }[] {
 const CARRIER_MENTION: readonly RegExp[] = [
   ...Object.values(CARRIER_NAME),
   /(?<![\p{L}\d])(?:packeta|z[áa]sielkovn\w*|z[áa]silkovn\w*)(?![\p{L}])/iu,
-  /slovensk\w*[  ]+po[šs]t\w*/iu,
+  // Bounded and anchored to a word start: an unbounded run here rescans the rest of a 400 KB body from
+  // every `slovensk` in it, which a crafted mail turned into half a minute of a blocked event loop.
+  // `\p{L}`, not `\w`: in JS `\w` is ASCII, so `Slovenská pošta` itself used never to match.
+  /(?<![\p{L}\d])slovensk\p{L}{0,12}[  ]+po[šs]t/iu,
   /(?<![\p{L}\d])(?:SPS|slovak parcel service)(?![\p{L}\d])/iu,
 ]
 
@@ -217,19 +220,24 @@ const CARRIER_MENTION: readonly RegExp[] = [
  * zásielku / zásielok), and with and without diacritics, because plenty of senders strip them.
  * `odber` on its own is absent on purpose: it is also how a newsletter subscription is named
  * ("odhlásenie z odberu"); the pickup sense only counts as `osobný odber` or `odberné miesto`.
+ *
+ * A stem that must be followed by a second word takes at most 12 letters of ending first. Unbounded,
+ * every repeat of the stem in a crafted subject rescanned the rest of it (tens of seconds on one
+ * message, with the web server blocked). And letters, not `\w`, which in JS is ASCII: `osobný odber`
+ * and `odberné miesto`, the very phrases named above, never matched with their diacritics.
  */
 const SHIPPING_SUBJECT = new RegExp([
   'z[áa]sielk\\w*', 'z[áa]silk\\w*',                        // zásielka (sk), zásilka (cz)
-  'bal[ií]k(?![\\p{L}]*ek)\\w*',                            // balík, balíka; not "balíček" (a bundle)
+  'bal[ií]k(?![\\p{L}]{0,4}ek)\\w*',                         // balík, balíka; not "balíček" (a bundle)
   'doru[čc]\\w*', 'odoslan\\w*', 'expedovan\\w*', 'expedi[cč]\\w*',
   'preprav\\w*', 'prepravc\\w*', 'kuri[eé]r\\w*',
-  'vyzdvih\\w*', 'prevzat\\w*', 'prevzet\\w*', 'osobn\\w*[ \\u00a0]+odber\\w*',
-  'sledovan\\w*[ \\u00a0]+(?:z[áa]sielk|balík)\\w*', 'podac\\w*[ \\u00a0]+[čc][ií]sl\\w*',
+  'vyzdvih\\w*', 'prevzat\\w*', 'prevzet\\w*', 'osobn\\p{L}{0,12}[ \\u00a0]+odber\\w*',
+  'sledovan\\p{L}{0,12}[ \\u00a0]+(?:z[áa]sielk|balík)\\w*', 'podac\\p{L}{0,12}[ \\u00a0]+[čc][ií]sl\\w*',
   // The pickup places, named one brand at a time rather than as a `*box` pattern: "inbox" and
   // "mailbox" are subject-line words, and an AlzaBox is not a mailbox.
   'alzabox\\w*', 'z-?box\\w*', 'bal[ií]ko(?:box|mat)\\w*', 'packomat\\w*', 'packstation\\w*',
-  'parcel ?shop\\w*', 'parcel ?locker\\w*', 'pickup station', 'odbern\\w*[ \\u00a0]+miest\\w*',
-  'v[yý]dajn\\w*[ \\u00a0]+miest\\w*',
+  'parcel ?shop\\w*', 'parcel ?locker\\w*', 'pickup station', 'odbern\\p{L}{0,12}[ \\u00a0]+miest\\w*',
+  'v[yý]dajn\\p{L}{0,12}[ \\u00a0]+miest\\w*',
   // English, for the shops that write in it.
   '\\btrack\\w*', 'shipment\\w*', 'shipp(?:ed|ing)', 'dispatch\\w*', 'deliver\\w*',
   'parcel\\w*', 'package\\w*', 'on its way', 'out for delivery', 'courier\\w*',
@@ -335,9 +343,11 @@ function forwardedHeader(text: string): { from?: string; name?: string } | undef
 
 /** Per-carrier "sent by" phrasing, for a card that reads "Alza" rather than a number. Merchant only; never status. */
 const MERCHANT: Partial<Record<CarrierId, RegExp[]>> = {
-  packeta: [/od odosielateľa\s+(.+?),?\s+(?:je pre vás|sme nemohli)/i, /odosielateľ\s+(.+?)\s+nám práve/i],
-  dpd: [/Odosielateľ:\s*(.+?)\s+Číslo balíka/i],
-  sps: [/cislo\s+\S+\s+od\s+(.+?)\s+je\s+pripravená/i],
+  // `.{1,400}?`, not `.+?`: the result is clipped to MERCHANT_MAX anyway, and an unbounded lazy group
+  // scans to the end of the body from every repeat of the opening phrase (quadratic on hostile mail).
+  packeta: [/od odosielateľa\s+(.{1,400}?),?\s+(?:je pre vás|sme nemohli)/i, /odosielateľ\s+(.{1,400}?)\s+nám práve/i],
+  dpd: [/Odosielateľ:\s*(.{1,400}?)\s+Číslo balíka/i],
+  sps: [/cislo\s+\S+\s+od\s+(.{1,400}?)\s+je\s+pripravená/i],
 }
 
 /**

@@ -174,6 +174,56 @@ describe('extract: carriers without a fixture from the real mailbox', () => {
   })
 })
 
+/**
+ * Extraction is synchronous inside `extract`, and the web server runs it during a refresh, so one
+ * crafted message with a regex that backtracks quadratically freezes every page for as long as it
+ * takes (29.8 s was measured for one 400 KB mail). Each of these is the worst case of one pattern.
+ */
+describe('extract: hostile mail finishes quickly', () => {
+  const timed = async (raw: Buffer) => {
+    const started = performance.now()
+    const e = await extract(raw)
+    return { e, ms: performance.now() - started }
+  }
+
+  test('a merchant phrase repeated to the size cap', async () => {
+    const unit = 'od odosielateľa x '
+    const body = 'Ahoj\r\n\r\n---------- Forwarded message ---------\r\nFrom: Packeta <info@packeta.com>\r\n\r\n'
+      + `Zasielka Z 1234567890\r\n${unit.repeat(Math.ceil(390_000 / unit.length))}`
+    const { e, ms } = await timed(eml('a@evil.example', 'balik', body))
+    expect(e).toMatchObject({ carrier: 'packeta', number: 'Z1234567890' })
+    expect(ms).toBeLessThan(1000)
+  })
+
+  test('a carrier-name stem repeated with no space after it', async () => {
+    const { ms } = await timed(eml('a@evil.example', 'hello', 'slovensk'.repeat(50_000)))
+    expect(ms).toBeLessThan(1000)
+  })
+
+  test.each([
+    ['a shipping word', `balik${'balík'.repeat(60_000)}ek`],
+    ['the first half of a two-word phrase', 'osobn'.repeat(60_000)],
+  ])('a subject of %s repeated', async (_, text) => {
+    const subject = `=?utf-8?B?${Buffer.from(text).toString('base64')}?=`
+    const { ms } = await timed(eml('a@evil.example', subject, 'hi'))
+    expect(ms).toBeLessThan(1000)
+  })
+
+  test('the bounds keep the words they were written for', async () => {
+    // `Slovenská pošta` in the nominative: `\w` is ASCII-only, so the old pattern never matched the
+    // carrier's own name, only its declined forms that happen to end in ASCII.
+    for (const name of ['Slovenská pošta', 'Slovenskou poštou', 'slovenska posta']) {
+      expect(await extract(eml('shop@example.com', 'Info', `Doručí ${name}.`))).toEqual({ confidence: 'none', evidence: 'carrier-named' })
+    }
+    expect(await extract(eml('shop@example.com', 'Info', 'Ako Československá pošta kedysi'))).toEqual({ confidence: 'none' })
+    expect(await extract(eml('shop@example.com', 'Váš balík je na ceste', 'hi'))).toEqual({ confidence: 'none', evidence: 'shipping-subject' })
+    expect(await extract(eml('shop@example.com', 'Darčekový balíček', 'hi'))).toEqual({ confidence: 'none' })
+    for (const subject of ['Osobný odber v predajni', 'Odberné miesto zmenené', 'Osobny odber']) {
+      expect(await extract(eml('shop@example.com', subject, 'hi'))).toEqual({ confidence: 'none', evidence: 'shipping-subject' })
+    }
+  })
+})
+
 describe('extract: hand-forwarded mail (wrapper is the fallback)', () => {
   test('reads the original sender from the Gmail wrapper, not the envelope', async () => {
     const e = await extract(fx('synthetic-gmail-forwarded-dpd'))
