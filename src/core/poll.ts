@@ -8,6 +8,7 @@ import { isPollable } from './types.js'
 import type { Notifier } from '../notify/types.js'
 import { buildNotifications } from '../notify/rules.js'
 import { ingestMessages, type IngestDeps, type IngestReport } from '../ingest/ingest.js'
+import { classifyImapError } from '../ingest/imap-probe.js'
 import { HttpTransportError, captureBodies } from './http.js'
 import { runMapPreview, summarizeMapPreview, type MapPreviewDeps, type MapPreviewReport } from './map-preview.js'
 import { mergeCarrierPickup, runPickupCodes, type PickupCodeReport } from './pickup-code.js'
@@ -101,6 +102,17 @@ type Fetched =
   | { chunk: Parcel[]; error: { kind: Failure; detail: string }; bodies: string[] }
 
 const describe = (err: unknown) => (err instanceof Error ? `${err.name}: ${err.message}` : String(err))
+
+/**
+ * imapflow throws a refused login as a bare "Command failed" and keeps the reason on separate
+ * fields (`authenticationFailed`, `serverResponseCode`, `responseText`), so `describe` alone stores
+ * text in which nothing can recognise a revoked App Password - and the banner that tells the user
+ * to re-enter it never fires. The probe's classifier already reads those fields.
+ */
+function ingestError(err: unknown, ingest: NonNullable<PollDeps['ingest']>): string {
+  const verdict = classifyImapError(err, ingest.imap)
+  return verdict.kind === 'auth' ? `AuthenticationFailure: ${verdict.detail ?? describe(err)}` : describe(err)
+}
 
 function* chunks<T>(items: T[], size: number): Generator<T[]> {
   for (let i = 0; i < items.length; i += size) yield items.slice(i, i + size)
@@ -256,7 +268,7 @@ async function runIngest(
       ...ingest, now: deps.now, adapters: deps.adapters, defaultPostalCode: deps.config.defaultPostalCode,
     })
   } catch (err) {
-    report = { read: 0, created: 0, linked: 0, archivedOld: 0, needsAttention: 0, ignored: 0, failed: 0, error: describe(err) }
+    report = { read: 0, created: 0, linked: 0, archivedOld: 0, needsAttention: 0, ignored: 0, failed: 0, error: ingestError(err, ingest) }
   }
   // Not recorded in carrier_health (keyed by carrier); the ingest has a row of its own. Never fatal.
   try {

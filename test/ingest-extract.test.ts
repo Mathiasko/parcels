@@ -834,12 +834,30 @@ describe('ingest health', () => {
   test('a failed run is recorded, a good run resets it', async () => {
     const db = memDb()
     await run(db, down(), NOW)
-    expect(status(db)).toMatchObject({ n: 1, e: 'Error: Invalid credentials (Failure)', ok: null })
+    expect(status(db)).toMatchObject({ n: 1, e: 'AuthenticationFailure: Invalid credentials (Failure)', ok: null })
     await run(db, down(), new Date(NOW.getTime() + 3_600_000))
     expect(status(db).n).toBe(2)
     await run(db, up(), new Date(NOW.getTime() + 7_200_000))
     expect(status(db)).toMatchObject({ n: 0, nt: null })
     expect(status(db).ok).not.toBeNull()
+  })
+
+  // imapflow's real shape: the message says nothing, the reason is on the side. Stored as plain
+  // `describe(err)` this was "Error: Command failed", and the revoked-password banner never matched it.
+  test('a refused login stored the way imapflow throws it still reads as a refused login', async () => {
+    const db = memDb()
+    const err = Object.assign(new Error('Command failed'), {
+      authenticationFailed: true, serverResponseCode: 'AUTHENTICATIONFAILED', responseText: 'Invalid credentials (Failure)',
+    })
+    await run(db, fakeImap([], { connectError: err }).client, NOW)
+    expect(status(db).e).toBe('AuthenticationFailure: Invalid credentials (Failure)')
+  })
+
+  test('a network failure is stored as it was thrown', async () => {
+    const db = memDb()
+    const err = Object.assign(new Error('getaddrinfo ENOTFOUND imap.gmail.com'), { code: 'ENOTFOUND' })
+    await run(db, fakeImap([], { connectError: err }).client, NOW)
+    expect(status(db).e).toBe('Error: getaddrinfo ENOTFOUND imap.gmail.com')
   })
 
   test('a run in which messages fail to store is a FAILED ingest run, not ok, and the Health page says so', async () => {
