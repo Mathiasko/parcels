@@ -137,6 +137,11 @@ form.inline{display:inline}
 .clock b{font-weight:600}
 .clock .due{color:var(--signal)}
 .clock .due-now{color:var(--warn)}
+/* The calendar link belongs to the deadline, so it rides on the deadline line, one per parcel, at the size
+   of the Maps link; lifted above a card's stretched link like the tracking number, with its own ring
+   because the card's rule hides every other link's outline in favour of the overlay's. */
+.cal{position:relative;z-index:1;font-size:.8125rem}
+.card-l a.cal:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .pk-b{padding:.75rem 1.5rem}
 .pk-b .meta{margin:.5rem 0 0}
 

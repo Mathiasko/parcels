@@ -870,7 +870,29 @@ backfill command.
 - A parcel whose mail yielded no code is only rescanned when new mail arrives for it, so a codeless
   parcel is not re-read from disk every hour.
 - **The code is deliberately kept out of notifications and out of `data/poll.log`.** It opens a
-  physical locker, and notification banners render on the lock screen.
+  physical locker, and notification banners render on the lock screen. The one place it leaves the
+  app is the description of an [Add to Calendar](#add-to-calendar) event you download yourself, and
+  even there it is kept out of the event's title and its reminders, which are what a lock screen shows.
+
+### Add to Calendar
+
+A parcel that is **ready for pickup with a deadline** (Packeta and Slovenská pošta give one) has an
+`Add to Calendar` link on its deadline line, on the dashboard card and on the parcel page; on a card
+that groups several parcels at one place, each parcel has its own. It downloads
+`/parcel/<id>/calendar.ics`, an all-day event on the deadline day (in Bratislava time) that Calendar
+syncs to your phone:
+
+- title `Pick up: <name>`, the pickup address as the location (with a pin when the carrier gave
+  coordinates), the Apple Maps link as the URL, and a description with the carrier, the tracking
+  number, the Z-BOX code if one is stored, and the deadline with its time when the carrier gave one;
+- two reminders, at 09:00 the day before and 09:00 on the day (correct on the days the clocks
+  change); one whose moment has already passed when you download is left out;
+- a stable UID per parcel and a SEQUENCE that grows with every download, so downloading again after the
+  deadline or the place changed updates the same event instead of adding a second one.
+
+It is a plain GET that reads the database and nothing else, behind the same Host check as every page.
+Parcels without a deadline, archived ones and ones not waiting for collection have no link, and the
+address answers with the ordinary not-found page.
 
 Adding by hand: with the carrier left on auto-detect the number must match exactly one carrier's
 shape. **Choosing a carrier explicitly overrides that check**, in the web page and in the CLI alike.

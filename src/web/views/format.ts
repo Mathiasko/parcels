@@ -6,7 +6,8 @@ import { html, type Html } from './html.js'
 
 export { CARRIER_NAME } from '../../notify/rules.js'
 
-const DISPLAY_ZONE = 'Europe/Bratislava'
+/** Every date the app shows, and the day a calendar event falls on, is in this zone. */
+export const DISPLAY_ZONE = 'Europe/Bratislava'
 const DAY_MS = 86_400_000
 
 const at = (d: Date) => DateTime.fromJSDate(d, { zone: DISPLAY_ZONE }).setLocale('en')

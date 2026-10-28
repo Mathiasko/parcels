@@ -41,6 +41,16 @@ export function mapsUrl(p: Parcel): string | undefined {
 }
 
 /**
+ * The parcel's calendar file, offered only when there is a day to put in a calendar: the parcel is
+ * waiting for collection, is not archived, and the carrier gave a deadline. The route answers 404 for
+ * anything this returns undefined for, so a link and its target can never disagree.
+ */
+export function calendarUrl(p: Parcel): string | undefined {
+  const offered = p.status === 'ready_for_pickup' && p.archivedAt === undefined && p.retainedTill !== undefined
+  return offered ? `/parcel/${p.id}/calendar.ics` : undefined
+}
+
+/**
  * What the page says about a poll run: one still going, one that ended badly, or the counts of one that
  * finished. The counts come from the `poll_runs` row the refresh redirected to, never from the URL.
  */
@@ -130,6 +140,11 @@ export type Urgency = 'none' | 'soon' | 'now'
  * are never printed without the absolute date beside them: the page cannot refresh itself.
  *
  * The parcel page prints this same line, so a deadline is worded one way wherever it appears.
+ *
+ * The deadline line also carries "Add to Calendar", because the calendar event IS this deadline: it
+ * belongs to one parcel, so it cannot go in a card's footer (facts about the place, shared by every
+ * parcel waiting there), and putting it here keeps one link per parcel on a shared card without adding
+ * a line to any block.
  */
 export function pickupClock(e: Entry, now: Date): { out: Html; urgency: Urgency } {
   const p = e.parcel
@@ -137,9 +152,11 @@ export function pickupClock(e: Entry, now: Date): { out: Html; urgency: Urgency 
     const d = calendarDaysBetween(now, p.retainedTill)
     const urgency: Urgency = d <= 0 ? 'now' : d <= 2 ? 'soon' : 'none'
     const rel = d < 0 ? 'deadline passed' : d === 0 ? 'today' : d === 1 ? 'tomorrow' : d === 2 ? 'in 2 days' : `${d} days left`
+    const cal = calendarUrl(p)
     return {
       urgency,
-      out: html`<p class="clock"><b class="due${urgency === 'now' ? raw(' due-now') : ''}">Collect by ${formatDay(p.retainedTill, now)}</b> · ${urgency === 'soon' ? html`<b>${rel}</b>` : html`<span class="t-2">${rel}</span>`}</p>`,
+      out: html`<p class="clock"><b class="due${urgency === 'now' ? raw(' due-now') : ''}">Collect by ${formatDay(p.retainedTill, now)}</b> · ${urgency === 'soon' ? html`<b>${rel}</b>` : html`<span class="t-2">${rel}</span>`}${
+        cal ? html` · <a class="cal" href="${cal}">Add to Calendar</a>` : ''}</p>`,
     }
   }
   const since = sinceOf(e)

@@ -49,7 +49,8 @@ import {
 } from '../core/update.js'
 import { getUpdateCheck, recordUpdateCheck } from '../db/update-state.js'
 import { historyPage } from './views/history.js'
-import { indexPage, type RefreshNote } from './views/index.js'
+import { calendarUrl, indexPage, type RefreshNote } from './views/index.js'
+import { calendarFilename, parcelCalendar } from './calendar.js'
 import { parcelPage } from './views/parcel.js'
 import { DateTime } from 'luxon'
 import type { PageCtx } from './views/layout.js'
@@ -325,6 +326,23 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       { ...c, reloadIn: r.reloadIn }, r.note, mapFor(parcel),
       parcel.status === 'ready_for_pickup' ? getPickupCode(db, parcel.id) : undefined,
     ))
+  })
+
+  /**
+   * The parcel's pickup deadline as a calendar file (see web/calendar.ts). A GET with no side effects and
+   * no network: it reads the database and builds a string, so it needs no POST, and it sits behind the
+   * same Host check and headers as every page. Offered on exactly the parcels `calendarUrl` links it for;
+   * anything else is the ordinary 404 page, "no such parcel" only when there is none. Nothing is logged:
+   * the body carries the locker code.
+   */
+  app.get<{ Params: { id: string } }>('/parcel/:id/calendar.ics', async (req, reply) => {
+    const parcel = parcelFor(req.params.id)
+    if (!parcel) return notFound(reply, 'parcel')
+    if (!calendarUrl(parcel)) return notFound(reply)
+    return reply.code(200)
+      .type('text/calendar; charset=utf-8')
+      .header('content-disposition', `attachment; filename="${calendarFilename(parcel)}"`)
+      .send(parcelCalendar(parcel, getPickupCode(db, parcel.id), now()))
   })
 
   /**
