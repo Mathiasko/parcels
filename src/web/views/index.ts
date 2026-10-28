@@ -10,6 +10,7 @@ import {
 import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
+import { calendarForm, calendarNotice, calendarOffered, type CalendarFormState, type CalendarOutcome } from './calendar-form.js'
 
 export { parcelName, pickupSummary } from '../../db/parcels.js'
 import { parcelName, pickupSummary } from '../../db/parcels.js'
@@ -41,38 +42,21 @@ export function mapsUrl(p: Parcel): string | undefined {
 }
 
 /**
- * The parcel's calendar file, offered for every parcel waiting for collection that is not archived. With
- * a deadline the event is that day; without one it is a nudge to collect it soon (web/calendar.ts). The
- * route answers 404 for anything this returns undefined for, so a link and its target can never disagree.
+ * The .ics fallback of "Add to Calendar", offered for exactly the parcels the form is (`calendarOffered`).
+ * The route answers 404 for anything this returns undefined for, so a link and its target cannot disagree.
  */
 export function calendarUrl(p: Parcel): string | undefined {
-  const offered = p.status === 'ready_for_pickup' && p.archivedAt === undefined
-  return offered ? `/parcel/${p.id}/calendar.ics` : undefined
+  return calendarOffered(p) ? `/parcel/${p.id}/calendar.ics` : undefined
 }
 
 /**
- * The calendar link for a parcel with NO deadline, which has no "Collect by" line to ride on: it goes
- * beside the sentence that says the carrier gave none - the footer of a card of one, or the parcel
- * page's pickup panel. A card that holds several parcels does not use this: its footer is shared, and
- * telling the links apart there would mean printing each parcel's name a second time (§6.1, "a name is
- * printed once"), so each one rides on its own parcel's clock line instead (`pickupClock`).
+ * The line of facts under a pickup: that the carrier gave no deadline, and the Maps link. Empty when there
+ * is nothing to say. One function for the dashboard card and the parcel page, so the two cannot drift.
+ * "Add to Calendar" is not here: it belongs to one parcel, so it rides on that parcel's clock line.
  */
-export function undatedCalendarLinks(entries: Entry[]): Html[] {
-  return entries.flatMap(e => {
-    const cal = e.parcel.retainedTill ? undefined : calendarUrl(e.parcel)
-    return cal ? [html`<a class="cal" href="${cal}">Add to Calendar</a>`] : []
-  })
-}
-
-/**
- * The line of facts under a pickup: that the carrier gave no deadline, the calendar links that sentence
- * calls for, and the Maps link. Empty when there is nothing to say. One function for the dashboard card
- * and the parcel page, so the two cannot drift.
- */
-export function pickupFacts(note: string, calendar: Html[], maps: string | undefined): Html | undefined {
-  const links = [...calendar, ...(maps ? [html`<a href="${maps}">Open in Apple Maps <span aria-hidden="true">↗</span></a>`] : [])]
-  if (!note && links.length === 0) return undefined
-  return html`${note}${note && links.length ? ' ' : ''}${links.flatMap((l, i) => (i === 0 ? [l] : [html` · `, l]))}`
+export function pickupFacts(note: string, maps: string | undefined): Html | undefined {
+  if (!note && !maps) return undefined
+  return html`${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps <span aria-hidden="true">↗</span></a>` : ''}`
 }
 
 /**
@@ -134,7 +118,14 @@ export function refreshBanner(n: RefreshNote | undefined, now: Date, doing?: str
   return notice('warn', html`<p><strong>${plural(n.failures, 'carrier failure')}.</strong> See <a href="/health">Health</a>.</p><p>${note}</p>`, true)
 }
 
-export interface Entry { parcel: Parcel; last: StoredEvent | undefined; /** The Z-BOX opening code, when its mail carried one. */ code?: string }
+export interface Entry {
+  parcel: Parcel
+  last: StoredEvent | undefined
+  /** The Z-BOX opening code, when its mail carried one. */
+  code?: string
+  /** The event "Add to Calendar" already made, and a refused submission to show again. */
+  cal?: CalendarFormState
+}
 
 /**
  * The code that opens the locker, shown only when the mail actually carried one.
@@ -198,31 +189,37 @@ export type Urgency = 'none' | 'soon' | 'now'
  *
  * The parcel page prints this same line, so a deadline is worded one way wherever it appears.
  *
- * The deadline line also carries "Add to Calendar", because the calendar event IS this deadline, and
- * putting it here keeps one link per parcel on a shared card without adding a line to any block. A
- * parcel with no deadline normally has its link beside "did not give a pickup deadline" instead
- * (`undatedCalendarLinks`); `undatedCal` puts it on this line, which is what a card holding several
- * parcels asks for.
+ * "Add to Calendar" (`cal`, the `<details>` from views/calendar-form.ts) rides at the end of this line,
+ * with or without a deadline: the event is planned against this clock, and on a card holding several
+ * parcels it is the one line that is unmistakably that parcel's. A `<details>` cannot live inside a `<p>`,
+ * so with it the line becomes a `.cline` row holding the unchanged `<p class="clock">` and the
+ * disclosure; opened, the disclosure takes a row of its own below (see `.calf` in style.ts).
  */
-export function pickupClock(e: Entry, now: Date, undatedCal = false): { out: Html; urgency: Urgency } {
+export function pickupClock(e: Entry, now: Date, cal?: Html): { out: Html; urgency: Urgency } {
+  const { line, urgency } = clockLine(e, now)
+  const form = cal && cal.toString() !== '' ? cal : undefined
+  if (!form) return { urgency, out: line ? html`<p class="clock">${line}</p>` : html`` }
+  return {
+    urgency,
+    out: html`<div class="cline">${line ? html`<p class="clock">${line}</p><span class="sep" aria-hidden="true">·</span>` : ''}${form}</div>`,
+  }
+}
+
+function clockLine(e: Entry, now: Date): { line?: Html; urgency: Urgency } {
   const p = e.parcel
   if (p.retainedTill) {
     const d = calendarDaysBetween(now, p.retainedTill)
     const urgency: Urgency = d <= 0 ? 'now' : d <= 2 ? 'soon' : 'none'
     const rel = d < 0 ? 'deadline passed' : d === 0 ? 'today' : d === 1 ? 'tomorrow' : d === 2 ? 'in 2 days' : `${d} days left`
-    const cal = calendarUrl(p)
     return {
       urgency,
-      out: html`<p class="clock"><b class="due${urgency === 'now' ? raw(' due-now') : ''}">Collect by ${formatDay(p.retainedTill, now)}</b> · ${urgency === 'soon' ? html`<b>${rel}</b>` : html`<span class="t-2">${rel}</span>`}${
-        cal ? html` · <a class="cal" href="${cal}">Add to Calendar</a>` : ''}</p>`,
+      line: html`<b class="due${urgency === 'now' ? raw(' due-now') : ''}">Collect by ${formatDay(p.retainedTill, now)}</b> · ${urgency === 'soon' ? html`<b>${rel}</b>` : html`<span class="t-2">${rel}</span>`}`,
     }
   }
   const since = sinceOf(e)
-  const cal = undatedCal ? calendarUrl(p) : undefined
-  const link = cal ? html`<a class="cal" href="${cal}">Add to Calendar</a>` : undefined
-  if (!since) return { urgency: 'none', out: link ? html`<p class="clock">${link}</p>` : html`` }
+  if (!since) return { urgency: 'none' }
   const days = Math.floor((now.getTime() - since.getTime()) / 86_400_000)
-  return { urgency: 'none', out: html`<p class="clock">Since ${formatDateTime(since, now)}${days >= 1 ? html` · <b>${plural(days, 'day')}</b>` : ''}${link ? html` · ${link}` : ''}</p>` }
+  return { urgency: 'none', line: html`Since ${formatDateTime(since, now)}${days >= 1 ? html` · <b>${plural(days, 'day')}</b>` : ''}` }
 }
 
 const listNames = (names: string[]): string =>
@@ -354,7 +351,7 @@ function cardEntry(c: Card, e: Entry, ctx: PageCtx): Html {
       e.last.location ? html` <span class="loc">· ${e.last.location}</span>` : ''}</div>`
   return html`<li>${c.placed ? html`<h3 class="who"><a href="/parcel/${p.id}">${parcelName(p)}</a></h3>` : ''}
 <span class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span></span>
-${sentence}${pickupClock(e, ctx.now, c.members.length > 1).out}${pickupCodeLine(e.code)}${postcodeRejected(p)
+${sentence}${pickupClock(e, ctx.now, calendarForm(p, ctx.now, e.cal, 'home')).out}${pickupCodeLine(e.code)}${postcodeRejected(p)
     ? html`<p class="meta t-warn">${glyph('problem')} Postcode needed: <a class="sel" href="/parcel/${p.id}">set one</a> to resume full tracking.</p>`
     : ''}${p.status === 'ready_for_pickup' ? markForm(p, 'Mark as collected', 'home') : ''}</li>`
 }
@@ -376,7 +373,7 @@ function card(c: Card, ctx: PageCtx): Html {
   const ready = c.members.some(m => m.parcel.status === 'ready_for_pickup')
   const note = ready ? noDeadlineNote(c.members) : ''
   const maps = ready ? c.members.map(m => mapsUrl(m.parcel)).find(u => u !== undefined) : undefined
-  const facts = pickupFacts(note, c.members.length > 1 ? [] : undatedCalendarLinks(c.members), maps)
+  const facts = pickupFacts(note, maps)
   return html`<article class="card">
 <div class="card-h${dueNow ? raw(' due-now') : ''}">${cardHead(c)}${cardChip(c)}</div>
 <ul class="card-l">${c.members.map(m => cardEntry(c, m, ctx))}</ul>${facts ? html`<p class="card-f meta">${facts}</p>` : ''}
@@ -452,6 +449,10 @@ export interface IndexOptions {
   mailConfigured?: boolean
   /** A parcel just marked collected from this page: the notice with its Undo (see `collectedNotice`). */
   collected?: { parcel: Parcel; mark: Pick<UserMark, 'kind'> }
+  /** What "Add to Calendar" just did, for the parcel it did it to (see `calendarNotice`). */
+  calendar?: { outcome: CalendarOutcome; parcel: Parcel }
+  /** An "Add to Calendar" submission refused for a parcel that no longer shows the form to say it in. */
+  calendarRefused?: string
 }
 
 export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote, opts: IndexOptions = {}): Html {
@@ -461,7 +462,8 @@ export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote, op
   const empty = mailOff
     ? html`<p class="empty">Nothing in flight. <a href="/add">Add a parcel</a> by its tracking number.</p>`
     : html`<p class="empty">Nothing in flight. Parcels appear here when a shipping email arrives, or when you <a href="/add">add one</a>.</p>`
-  const marked = collectedNotice(opts.collected)
+  const marked = html`${collectedNotice(opts.collected)}${calendarNotice(opts.calendar?.outcome, opts.calendar?.parcel, ctx.now)}${
+    opts.calendarRefused ? notice('warn', html`<p>${opts.calendarRefused}</p>`, true) : ''}`
   const body = entries.length === 0
     ? html`${marked}${empty}`
     : html`<p class="lede">${indexLede(entries, ctx)}</p>${refreshBanner(note, ctx.now, REFRESH_DOES)}${marked}${

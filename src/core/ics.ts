@@ -1,6 +1,7 @@
 /**
- * Just enough iCalendar (RFC 5545) to hand one all-day event to Calendar.app: no parser, no time
- * zones, no recurrence. Pure string building, so every rule the format has is tested here and the
+ * Just enough iCalendar (RFC 5545) to hand one event to Calendar.app: no parser, no VTIMEZONE, no
+ * recurrence. An event is either all-day (DATE values) or timed, and a timed one is written in UTC, which
+ * the RFC allows without any time zone definition and every reader converts to its own local time. Pure string building, so every rule the format has is tested here and the
  * route only decides WHAT the event says.
  *
  * The rules that bite in practice, all handled below:
@@ -14,7 +15,7 @@ export interface IcsDate { year: number; month: number; day: number }
 
 export interface IcsAlarm {
   /**
-   * When to fire, in signed whole hours from the start of the event. For an all-day event the start is
+   * When to fire, in signed whole hours from the start of the event; `0` is at the start. For an all-day event the start is
    * local midnight of its first day, so `-15` is 09:00 the day before and `9` is 09:00 on the day -
    * except on a day the clocks change, which is why the caller passes hours it has worked out rather
    * than this module assuming a 24-hour day.
@@ -23,13 +24,11 @@ export interface IcsAlarm {
   description: string
 }
 
-export interface IcsEvent {
+interface IcsEventBase {
   uid: string
   sequence: number
   /** DTSTAMP: when this copy of the event was made. */
   stamp: Date
-  /** The one day the event covers. */
-  date: IcsDate
   summary: string
   location?: string
   geo?: { lat: number; lon: number }
@@ -38,6 +37,9 @@ export interface IcsEvent {
   description?: string[]
   alarms?: IcsAlarm[]
 }
+
+/** The one day an all-day event covers, or the start and end of a timed one. */
+export type IcsEvent = IcsEventBase & ({ date: IcsDate } | { start: Date; end: Date })
 
 const CRLF = '\r\n'
 const MAX_OCTETS = 75
@@ -87,7 +89,7 @@ export function nextDay(d: IcsDate): IcsDate {
   return { year: t.getUTCFullYear(), month: t.getUTCMonth() + 1, day: t.getUTCDate() }
 }
 
-/** A DATE-TIME in UTC form (`20261026T100405Z`), as DTSTAMP requires. */
+/** A DATE-TIME in UTC form (`20261026T100405Z`), as DTSTAMP requires and a timed DTSTART/DTEND may use. */
 export const utcStamp = (d: Date): string =>
   `${pad(d.getUTCFullYear(), 4)}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`
 
@@ -105,17 +107,19 @@ function eventLines(e: IcsEvent): string[] {
     `UID:${escapeText(e.uid)}`,
     `SEQUENCE:${Math.max(0, Math.trunc(e.sequence))}`,
     `DTSTAMP:${utcStamp(e.stamp)}`,
-    `DTSTART;VALUE=DATE:${dateValue(e.date)}`,
-    // DTEND is exclusive: a one-day event ends at the start of the next day.
-    `DTEND;VALUE=DATE:${dateValue(nextDay(e.date))}`,
+    ...('date' in e
+      // DTEND is exclusive: a one-day event ends at the start of the next day.
+      ? [`DTSTART;VALUE=DATE:${dateValue(e.date)}`, `DTEND;VALUE=DATE:${dateValue(nextDay(e.date))}`]
+      : [`DTSTART:${utcStamp(e.start)}`, `DTEND:${utcStamp(e.end)}`]),
     ...text('SUMMARY', e.summary),
     ...text('LOCATION', e.location),
     ...(e.geo ? [`GEO:${coord(e.geo.lat)};${coord(e.geo.lon)}`] : []),
     ...(e.url ? [`URL:${e.url}`] : []),
     // Each line escaped on its own, then joined by the escaped newline.
     ...(e.description?.length ? [`DESCRIPTION:${e.description.map(escapeText).join('\\n')}`] : []),
-    // A reminder, not an appointment: it should not show the whole day as busy.
-    'TRANSP:TRANSPARENT',
+    // An all-day reminder is not an appointment and should not show the whole day as busy. A timed
+    // event is a trip somebody planned, so it is left at the default (busy), as Calendar.app makes it.
+    ...('date' in e ? ['TRANSP:TRANSPARENT'] : []),
     ...(e.alarms ?? []).flatMap(a => [
       'BEGIN:VALARM',
       'ACTION:DISPLAY',

@@ -13,8 +13,9 @@ import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
 import {
   mapsUrl, markForm, noDeadlineNote, parcelName, pickupClock, pickupCodeLine, pickupFacts, pickupSummary, refreshBanner,
-  undatedCalendarLinks, undoForm, type RefreshNote,
+  undoForm, type RefreshNote,
 } from './index.js'
+import { calendarForm, calendarNotice, type CalendarFormState, type CalendarOutcome } from './calendar-form.js'
 import type { TileGrid } from '../../core/slippy.js'
 
 const RAW_SHOWN_CHARS = 20_000
@@ -98,31 +99,35 @@ function mapPanel(grid: TileGrid, where: string): Html {
 </div></div>`
 }
 
-/** The place, how long it has been waiting (or the deadline), and a Maps link only if the carrier gave coordinates. */
-function pickupPanel(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx, map?: TileGrid, code?: string): Html {
+/**
+ * The place, how long it has been waiting (or the deadline) with "Add to Calendar" at the end of that
+ * line, and a Maps link.
+ */
+function pickupPanel(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx, map?: TileGrid, code?: string, cal?: CalendarFormState): Html {
   const where = pickupSummary(p)
   if (!where) return html``
   const maps = mapsUrl(p)
   const ready = p.status === 'ready_for_pickup'
   // The dashboard's own clock line, so a deadline reads the same on both pages: a deadline whenever the
   // carrier gave one, else how long it has waited - which is only true while it is waiting.
-  const { out: clock, urgency } = p.retainedTill || ready ? pickupClock({ parcel: p, last }, ctx.now) : { out: html``, urgency: 'none' }
+  const { out: clock, urgency } = p.retainedTill || ready
+    ? pickupClock({ parcel: p, last }, ctx.now, calendarForm(p, ctx.now, cal)) : { out: html``, urgency: 'none' }
   const note = ready ? noDeadlineNote([{ parcel: p, last }]) : ''
-  const facts = pickupFacts(note, ready ? undatedCalendarLinks([{ parcel: p, last }]) : [], maps)
+  const facts = pickupFacts(note, maps)
   return html`<section class="pk" aria-label="Pickup point"><div class="pk-h${ready ? '' : raw(' plain')}${ready && urgency === 'now' ? raw(' due-now') : ''}"><div class="where">${where}</div>${ready ? statusIndicator('ready_for_pickup') : html`<span class="meta">Pickup point</span>`}</div>
 <div class="pk-b">${clock}${ready ? pickupCodeLine(code) : ''}${ready && map ? mapPanel(map, where) : ''}${facts ? html`<p class="meta">${facts}</p>` : ''}</div></section>`
 }
 
 /**
- * A parcel waiting for collection at a place the carrier did not name has no pickup panel, so the facts
- * that panel would carry - no deadline, and the calendar reminder that calls for - get a line of their
- * own under the parcel's details. Nothing at all for a parcel with a deadline: its clock is not shown
- * here either, the dashboard card has it.
+ * A parcel waiting for collection at a place the carrier did not name has no pickup panel, so what that
+ * panel would carry gets lines of their own under the parcel's details: the clock line with "Add to
+ * Calendar" on it (the deadline, or how long it has waited), and the sentence saying there is no deadline.
  */
-function placelessFacts(p: Parcel, last: StoredEvent | undefined): Html {
-  if (p.status !== 'ready_for_pickup' || pickupSummary(p) || p.retainedTill) return html``
-  const facts = pickupFacts(noDeadlineNote([{ parcel: p, last }]), undatedCalendarLinks([{ parcel: p, last }]), undefined)
-  return facts ? html`<p class="meta">${facts}</p>` : html``
+function placelessFacts(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx, cal?: CalendarFormState): Html {
+  if (p.status !== 'ready_for_pickup' || pickupSummary(p)) return html``
+  const { out: clock } = pickupClock({ parcel: p, last }, ctx.now, calendarForm(p, ctx.now, cal))
+  const facts = pickupFacts(noDeadlineNote([{ parcel: p, last }]), undefined)
+  return html`${clock}${facts ? html`<p class="meta">${facts}</p>` : ''}`
 }
 
 /**
@@ -210,9 +215,18 @@ function timelineSection(p: Parcel, events: StoredEvent[], ctx: PageCtx): Html {
  * when there is none to draw (no coordinates, a tile missing, or the preview turned off). The view
  * never looks at the disk itself: a page render reads the database and nothing else.
  */
+export interface ParcelPageOptions {
+  /** The event "Add to Calendar" already made, and a refused submission to show again. */
+  cal?: CalendarFormState
+  /** What "Add to Calendar" just did, from the POST this page was redirected from. */
+  calendar?: CalendarOutcome
+  /** An "Add to Calendar" submission refused when this parcel no longer shows the form to say it in. */
+  calendarRefused?: string
+}
+
 export function parcelPage(
   p: Parcel, events: StoredEvent[], raws: RawResponse[], ctx: PageCtx, note?: RefreshNote, map?: TileGrid, code?: string,
-  mark?: UserMark,
+  mark?: UserMark, opts: ParcelPageOptions = {},
 ): Html {
   const last = events.at(-1)
   const plain = postcodeRejected(p) || p.needsPostcode !== undefined
@@ -225,7 +239,7 @@ ${statusBox(statusLine(p, events, mark))}
   // Said on every email-only parcel, with or without events: it is why there is no refresh button and
   // why the timeline is whatever the mail said, which is not guessable from the page otherwise.
   isEmailOnlyCarrier(p.carrier) ? html`<p class="meta">Never polled: updates arrive by email, in ${CARRIER_NAME[p.carrier]}'s own words.</p>` : ''}
-${placelessFacts(p, last)}${refreshBanner(note, ctx.now, 'Asking the carrier about this parcel.')}${postcodeNotice(p)}${pickupPanel(p, last, ctx, map, code)}
+${placelessFacts(p, last, ctx, opts.cal)}${refreshBanner(note, ctx.now, 'Asking the carrier about this parcel.')}${calendarNotice(opts.calendar, p, ctx.now)}${opts.calendarRefused ? notice('warn', html`<p>${opts.calendarRefused}</p>`, true) : ''}${postcodeNotice(p)}${pickupPanel(p, last, ctx, map, code, opts.cal)}
 ${timelineSection(p, events, ctx)}
 ${rawSection(raws, ctx)}
 ${deleteSection(p)}

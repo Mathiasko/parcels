@@ -1,5 +1,6 @@
 import { NOTIFIERS } from '../../core/config.js'
 import type { ImapProbeResult } from '../../ingest/imap-probe.js'
+import { CalendarFailure } from '../../core/calendar-app.js'
 import type { SettingsValues } from '../settings.js'
 import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
@@ -25,6 +26,25 @@ export interface SettingsState {
    * it loads, because the poller is failing on the same file.
    */
   configError?: string
+  /** The writable calendars Calendar.app listed for this render, or why it could not. Absent: not asked. */
+  calendars?: CalendarList
+}
+
+export type CalendarList = { ok: true; names: string[] } | { ok: false; why: string }
+
+/** Why Calendar.app could not list its calendars, as a sentence for the settings page. */
+export function calendarListWhy(err: unknown): string {
+  const f = err instanceof CalendarFailure ? err : undefined
+  switch (f?.kind) {
+    case 'denied':
+      return 'macOS has not allowed this app to control Calendar. Allow it in System Settings → Privacy & Security → Automation → node → Calendar, then reload this page.'
+    case 'timeout':
+      return 'Calendar did not answer in time. The first time, macOS asks whether node may control Calendar: answer that, then reload this page.'
+    default: {
+      const said = f?.detail ?? (err instanceof Error ? err.message : String(err))
+      return `Calendar said: ${said}`
+    }
+  }
 }
 
 const APP_PASSWORDS = 'https://myaccount.google.com/apppasswords'
@@ -82,6 +102,32 @@ function testResult(r: ImapProbeResult): Html {
   }
 }
 
+/**
+ * "Calendar for pickups": a select of the writable calendars Calendar.app listed for this render. The
+ * empty value is the first writable one, named so the default is not a mystery. A stored name that is
+ * not in the list stays selectable and says so, so a save does not quietly change it; a name several
+ * calendars share says that too, because adding to it is refused until it is told apart.
+ *
+ * When the list could not be read there is no select at all, only a sentence saying why: the form then
+ * does not send the field, and a save keeps whatever is stored.
+ */
+function calendarField(v: SettingsValues, list: CalendarList | undefined): Html {
+  const hint = html`<span class="meta hint">Where “Add to Calendar” puts a pickup. Calendar can sync it to your phone.</span>`
+  if (!list || !list.ok) {
+    return html`<div class="wide" id="calendar"><span class="lbl">Calendar for pickups</span>
+<p class="meta hint">${v.pickupCalendar ? html`Now “${v.pickupCalendar}”.` : 'Now the first calendar you can write to.'} The list of your calendars could not be read, so it cannot be changed here right now: ${list ? list.why : 'it was not asked for'}</p></div>`
+  }
+  const counts = new Map<string, number>()
+  for (const n of list.names) counts.set(n, (counts.get(n) ?? 0) + 1)
+  const names = [...counts.keys()]
+  const first = list.names[0]
+  const extra = v.pickupCalendar !== '' && !counts.has(v.pickupCalendar) ? [v.pickupCalendar] : []
+  return html`<label class="wide" id="calendar">Calendar for pickups<select name="pickupCalendar">${
+    option('', first ? `The first one (now “${first}”)` : 'The first one (there is none yet)', v.pickupCalendar)}${
+    names.map(n => option(n, (counts.get(n) ?? 0) > 1 ? `${n} (${counts.get(n)} calendars have this name)` : n, v.pickupCalendar))}${
+    extra.map(n => option(n, `${n} (not found in Calendar)`, v.pickupCalendar))}</select>${hint}</label>`
+}
+
 /** What the button is about to do, in the saved values, so the test is never a black box. */
 function testTarget(v: SettingsValues): Html {
   if (!v.imapConfigured) {
@@ -130,6 +176,7 @@ ${state.test ? testResult(state.test) : ''}
 <div class="fields">
 <label>Default postcode<input name="defaultPostalCode" value="${v.defaultPostalCode}" size="8" inputmode="numeric" pattern="[0-9]{3} ?[0-9]{2}" required><span class="meta hint">GLS and DPD need one to answer; a parcel can have its own.</span></label>
 <label>Pickup map<select name="mapPreview">${option('true', 'On', String(v.mapPreview))}${option('false', 'Off', String(v.mapPreview))}</select><span class="meta hint">Off removes the map and stops looking addresses up online.</span></label>
+${calendarField(v, state.calendars)}
 </div>
 
 <details class="adv"><summary>Advanced</summary>

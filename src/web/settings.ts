@@ -10,6 +10,8 @@ export interface SettingsForm {
   defaultPostalCode?: string
   notifier?: string
   mapPreview?: string
+  /** Absent when the page could not list the calendars and so offered no choice: the stored one is kept. */
+  pickupCalendar?: string
   imapHost?: string
   imapPort?: string
   imapUser?: string
@@ -26,6 +28,8 @@ export interface SettingsValues {
   defaultPostalCode: string
   notifier: string
   mapPreview: boolean
+  /** The chosen calendar's name; `''` is the first writable calendar. */
+  pickupCalendar: string
   /** Whether the file actually has a mail block, as opposed to the form merely showing defaults. */
   imapConfigured: boolean
   imapHost: string
@@ -63,6 +67,7 @@ export function settingsValues(doc: ConfigDocument): SettingsValues {
     defaultPostalCode: text(doc.defaultPostalCode),
     notifier: text(doc.notifier) || 'auto',
     mapPreview: doc.mapPreview !== false,
+    pickupCalendar: text(doc.pickupCalendar).trim(),
     imapConfigured: !fresh,
     imapHost: fresh ? GMAIL_DEFAULTS.host : text(imap?.host),
     imapPort: fresh ? GMAIL_DEFAULTS.port : text(imap?.port),
@@ -83,6 +88,7 @@ export function submittedSettings(f: SettingsForm, doc: ConfigDocument): Setting
     defaultPostalCode: (f.defaultPostalCode ?? '').trim(),
     notifier: (f.notifier ?? '').trim() || 'auto',
     mapPreview: f.mapPreview !== 'false',
+    pickupCalendar: f.pickupCalendar === undefined ? text(doc.pickupCalendar).trim() : f.pickupCalendar.trim(),
     imapHost: (f.imapHost ?? '').trim(),
     imapPort: (f.imapPort ?? '').trim(),
     imapUser: (f.imapUser ?? '').trim(),
@@ -120,6 +126,11 @@ export function applySettings(doc: ConfigDocument, f: SettingsForm): ApplyResult
 
   const mapPreview = f.mapPreview === 'true' ? true : f.mapPreview === 'false' ? false : undefined
   if (mapPreview === undefined) return no('The map preview must be on or off.')
+
+  // Not checked against Calendar's list: the list may not be readable right now, and a name that is not
+  // there is reported when it is used. Absent from the form (no list to offer) keeps what is stored.
+  const pickupCalendar = f.pickupCalendar === undefined ? text(doc.pickupCalendar).trim() : f.pickupCalendar.trim()
+  if (Array.from(pickupCalendar).length > 255) return no('A calendar name is not longer than 255 characters.')
 
   const host = (f.imapHost ?? '').trim()
   const portText = (f.imapPort ?? '').trim()
@@ -161,6 +172,9 @@ export function applySettings(doc: ConfigDocument, f: SettingsForm): ApplyResult
   }
 
   const next: ConfigDocument = { ...doc, defaultPostalCode: postcode, notifier, mapPreview }
+  // The first writable calendar is the absence of a choice, so it is written as no key at all.
+  if (pickupCalendar === '') delete next.pickupCalendar
+  else next.pickupCalendar = pickupCalendar
   if (imap === undefined) delete next.imap
   else next.imap = imap
 
@@ -200,6 +214,8 @@ export function changedSettingFields(before: ConfigDocument, after: ConfigDocume
   // Compared as the effective value, not as the stored one: absent means on, so a document that gains
   // an explicit `true` did not change the setting and must not read as having done so.
   if ((before.mapPreview !== false) !== (after.mapPreview !== false)) changed.push('mapPreview')
+  // Effective value again: `""` and no key both mean the first writable calendar.
+  if (text(before.pickupCalendar).trim() !== text(after.pickupCalendar).trim()) changed.push('pickupCalendar')
 
   const a = imapBlock(before)
   const b = imapBlock(after)

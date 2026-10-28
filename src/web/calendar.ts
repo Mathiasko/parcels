@@ -1,13 +1,17 @@
 import { DateTime } from 'luxon'
-import { icsCalendar, type IcsAlarm } from '../core/ics.js'
+import type { CalendarEventSpec } from '../core/calendar-app.js'
+import { icsCalendar } from '../core/ics.js'
 import { parcelName, pickupSummary, type Parcel } from '../db/parcels.js'
+import { wallClock } from './calendar-slots.js'
 import { CARRIER_NAME, DISPLAY_ZONE, formatDay } from './views/format.js'
 import { mapsUrl } from './views/index.js'
 
 const PRODID = '-//parcels//Add to Calendar//EN'
-const HOUR_MS = 3_600_000
 /** SEQUENCE counts minutes from here, so it stays a small integer for decades. */
 const SEQUENCE_EPOCH = Date.UTC(2020, 0, 1)
+
+/** How long the planned trip is in the calendar: long enough to see, short enough not to block an afternoon. */
+export const EVENT_MINUTES = 30
 
 /**
  * A carrier that gives a deadline as a bare date is stored as that day's last instant, local time
@@ -17,100 +21,80 @@ const SEQUENCE_EPOCH = Date.UTC(2020, 0, 1)
 const isWholeDay = (t: DateTime): boolean => t.toFormat('HH:mm:ss.SSS') === '23:59:59.999'
 
 /**
- * The local hour by which a parcel with no deadline should be thought about today: an event downloaded
- * before it is for today, reminded at this hour; one downloaded at or after it is for tomorrow, reminded
- * at 09:00. Late enough to be on the way home, early enough that the pickup point is still open.
+ * What a pickup event SAYS, whichever way it reaches the calendar: Calendar.app through osascript
+ * (`pickupEventSpec`) or the downloadable .ics (`parcelCalendar`). One function, so the two cannot say
+ * different things.
+ *
+ * - Title `Pick up: <name>`. Location the pickup address; the URL the Apple Maps link the pages print
+ *   (the event lives on a phone, where this server's own loopback address means nothing).
+ * - Description: carrier and tracking number, the locker code when one is stored, and the REAL deadline
+ *   ("Collect by Sat 31 Oct, 18:00"), or that the carrier gave none - the event's own time is the plan,
+ *   and the deadline is what the plan has to beat.
+ * - The opening code goes in the description, which is the point - it is read at the locker - and never
+ *   in the title or the alert: those are what a lock screen shows, which is also why notifications leave
+ *   it out.
  */
-const COLLECT_TODAY_BY = 17
+export interface PickupEventContent {
+  summary: string
+  location?: string
+  url?: string
+  geo?: { lat: number; lon: number }
+  description: string[]
+}
+
+export function pickupEventContent(p: Parcel, code: string | undefined, now: Date): PickupEventContent {
+  const { lat, lon } = p.pickup ?? {}
+  return {
+    summary: `Pick up: ${parcelName(p)}`,
+    location: pickupSummary(p),
+    url: mapsUrl(p),
+    geo: lat !== undefined && lon !== undefined ? { lat, lon } : undefined,
+    description: [
+      `${CARRIER_NAME[p.carrier]} · ${p.trackingNumber}`,
+      ...(code ? [`Open the box with ${code}`] : []),
+      deadlineLine(p, now),
+    ],
+  }
+}
+
+/** `Collect by Sat 31 Oct, 18:00`, `Collect by Sat 31 Oct` for a whole-day deadline, or that there is none. */
+function deadlineLine(p: Parcel, now: Date): string {
+  if (!p.retainedTill) return `${CARRIER_NAME[p.carrier]} gave no pickup deadline`
+  const till = DateTime.fromJSDate(p.retainedTill, { zone: DISPLAY_ZONE })
+  return `Collect by ${formatDay(p.retainedTill, now)}${isWholeDay(till) ? '' : `, ${till.toFormat('HH:mm')}`}`
+}
+
+/** The event for Calendar.app: the same content, a wall-clock start in the display zone, 30 minutes. */
+export function pickupEventSpec(p: Parcel, code: string | undefined, start: Date, now: Date): CalendarEventSpec {
+  const c = pickupEventContent(p, code, now)
+  return {
+    summary: c.summary, location: c.location, url: c.url, description: c.description.join('\n'),
+    start: wallClock(start), minutes: EVENT_MINUTES,
+  }
+}
 
 /**
- * One parcel waiting for collection as an all-day iCalendar event, for `GET /parcel/:id/calendar.ics`.
- * Only for a parcel `calendarUrl` offers it for. Two shapes, one event:
+ * The same event as an .ics file, for `GET /parcel/:id/calendar.ics` - the fallback when Calendar.app
+ * could not be driven. A 30-minute event at the chosen time with one alert at its start, exactly what
+ * the osascript path makes. Times are written in UTC (see core/ics.ts), so the file means the same
+ * moment on any device.
  *
- * - **With a deadline**, the event is on the deadline day, reminded at 09:00 the day before and 09:00
- *   on the day (each left out once its moment has passed), and the description says "Collect by".
- * - **Without one** (most carriers never send it), the event is a nudge to go soon: today if it is
- *   downloaded before 17:00 local, reminded at 17:00; otherwise tomorrow, reminded at 09:00. The
- *   description says the carrier gave no deadline rather than inventing one.
- *
- * Common to both:
- * - The day is a date in the display zone, so 00:30 local is that day, not the UTC day before; and a
- *   reminder's offset from local midnight is worked out on that very day, so on the days the clocks
- *   change 09:00 (or 17:00) is still 09:00, not an hour off.
- * - The URL is the Apple Maps link the pages print: the event lives on a phone, where this server's own
- *   address (loopback) means nothing.
- * - The opening code goes in the DESCRIPTION, which is the point - it is read at the locker - and never in
- *   the title or an alarm: those are what a lock screen shows, which is also why notifications leave it out.
- * - The UID is stable per parcel, and SEQUENCE is the download time in minutes, so every later download is
- *   a newer version of the SAME event (a deadline that arrived since, a new place, a code) rather than a
- *   second event, and an older file can never win over a newer one.
+ * The UID is stable per parcel, and SEQUENCE is the download time in minutes, so a later download is a
+ * newer version of the SAME event (another time, a deadline that arrived since, a code) rather than a
+ * second event, and an older file can never win over a newer one.
  */
-export function parcelCalendar(p: Parcel, code: string | undefined, now: Date): string {
-  const name = parcelName(p)
-  const when = p.retainedTill ? byDeadline(p.retainedTill, name, now) : soon(p, name, now)
-  // A reminder, as signed whole hours from the event's start (local midnight of its day).
-  const alarms: IcsAlarm[] = when.alarms
-    .map(a => ({ hours: Math.round((a.at.toMillis() - when.day.toMillis()) / HOUR_MS), description: a.description }))
-
-  const { lat, lon } = p.pickup ?? {}
+export function parcelCalendar(p: Parcel, code: string | undefined, start: Date, now: Date): string {
+  const c = pickupEventContent(p, code, now)
   return icsCalendar(PRODID, [{
     uid: `parcel-${p.id}-${p.trackingNumber}@parcels.local`,
     sequence: Math.max(0, Math.floor((now.getTime() - SEQUENCE_EPOCH) / 60_000)),
     stamp: now,
-    date: { year: when.day.year, month: when.day.month, day: when.day.day },
-    summary: `Pick up: ${name}`,
-    location: pickupSummary(p),
-    geo: lat !== undefined && lon !== undefined ? { lat, lon } : undefined,
-    url: mapsUrl(p),
-    description: [
-      `${CARRIER_NAME[p.carrier]} · ${p.trackingNumber}`,
-      ...(code ? [`Open the box with ${code}`] : []),
-      when.line,
-    ],
-    alarms,
+    start,
+    end: new Date(start.getTime() + EVENT_MINUTES * 60_000),
+    ...c,
+    alarms: [{ hours: 0, description: c.summary }],
   }])
 }
-
-interface Timing {
-  /** Local midnight of the event's one day. */
-  day: DateTime
-  /** The description's last line: what the deadline is, or that there is none. */
-  line: string
-  alarms: Array<{ at: DateTime; description: string }>
-}
-
-/** The deadline day, reminded at 09:00 the day before and on the day; a reminder already past is left out. */
-function byDeadline(retainedTill: Date, name: string, now: Date): Timing {
-  const till = DateTime.fromJSDate(retainedTill, { zone: DISPLAY_ZONE })
-  const day = till.startOf('day')
-  const time = isWholeDay(till) ? undefined : till.toFormat('HH:mm')
-  return {
-    day,
-    line: `Collect by ${formatDay(retainedTill, now)}${time ? `, ${time}` : ''}`,
-    alarms: [
-      { at: at(day.minus({ days: 1 }), 9), description: `Pick up tomorrow: ${name}` },
-      { at: at(day, 9), description: `Pick up today${time ? ` by ${time}` : ''}: ${name}` },
-    ].filter(a => a.at.toMillis() > now.getTime()),
-  }
-}
-
-/**
- * No deadline: today, reminded at 17:00, or - once it is 17:00 or later - tomorrow, reminded at 09:00.
- * Both reminders are always still to come, so nothing is filtered.
- */
-function soon(p: Parcel, name: string, now: Date): Timing {
-  const local = DateTime.fromJSDate(now, { zone: DISPLAY_ZONE })
-  const today = local.hour < COLLECT_TODAY_BY
-  const day = (today ? local : local.plus({ days: 1 })).startOf('day')
-  return {
-    day,
-    line: `${CARRIER_NAME[p.carrier]} gave no pickup deadline — collect it soon`,
-    alarms: [{ at: at(day, today ? COLLECT_TODAY_BY : 9), description: `Pick up: ${name}` }],
-  }
-}
-
-/** That local day at a whole hour: on a day the clocks change, its distance from midnight is not `hour`. */
-const at = (day: DateTime, hour: number): DateTime => day.set({ hour, minute: 0, second: 0, millisecond: 0 })
 
 /**
  * `pick-up-topanky-zalando.ics`: ASCII only, because a header value is bytes and a browser's guess at

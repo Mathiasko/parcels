@@ -342,6 +342,10 @@ export function setPostalCode(db: Database, id: number, postalCode: string): voi
  * The files go AFTER the transaction has committed, so a row can never hold a path to a file that is
  * not there, and a failed unlink leaks an unreferenced file rather than undoing the deletion.
  *
+ * Its `calendar_events` row goes by itself (ON DELETE CASCADE). The EVENT that row points at, in the
+ * person's Calendar, is deliberately left alone: deleting a parcel never reaches into their calendar,
+ * because removing things from it unasked is worse than a stale entry they can delete themselves.
+ *
  * The `activity_log` row is the one thing deliberately NOT deleted with the parcel, and is written
  * inside the same transaction with the status the parcel was in when it went: "where did my parcel
  * go" has to be answerable with "you deleted it on Tuesday", which is only possible if the evidence

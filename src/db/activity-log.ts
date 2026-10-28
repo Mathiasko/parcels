@@ -97,6 +97,7 @@ export type ActivityKind =
   | 'update'
   | 'collected'
   | 'uncollected'
+  | 'calendar_added'
 
 /**
  * The settings the page can change, as names. The list is closed and is the ONLY thing ever recorded
@@ -105,7 +106,7 @@ export type ActivityKind =
  * and `imap` means the whole mail block was added or removed, which is one decision and not five.
  */
 export const SETTING_FIELDS = [
-  'defaultPostalCode', 'notifier', 'mapPreview',
+  'defaultPostalCode', 'notifier', 'mapPreview', 'pickupCalendar',
   'imap', 'imap.host', 'imap.port', 'imap.user', 'imap.mailbox', 'imap.pass',
 ] as const
 export type SettingField = typeof SETTING_FIELDS[number]
@@ -164,6 +165,12 @@ export type Action =
    */
   | { kind: 'collected'; as: 'collected' | 'received'; parcelId: number; carrier: CarrierId; from: CanonicalStatus }
   | { kind: 'uncollected'; as: 'collected' | 'received'; parcelId: number; carrier: CarrierId; to: CanonicalStatus }
+  /**
+   * "Add to Calendar" put an event into Calendar.app: the day and time it was planned for (`2026-10-30`,
+   * `13:00`) and whether it replaced one added before. Not the calendar's name - that is the person's own
+   * free text - and never the locker code that went into the event's description.
+   */
+  | { kind: 'calendar_added'; parcelId: number; carrier: CarrierId; day: string; time: string; replaced: boolean }
 
 /** One row, as a reader wants it. Absent fields are the columns that do not apply to the kind. */
 export interface ActivityEntry {
@@ -296,12 +303,21 @@ function insertFor(a: Action): Insert {
       return { kind: a.kind, parcelId: a.parcelId, carrier: a.carrier, from: a.from, to: 'delivered', detail: a.as }
     case 'uncollected':
       return { kind: a.kind, parcelId: a.parcelId, carrier: a.carrier, from: 'delivered', to: a.to, detail: a.as }
+    case 'calendar_added':
+      return { kind: a.kind, parcelId: a.parcelId, carrier: a.carrier, detail: calendarDetail(a.day, a.time, a.replaced) }
     case 'update':
       // Three tokens in one column: the outcome, then where it came from and where it ended up. A
       // column each would mean three migrations for one fact that is never read apart.
       return { kind: a.kind, detail: [a.outcome, shaOrDash(a.from), shaOrDash(a.to)].join(' ') }
   }
 }
+
+/**
+ * `2026-10-30 13:00`, then `replaced` when it took the place of an earlier event. Built only from a day
+ * and a time that pass these patterns, so the column keeps holding nothing but this app's own tokens.
+ */
+const calendarDetail = (day: string, time: string, replaced: boolean): string =>
+  [/^\d{4}-\d{2}-\d{2}$/.test(day) ? day : '-', /^\d{2}:\d{2}$/.test(time) ? time : '-', ...(replaced ? ['replaced'] : [])].join(' ')
 
 /**
  * A commit sha, shortened, or `-` for "not recorded". Anything that is not hex becomes `-`: the shas
@@ -388,6 +404,7 @@ const FIELD_WORDS: Record<ActivityKind, string> = {
   update: 'update',
   collected: 'marked collected',
   uncollected: 'mark undone',
+  calendar_added: 'added to calendar',
 }
 
 /** The word for a kind, for a page that groups rows by what happened. */
@@ -422,6 +439,10 @@ export function describeActivity(e: ActivityEntry): string {
       return `${parcel} marked ${e.detail === 'received' ? 'received' : 'collected'} by you${e.from ? `, it was ${e.from}` : ''}`
     case 'uncollected':
       return `${parcel}: "marked ${e.detail === 'received' ? 'received' : 'collected'}" undone, back to ${e.to ?? '?'}`
+    case 'calendar_added': {
+      const [day = '-', time = '-', replaced] = (e.detail ?? '').split(' ')
+      return `${parcel} added to Calendar for ${day} ${time}${replaced === 'replaced' ? ', replacing the event added before' : ''}`
+    }
     default:
       return e.kind
   }

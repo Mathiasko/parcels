@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import {
@@ -7,7 +8,7 @@ import type { CarrierId } from '../core/types.js'
 import type { Database } from '../db/index.js'
 import { latestEvent, listEvents, userMark, userMarks } from '../db/events.js'
 import { markCollected, undoCollected } from '../core/collected.js'
-import { deleteParcel, getParcel, listActive, type Parcel } from '../db/parcels.js'
+import { deleteParcel, getParcel, listActive, parcelName, type Parcel } from '../db/parcels.js'
 import type { Carrier, HttpClient } from '../core/types.js'
 import { createHttpClient } from '../core/http.js'
 import { cachedGrid } from '../core/map-preview.js'
@@ -29,8 +30,12 @@ import { addParcel, cleanPostcode, MAX_LABEL } from './actions.js'
 import { applySettings, changedSettingFields, settingsValues, submittedSettings, type SettingsValues } from './settings.js'
 import { probeImap, type ImapProbeLike, type ImapProbeResult } from '../ingest/imap-probe.js'
 import type { ImapConfig } from '../ingest/imap.js'
-import { settingsPage, type SettingsState } from './views/settings.js'
-import { CARRIER_NAME } from './views/format.js'
+import { calendarListWhy, settingsPage, type CalendarList, type SettingsState } from './views/settings.js'
+import { CalendarFailure, osascriptCalendar, type CalendarClient } from '../core/calendar-app.js'
+import { calendarEventsFor, getCalendarEvent, saveCalendarEvent } from '../db/calendar-events.js'
+import { calendarOffered, type CalendarFormState, type CalendarOutcome } from './views/calendar-form.js'
+import { pickupSlots, slotAllowed, slotStart, timeLabel, type Slots } from './calendar-slots.js'
+import { CARRIER_NAME, DISPLAY_ZONE } from './views/format.js'
 import {
   deliveryStats, getUnparsedMessage, listUnparsedMessages, rawResponsesFor,
 } from './queries.js'
@@ -51,7 +56,7 @@ import {
 import { getUpdateCheck, recordUpdateCheck } from '../db/update-state.js'
 import { historyPage } from './views/history.js'
 import { calendarUrl, indexPage, type RefreshNote } from './views/index.js'
-import { calendarFilename, parcelCalendar } from './calendar.js'
+import { calendarFilename, parcelCalendar, pickupEventSpec } from './calendar.js'
 import { parcelPage } from './views/parcel.js'
 import { DateTime } from 'luxon'
 import type { PageCtx } from './views/layout.js'
@@ -72,6 +77,12 @@ export interface WebDeps {
   now?: () => Date
   /** The map-tile cache; defaults to `data/tiles` beside the database, as the poller writes it. */
   tileDir?: string
+  /**
+   * Calendar.app, for "Add to Calendar" and the settings page's list of calendars. Defaults to the
+   * osascript client (core/calendar-app.ts); every test injects a fake, and the real one refuses to run
+   * under the test runner anyway, so no test can raise the Automation prompt or touch a real calendar.
+   */
+  calendar?: CalendarClient
   /** The IMAP client the connection test uses; injected so tests never touch the network. */
   imapClient?: (config: ImapConfig) => ImapProbeLike
   /**
@@ -116,6 +127,23 @@ export const BIND_HOST = '127.0.0.1'
 
 export async function startServer(app: FastifyInstance, port: number): Promise<void> {
   await app.listen({ host: BIND_HOST, port })
+}
+
+/** An "Add to Calendar" submission the POST would not take, shown again on the page it came from. */
+interface Refused { parcelId: number; error: string; day: string; time: string }
+
+/**
+ * Why a submitted day and time is not one the form offers right now, in words for the form to show.
+ * Most often a time on today that passed while the page sat open: the page has no script to notice.
+ */
+function slotRefusal(slots: Slots, day: string, time: string, at: Date): string {
+  if (day === '' || time === '') return 'Choose a day and a time.'
+  if (!/^\d{2}:\d{2}$/.test(time) || slotStart('2000-01-01', time) === undefined) return 'Choose one of the times listed.'
+  const offered = slots.days.find(d => d.date === day)
+  const today = DateTime.fromJSDate(at, { zone: DISPLAY_ZONE }).toFormat('yyyy-LL-dd')
+  if (offered) return `${timeLabel(time)}${day === today ? ' today' : ''} has already passed. Choose a later time or another day.`
+  if (day === today) return 'Today has no time left to choose. Choose another day.'
+  return slots.days.length === 0 ? 'There is no time left to plan this pickup for.' : 'That day cannot be chosen. Choose one of the days listed.'
 }
 
 /** A parcel tried within this long is left alone by the global refresh (a double click, or the hourly poll just ran). */
@@ -167,6 +195,11 @@ const RUNS_SHOWN = 20
  * not resurface the notice days later. Undo stays on the parcel page for as long as the mark stands.
  */
 const COLLECTED_NOTICE_MS = 60 * 60_000
+
+/** How long the result of an "Add to Calendar" press is shown for `?calendar=<id>`; the same hour, for the same reasons. */
+const CALENDAR_NOTICE_MS = 60 * 60_000
+/** How many of those results are kept in memory. Only the latest is ever wanted; a few cover several tabs. */
+const CALENDAR_OUTCOMES_KEPT = 20
 
 /**
  * How many activity entries the Health page shows. More than the runs, because these are what somebody
@@ -300,17 +333,31 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     }
   }
 
-  app.get('/', async (req, reply) => {
+  /**
+   * The dashboard. `refused` is an "Add to Calendar" submission the POST would not take: its parcel's
+   * form opens again with the reason inside it, or - when the parcel no longer offers the form at all -
+   * the reason is a notice at the top.
+   */
+  const home = (reply: FastifyReply, query: Record<string, unknown>, refused?: Refused, status = 200) => {
     const active = listActive(db)
-    // One query for every code on the page, rather than one per parcel inside the card renderer.
-    const codes = pickupCodesFor(db, active.filter(p => p.status === 'ready_for_pickup').map(p => p.id))
-    const entries = active.map(parcel => ({ parcel, last: latestEvent(db, parcel.id), code: codes.get(parcel.id) }))
-    const c = ctx()
-    const r = runState(req.query as Record<string, unknown>, c.now, entries.length)
-    return send(reply, indexPage(entries, { ...c, reloadIn: r.reloadIn }, r.note, {
-      mailConfigured: config.imap !== undefined, collected: justCollected(req.query as Record<string, unknown>, c.now),
+    const ready = active.filter(p => p.status === 'ready_for_pickup').map(p => p.id)
+    // One query for every code (and every calendar event) on the page, rather than one per parcel.
+    const codes = pickupCodesFor(db, ready)
+    const events = calendarEventsFor(db, ready)
+    const entries = active.map(parcel => ({
+      parcel, last: latestEvent(db, parcel.id), code: codes.get(parcel.id),
+      cal: calState(parcel, events.get(parcel.id), refused),
     }))
-  })
+    const c = ctx()
+    const r = runState(query, c.now, entries.length)
+    return send(reply, indexPage(entries, { ...c, reloadIn: r.reloadIn }, r.note, {
+      mailConfigured: config.imap !== undefined, collected: justCollected(query, c.now),
+      calendar: calendarResult(query, c.now),
+      calendarRefused: refusedElsewhere(refused, active),
+    }), status)
+  }
+
+  app.get('/', async (req, reply) => home(reply, req.query as Record<string, unknown>))
 
   /**
    * The parcel named by `?collected=<id>`, but only while it really is marked, recently, and not archived:
@@ -338,37 +385,158 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     return cachedGrid(tileDir, lat, lon)
   }
 
-  app.get<{ Params: { id: string } }>('/parcel/:id', async (req, reply) => {
-    const parcel = /^\d+$/.test(req.params.id) ? getParcel(db, Number(req.params.id)) : undefined
-    if (!parcel) return notFound(reply, 'parcel')
+  const parcelView = (reply: FastifyReply, parcel: Parcel, query: Record<string, unknown>, refused?: Refused, status = 200) => {
     const c = ctx()
     // No `active` count here: "nothing is in flight yet" is a statement about the dashboard, and this
     // page's refresh only ever asked about one parcel.
-    const r = runState(req.query as Record<string, unknown>, c.now)
+    const r = runState(query, c.now)
+    const result = calendarResult(query, c.now)
     return send(reply, parcelPage(
       parcel, listEvents(db, parcel.id), rawResponsesFor(db, parcel.id, parcel.carrier),
       { ...c, reloadIn: r.reloadIn }, r.note, mapFor(parcel),
       parcel.status === 'ready_for_pickup' ? getPickupCode(db, parcel.id) : undefined,
       userMark(db, parcel.id),
-    ))
+      {
+        cal: calState(parcel, getCalendarEvent(db, parcel.id), refused),
+        calendar: result?.parcel.id === parcel.id ? result.outcome : undefined,
+        calendarRefused: refusedElsewhere(refused, [parcel]),
+      },
+    ), status)
+  }
+
+  app.get<{ Params: { id: string } }>('/parcel/:id', async (req, reply) => {
+    const parcel = /^\d+$/.test(req.params.id) ? getParcel(db, Number(req.params.id)) : undefined
+    if (!parcel) return notFound(reply, 'parcel')
+    return parcelView(reply, parcel, req.query as Record<string, unknown>)
+  })
+
+  // --- Add to Calendar ---------------------------------------------------------------------------------
+
+  /** The form's state for one parcel: the event already added, and the refused submission if it was this parcel's. */
+  const calState = (p: Parcel, stored: CalendarFormState['stored'], refused?: Refused): CalendarFormState | undefined => {
+    const mine = refused?.parcelId === p.id && calendarOffered(p) ? refused : undefined
+    if (!stored && !mine) return undefined
+    return { ...(stored && { stored }), ...(mine && { error: mine.error, day: mine.day, time: mine.time }) }
+  }
+
+  /** A refusal whose parcel shows no form to put it in (it stopped waiting, or was archived): said at the top instead. */
+  const refusedElsewhere = (refused: Refused | undefined, shown: Parcel[]): string | undefined => {
+    if (!refused) return undefined
+    const p = shown.find(x => x.id === refused.parcelId)
+    return p && calendarOffered(p) ? undefined : refused.error
+  }
+
+  /**
+   * What each press came to, for the page it redirects to. In memory, like the settings page's connection
+   * test: the URL names WHICH result (`?calendar=<id>`, an unguessable token) and never what it says, so
+   * a bookmark or a hand-edited URL cannot make the page claim an event was added. Shown for an hour.
+   */
+  const calendarOutcomes = new Map<string, { at: Date; outcome: CalendarOutcome }>()
+  const remember = (outcome: CalendarOutcome): string => {
+    const id = randomBytes(6).toString('hex')
+    calendarOutcomes.set(id, { at: now(), outcome })
+    for (const key of calendarOutcomes.keys()) {
+      if (calendarOutcomes.size <= CALENDAR_OUTCOMES_KEPT) break
+      calendarOutcomes.delete(key)                                  // a Map iterates oldest first
+    }
+    return id
+  }
+  const calendarResult = (query: Record<string, unknown>, at: Date): { outcome: CalendarOutcome; parcel: Parcel } | undefined => {
+    const id = one(query.calendar)
+    const kept = id !== undefined && /^[0-9a-f]{12}$/.test(id) ? calendarOutcomes.get(id) : undefined
+    if (!kept) return undefined
+    const age = at.getTime() - kept.at.getTime()
+    const parcel = getParcel(db, kept.outcome.parcelId)
+    return parcel && age >= 0 && age <= CALENDAR_NOTICE_MS ? { outcome: kept.outcome, parcel } : undefined
+  }
+
+  /**
+   * "Add to Calendar": the event goes into Calendar.app through osascript (core/calendar-app.ts).
+   *
+   * An ordinary POST, so the `onRequest` guard refuses a foreign Host or a cross-site form like any other
+   * write. An unknown parcel is the 404 page. A parcel that no longer offers the form (not waiting for
+   * collection, or archived) or a slot the form does not offer right now - a past time on today, a day
+   * outside the range, anything malformed - is refused with a 400 that shows the page again, with the
+   * form open and the reason in it: the page has no script, so "that time has passed" is said here.
+   *
+   * Adding again for the same parcel replaces the event added before (its uid is in `calendar_events`)
+   * rather than adding a second one. Whatever happens, the request ends in a redirect to the page the
+   * form was on, which shows the result: where the event went, or why it did not and the .ics instead.
+   */
+  app.post<{ Params: { id: string } }>('/parcel/:id/calendar', async (req, reply) => {
+    const parcel = parcelFor(req.params.id)
+    if (!parcel) return notFound(reply, 'parcel')
+    const f = form(req)
+    const back = text(f.back) === 'home'
+    const day = text(f.day)
+    const time = text(f.time)
+    const at = now()
+    const refuse = (error: string) => {
+      const refused: Refused = { parcelId: parcel.id, error, day, time }
+      return back ? home(reply, {}, refused, 400) : parcelView(reply, parcel, {}, refused, 400)
+    }
+    if (!calendarOffered(parcel)) {
+      return refuse(`${parcelName(parcel)} is no longer waiting for collection, so it was not added to Calendar.`)
+    }
+    const slots = pickupSlots(parcel.retainedTill, at)
+    if (!slotAllowed(slots, day, time)) return refuse(slotRefusal(slots, day, time, at))
+    const start = slotStart(day, time)!
+    const stored = getCalendarEvent(db, parcel.id)
+    let outcome: CalendarOutcome
+    try {
+      const added = await calendar.add(
+        pickupEventSpec(parcel, getPickupCode(db, parcel.id), start, at),
+        config.pickupCalendar,
+        stored && { uid: stored.uid, calendar: stored.calendar },
+      )
+      saveCalendarEvent(db, { parcelId: parcel.id, uid: added.uid, calendar: added.calendar, startsAt: start, createdAt: now() })
+      // The day and time, never the locker code that went into the event's description, nor the
+      // calendar's name, which is the person's own words.
+      logAction(db, { kind: 'calendar_added', parcelId: parcel.id, carrier: parcel.carrier, day, time, replaced: stored !== undefined }, acted())
+      outcome = { ok: true, parcelId: parcel.id, calendar: added.calendar, startsAt: start, replaced: stored !== undefined }
+    } catch (err) {
+      const failed = err instanceof CalendarFailure ? err : new CalendarFailure('other', err instanceof Error ? err.message : String(err))
+      if (failed.kind === 'other') console.error(`${new Date().toISOString()} POST /parcel/${parcel.id}/calendar:`, failed.message)
+      outcome = {
+        ok: false, parcelId: parcel.id, kind: failed.kind, day, time,
+        ...(failed.detail !== undefined && { detail: failed.detail }),
+        ...((failed.calendar ?? config.pickupCalendar) !== undefined && { calendar: failed.calendar ?? config.pickupCalendar }),
+      }
+    }
+    const id = remember(outcome)
+    return reply.redirect(back ? `/?calendar=${id}` : `/parcel/${parcel.id}?calendar=${id}`, 303)
   })
 
   /**
-   * A parcel waiting for collection as a calendar file: its deadline day, or a nudge to collect it soon
-   * when the carrier gave none (see web/calendar.ts). A GET with no side effects and
-   * no network: it reads the database and builds a string, so it needs no POST, and it sits behind the
-   * same Host check and headers as every page. Offered on exactly the parcels `calendarUrl` links it for;
-   * anything else is the ordinary 404 page, "no such parcel" only when there is none. Nothing is logged:
-   * the body carries the locker code.
+   * The same event as a file: the fallback every failure offers, and what Calendar.app opens straight
+   * into its Add dialog when Safari is handed it `inline`. `?day=YYYY-MM-DD&time=HH:MM` must be a slot the
+   * form offers right now (else 400); with neither, it is the form's default slot (the last day, at 9:00
+   * or the first time still to come), so an old link still works.
+   *
+   * A GET with no side effects and no network: it reads the database and builds a string, behind the
+   * same Host check and headers as every page. Offered on exactly the parcels the form is; anything else
+   * is the ordinary 404 page, "no such parcel" only when there is none. Nothing is logged: the body
+   * carries the locker code.
    */
   app.get<{ Params: { id: string } }>('/parcel/:id/calendar.ics', async (req, reply) => {
     const parcel = parcelFor(req.params.id)
     if (!parcel) return notFound(reply, 'parcel')
     if (!calendarUrl(parcel)) return notFound(reply)
+    const query = req.query as Record<string, unknown>
+    const at = now()
+    const slots = pickupSlots(parcel.retainedTill, at)
+    const asked = one(query.day) !== undefined || one(query.time) !== undefined
+    const day = asked ? one(query.day) ?? '' : slots.day
+    const time = asked ? one(query.time) ?? '' : slots.time
+    if (day === undefined || time === undefined || !slotAllowed(slots, day, time)) {
+      return sendError(reply, 400, () => errorPage('That time cannot be chosen', html`${
+        day === undefined ? 'There is no time left to plan this pickup for.' : slotRefusal(slots, day, time ?? '', at)} Go back to <a href="/parcel/${parcel.id}">${parcelName(parcel)}</a> and choose again.`, errorCtx()),
+      'that day and time cannot be chosen')
+    }
     return reply.code(200)
       .type('text/calendar; charset=utf-8')
-      .header('content-disposition', `attachment; filename="${calendarFilename(parcel)}"`)
-      .send(parcelCalendar(parcel, getPickupCode(db, parcel.id), now()))
+      .header('content-disposition', `inline; filename="${calendarFilename(parcel)}"`)
+      .send(parcelCalendar(parcel, getPickupCode(db, parcel.id), slotStart(day, time)!, at))
   })
 
   /**
@@ -404,6 +572,16 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   const form = (req: { body: unknown }): Record<string, string> => (req.body ?? {}) as Record<string, string>
   const text = (v: string | undefined) => (v ?? '').trim()
   const parcelFor = (id: string) => (/^\d+$/.test(id) ? getParcel(db, Number(id)) : undefined)
+  const calendar = deps.calendar ?? osascriptCalendar()
+
+  /** The writable calendars for the settings page, or why they could not be listed. Never throws. */
+  const calendarList = async (): Promise<CalendarList> => {
+    try {
+      return { ok: true, names: await calendar.listWritable() }
+    } catch (err) {
+      return { ok: false, why: calendarListWhy(err) }
+    }
+  }
 
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
     done(null, Object.fromEntries(new URLSearchParams(body as string)))
@@ -531,13 +709,13 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     }
   }
 
-  const settings = (
+  const settings = async (
     reply: FastifyReply, file: { doc: ConfigDocument; error?: string },
     state: SettingsState = {}, values?: SettingsValues, status = 200,
   ) => send(reply, settingsPage(
     values ?? settingsValues(file.doc),
     { port: config.port, dbPath: config.dbPath, configPath },
-    ctx(), { ...state, configError: file.error },
+    ctx(), { ...state, configError: file.error, calendars: await calendarList() },
   ), status)
 
   /**

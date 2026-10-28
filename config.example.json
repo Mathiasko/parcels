@@ -4,6 +4,7 @@
   "port": 8787,
   "notifier": "auto",
   "mapPreview": true,
+  "pickupCalendar": "",
   "imap": {
     "host": "imap.gmail.com",
     "port": 993,

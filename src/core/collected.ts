@@ -38,6 +38,9 @@ export const canMark = (p: Parcel): boolean => p.archivedAt === undefined && !is
  * notification rules announce whatever differs from `last_announced_status`, and a "Delivered" banner
  * about something the user has just done themselves is noise. Reminders stop on their own, because
  * they are only ever sent for a parcel that is `ready_for_pickup`.
+ *
+ * An event "Add to Calendar" made for it is NOT removed: marking never reaches into the person's
+ * calendar, because removing things from it unasked is worse than a stale entry they can delete.
  */
 export function markCollected(db: Database, parcelId: number, cause: Cause = UNATTRIBUTED): MarkOutcome {
   const at = cause.at ?? new Date()

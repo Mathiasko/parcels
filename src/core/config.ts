@@ -15,6 +15,12 @@ export interface Config {
    * either service ever objects to us. Default on.
    */
   mapPreview: boolean
+  /**
+   * The Calendar.app calendar "Add to Calendar" puts pickups into, by name. Absent (or `""` in the file)
+   * means the first writable calendar; the success notice always names the calendar it used, so a wrong
+   * default is seen and can be changed on /settings.
+   */
+  pickupCalendar?: string
   imap?: { host: string; port: number; user: string; pass: string; mailbox: string }
 }
 
@@ -53,6 +59,9 @@ export function validateConfig(raw: ConfigDocument, label = 'config.json'): Conf
   if (raw.mapPreview !== undefined && typeof raw.mapPreview !== 'boolean') {
     throw new Error(`config ${label}: "mapPreview" must be true or false`)
   }
+  if (raw.pickupCalendar !== undefined && typeof raw.pickupCalendar !== 'string') {
+    throw new Error(`config ${label}: "pickupCalendar" must be a calendar's name, or "" for the first writable calendar`)
+  }
   if (raw.dbPath !== undefined && (typeof raw.dbPath !== 'string' || raw.dbPath === '')) {
     throw new Error(`config ${label}: "dbPath" must be a non-empty string`)
   }
@@ -84,6 +93,7 @@ export function validateConfig(raw: ConfigDocument, label = 'config.json'): Conf
     defaultPostalCode: raw.defaultPostalCode,
     notifier,
     mapPreview: (raw.mapPreview as boolean | undefined) ?? true,
+    ...(typeof raw.pickupCalendar === 'string' && raw.pickupCalendar.trim() !== '' && { pickupCalendar: raw.pickupCalendar.trim() }),
     imap,
   }
 }

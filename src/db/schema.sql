@@ -204,6 +204,23 @@ CREATE TABLE IF NOT EXISTS pickup_nudges (
   PRIMARY KEY (parcel_id, slot_key)
 );
 
+-- The event "Add to Calendar" last put into Calendar.app for a parcel, one row per parcel, so that adding
+-- again REPLACES that event instead of adding a second one. `uid` is Calendar's own id for it, `calendar`
+-- the name of the calendar it went into (where the replace looks for it), `starts_at` the planned pickup
+-- (UTC ISO), which the form shows as "In Calendar: Fri 30 Oct, 13:00".
+--
+-- ON DELETE CASCADE, so deleting a parcel (or folding a duplicate into another) takes this row with it.
+-- The EVENT in Calendar stays: deleting a parcel, or marking it collected, never touches the person's
+-- calendar. Removing things from somebody's calendar unasked is worse than a stale entry they can delete.
+-- A table of its own, so an existing database gains it from the idempotent schema exec, no migration.
+CREATE TABLE IF NOT EXISTS calendar_events (
+  parcel_id  INTEGER PRIMARY KEY REFERENCES parcels(id) ON DELETE CASCADE,
+  uid        TEXT NOT NULL,
+  calendar   TEXT NOT NULL,
+  starts_at  TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 -- One row per poll run, whoever started it: the hourly poller, `cli poll`, or the "Refresh now" button.
 -- This is the app's activity log, which is why every entry point writes it rather than only the button.
 -- The row is opened BEFORE the run (the web refresh redirects to it and shows it while it is going) and

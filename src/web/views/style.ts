@@ -70,6 +70,8 @@ label input,label select{display:block;width:100%;margin-top:.25rem;font-size:.9
 .fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;max-width:28rem}
 .fields .wide{grid-column:1/-1}
 .fields .hint{margin:.25rem 0 0;font-weight:400}
+/* A field's label when there is no control to label (the calendar list could not be read). */
+.lbl{display:block;font-size:.8125rem;line-height:1.3846;font-weight:600;color:var(--ink-2)}
 .inl{display:flex;gap:.5rem;align-items:center}
 .inl input{flex:1;min-width:0}
 form.inline{display:inline}
@@ -137,11 +139,33 @@ form.inline{display:inline}
 .clock b{font-weight:600}
 .clock .due{color:var(--signal)}
 .clock .due-now{color:var(--warn)}
-/* The calendar link belongs to the deadline, so it rides on the deadline line, one per parcel, at the size
-   of the Maps link; lifted above a card's stretched link like the tracking number. */
-.cal{position:relative;z-index:1;font-size:.8125rem}
+/* "Add to Calendar": a disclosure at the end of the parcel's clock line, one per parcel, at the size of the
+   Maps link. A disclosure cannot sit inside the clock's paragraph, so the line is a wrapping row (.cline) of
+   the clock and the disclosure; opened, the disclosure takes a row of its own below the clock and its "·"
+   goes. Lifted above a card's stretched link like .sel and .got, so opening it does not open the parcel.
+   Nothing here takes the signal colour: the radios are ink (accent-color), the button is the quiet one. */
+.cline{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:.375rem;margin:.125rem 0 0}
+.cline .clock{margin:0}
+.cline .sep:has(+ .calf[open]){display:none}
+.calf{position:relative;z-index:1;margin:0;font-size:.8125rem;line-height:1.3846}
+.calf[open]{flex-basis:100%}
+.calf summary{width:fit-content;padding:0;font-size:inherit;color:var(--ink-2)}
+.calf summary:hover{color:var(--ink)}
+.calf-c{text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:3px}
+.calf-in{font-size:.8125rem;color:var(--ink-3)}
+.calf form{display:grid;justify-items:start;gap:.625rem;max-width:34rem;margin:.375rem 0 .25rem;padding:.75rem 1rem;background:var(--paper);border:1px solid var(--rule-s);border-radius:8px}
+.calf fieldset{min-width:0;margin:0;padding:0;border:0}
+.calf legend{margin:0 0 .25rem;padding:0;font-weight:600;color:var(--ink-2)}
+.picks{display:flex;flex-wrap:wrap;gap:.375rem}
+.pick{display:inline-flex;align-items:center;gap:.375rem;height:1.75rem;padding:0 .625rem 0 .5rem;border:1px solid var(--rule-s);border-radius:6px;background:var(--surface);font-size:.8125rem;font-weight:400;color:var(--ink);white-space:nowrap;cursor:pointer}
+.pick:hover{border-color:var(--ink-3)}
+.pick:has(input:checked){border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.pick input{display:inline;width:auto;height:auto;margin:0;padding:0;border:0;background:none;accent-color:var(--ink)}
+.calf button{height:1.75rem;padding:0 .625rem;font-weight:500;color:var(--ink-2)}
+.calf button:hover{color:var(--ink)}
+.calf-err{display:flex;align-items:center;gap:.375rem;margin:0;font-weight:600;color:var(--warn)}
 /* "Mark as collected": a secondary button, never blue (the chip already says this parcel is waiting on you).
-   In a card it is lifted above the stretched link like .cal and .sel, so it takes its own click and the
+   In a card it is lifted above the stretched link like .calf and .sel, so it takes its own click and the
    rest of the block still opens the parcel; it sits at the foot of its parcel's block, one per parcel. */
 .got{position:relative;z-index:1;width:fit-content;margin:.5rem 0 0}
 .got button{height:1.75rem;padding:0 .625rem;font-weight:500;color:var(--ink-2)}
