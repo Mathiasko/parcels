@@ -138,7 +138,7 @@ describe('POST /settings', () => {
       { imapHost: 'imap.attacker.example' },
       { imapPort: '1993' },
       { imapUser: 'someone-else@gmail.com' },
-    ]) {
+    ] as Array<Record<string, string>>) {
       const h = harness()
       const before = readFileSync(h.path, 'utf8')
       const res = await h.post('/settings', fields({ ...over, imapPass: '' }))
