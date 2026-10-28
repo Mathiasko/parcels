@@ -12,7 +12,7 @@ import { HttpTransportError, captureBodies } from './http.js'
 import { runMapPreview, summarizeMapPreview, type MapPreviewDeps, type MapPreviewReport } from './map-preview.js'
 import { mergeCarrierPickup, runPickupCodes, type PickupCodeReport } from './pickup-code.js'
 import { adoptUpdateOutcome, maybeCheckForUpdate, type UpdateCheck, type UpdateCheckOptions } from './update.js'
-import { isDormant, isDue, slotFor } from './backoff.js'
+import { isDormant, isDue } from './backoff.js'
 import { appendEvents, recomputeParcelStatus } from '../db/events.js'
 import { UNATTRIBUTED, type Cause } from '../db/activity-log.js'
 import { recordIngest } from '../db/ingest-status.js'
@@ -114,7 +114,6 @@ function* chunks<T>(items: T[], size: number): Generator<T[]> {
  */
 export async function runPoll(deps: PollDeps): Promise<PollReport> {
   const { db, http, now } = deps
-  const slot = slotFor(now)
   const cause = deps.cause ?? UNATTRIBUTED
   const report: PollReport = { polled: 0, newEvents: [], failures: [] }
 
@@ -128,7 +127,7 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
     // sleep gap (every morning) would re-poll every dormant parcel. A parcel named in `parcelIds` is
     // the user's explicit "refresh this one" and is polled even when dormant.
     if (deps.parcelIds === undefined && isDormant(p, now)) continue
-    if (!deps.forceAll && !isDue(p, now, slot)) continue
+    if (!deps.forceAll && !isDue(p, now)) continue
     // Deterministic: the carrier rejected this exact postcode and would reject it identically for
     // ever, so do not ask. The flag is NOT cleared here: clearing at selection would unflag a
     // parcel whose carrier has no adapter or is throttled, i.e. one that never gets polled at all.

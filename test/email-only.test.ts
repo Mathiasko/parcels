@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { runCli } from '../src/cli.js'
 import { runPoll } from '../src/core/poll.js'
-import { isDormant, isDue, slotFor } from '../src/core/backoff.js'
+import { isDormant, isDue } from '../src/core/backoff.js'
 import { allAdapters } from '../src/carriers/registry.js'
 import { dhlCarrier } from '../src/carriers/dhl.js'
 import { extract } from '../src/ingest/extract.js'
@@ -174,7 +174,7 @@ describe('an email-only carrier is never polled', () => {
       .run(new Date(NOW.getTime() - 40 * DAY).toISOString(), id)
     const p = getParcel(db, id)!
     expect(isDormant(p, NOW)).toBe(false)
-    expect(isDue(p, NOW, slotFor(NOW))).toBe(false)
+    expect(isDue(p, NOW)).toBe(false)
   })
 
   test('/attention does not list it as dormant and the index does not say it stopped being polled', async () => {

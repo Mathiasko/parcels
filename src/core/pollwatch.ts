@@ -12,11 +12,6 @@ export const HEALTH_STALE_MS = 2 * HOUR
 /** The poller announces (once) that it was away when it resumes after this much polling-window time. */
 export const ALARM_STALE_MS = 6 * HOUR
 
-export const inPollWindow = (now: Date): boolean => {
-  const h = DateTime.fromJSDate(now, { zone: ZONE }).hour
-  return h >= WINDOW_START_HOUR && h < WINDOW_END_HOUR
-}
-
 /**
  * How much of [fromMs, toMs] falls inside the daily 07:00-21:00 window. Age is measured in this, not in
  * wall-clock time, because the Mac sleeps from about 21:00 to 07:00: the first poll of every morning

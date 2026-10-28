@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
-  ALARM_STALE_MS, HEALTH_STALE_MS, inPollWindow, pollerStatus, stalePollAlarm, windowMsBetween,
+  ALARM_STALE_MS, HEALTH_STALE_MS, pollerStatus, stalePollAlarm, windowMsBetween,
 } from '../src/core/pollwatch.js'
 import { recordPoll } from '../src/core/sleepgap.js'
 import { runPoll } from '../src/core/poll.js'
@@ -24,12 +24,6 @@ describe('windowMsBetween', () => {
   test('is zero for an empty or reversed span', () => {
     expect(windowMsBetween(at('2026-10-26T10:00:00'), at('2026-10-26T10:00:00'))).toBe(0)
     expect(windowMsBetween(at('2026-10-26T12:00:00'), at('2026-10-26T10:00:00'))).toBe(0)
-  })
-  test('inPollWindow follows Bratislava local time', () => {
-    expect(inPollWindow(new Date(at('2026-10-26T06:59:00')))).toBe(false)
-    expect(inPollWindow(new Date(at('2026-10-26T07:00:00')))).toBe(true)
-    expect(inPollWindow(new Date(at('2026-10-26T20:59:00')))).toBe(true)
-    expect(inPollWindow(new Date(at('2026-10-26T21:00:00')))).toBe(false)
   })
 })
 

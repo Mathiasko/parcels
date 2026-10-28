@@ -68,16 +68,6 @@ async function scrapeApiKey(http: HttpClient): Promise<string | undefined> {
   }
 }
 
-/**
- * Reads the current `Api-Key` out of SPS's own public JS bundle: the index page names the hashed
- * bundle, the bundle carries the key. It is a build-time constant, so no account is involved.
- * Never throws: any failure along the way yields the known literal, and a wrong key surfaces
- * later as a 401, which is `gated`.
- */
-export async function resolveApiKey(http: HttpClient): Promise<string> {
-  return (await scrapeApiKey(http)) ?? FALLBACK_API_KEY
-}
-
 /** The key only changes when SPS deploys, so an hour is ample. */
 const KEY_TTL_MS = 60 * 60 * 1000
 
@@ -88,7 +78,13 @@ const KEY_TTL_MS = 60 * 60 * 1000
  */
 let cachedKey: { at: number; found: Promise<string | undefined> } | undefined
 
-function apiKey(http: HttpClient): Promise<string> {
+/**
+ * Reads the current `Api-Key` out of SPS's own public JS bundle: the index page names the hashed
+ * bundle, the bundle carries the key. It is a build-time constant, so no account is involved.
+ * Never throws: any failure along the way yields the known literal, and a wrong key surfaces
+ * later as a 401, which is `gated`. Cached as above; a scrape that failed is retried next call.
+ */
+export function resolveApiKey(http: HttpClient): Promise<string> {
   if (!cachedKey || Date.now() - cachedKey.at >= KEY_TTL_MS) {
     const entry = { at: Date.now(), found: scrapeApiKey(http) }
     cachedKey = entry
@@ -137,7 +133,7 @@ function toResult(number: string, shipmentStatus: string, states: RawState[], ra
 async function fetchOne({ number }: FetchInput, http: HttpClient): Promise<FetchResult> {
   const transport: FetchResult = { ok: false, number, reason: 'transport' }
   try {
-    const key = await apiKey(http)
+    const key = await resolveApiKey(http)
     const res = await http(ENDPOINT, {
       method: 'POST',
       headers: { 'Api-Key': key, 'Content-Type': 'application/json' },
