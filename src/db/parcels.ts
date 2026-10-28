@@ -174,9 +174,11 @@ export function updateParcelState(
   // moment later the row no longer knows it. One indexed lookup per update, which is the price.
   const before = db.prepare('SELECT status, carrier FROM parcels WHERE id = ?').get(id) as
     { status: CanonicalStatus; carrier: CarrierId } | undefined
-  // A supplied pickup point REPLACES the stored one wholesale (unspecified fields become NULL),
-  // so a parcel that moves to a point without coordinates never keeps the old point's lat/lon.
-  // An omitted pickup leaves every pickup_* column untouched.
+  // A supplied pickup point REPLACES the stored one wholesale (unspecified fields become NULL): the
+  // caller decides what the whole point is. The poller merges a carrier's answer about the SAME point
+  // into the stored one first (`mergeCarrierPickup`), and passes a different point as it came, so a
+  // parcel moved to another point never keeps the old one's lat/lon. An omitted pickup leaves every
+  // pickup_* column untouched.
   const replacePickup = s.pickup !== undefined
   db.prepare(`
     UPDATE parcels SET
@@ -224,9 +226,9 @@ export function updateParcelState(
 
 /**
  * Writes coordinates onto an existing pickup point and touches nothing else. Deliberately not part of
- * `ParcelStateUpdate`: that one replaces the pickup point wholesale, which is right for a carrier
- * answer and wrong here, where the geocoder has learned one extra fact about the place the carrier
- * named. The row is left alone when it has no pickup point at all, so a lookup can never invent one.
+ * `ParcelStateUpdate`: that one replaces the pickup point wholesale, which is right once a caller has
+ * decided the whole point and wrong here, where the geocoder has learned one extra fact about the
+ * place the carrier named. The row is left alone when it has no pickup point at all, so a lookup can never invent one.
  */
 export function setPickupCoords(db: Database, id: number, lat: number, lon: number): void {
   db.prepare('UPDATE parcels SET pickup_lat = ?, pickup_lon = ? WHERE id = ? AND pickup_kind IS NOT NULL')

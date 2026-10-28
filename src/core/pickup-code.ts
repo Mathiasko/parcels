@@ -94,19 +94,15 @@ export async function runPickupCodes(deps: PickupCodeDeps): Promise<PickupCodeRe
  * `none` - the carrier located the parcel itself and left nothing useful blank, so there is nothing to
  * look for; the carrier's own data wins and is never re-read, never second-guessed.
  *
- * `missing` - once, and again only when new mail arrives. A point written here persists: the carriers
- * that give no point give none on every poll, so nothing overwrites it, and `checked_messages` is what
- * remembers that a mail with no block has already been looked at.
- *
- * `thin` and `postcode` - every run. `updateParcelState` replaces a pickup point wholesale, so the
- * carrier's next answer (`{ kind: 'parcelshop' }`, or Packeta's point with no postcode in it, every
- * hour for as long as the parcel waits) wipes whatever this pass added. Re-reading is the only thing
- * that keeps the address on the page; it is a local read of a file the poller itself wrote, and it
- * stops the moment the parcel is collected.
+ * Anything else - once, and again only when new mail arrives. A point written here persists: the
+ * carrier's next answer about the same point is merged into it rather than replacing it (see
+ * `mergeCarrierPickup`), so nothing wipes what this pass added, and `checked_messages` is what
+ * remembers that the mail has already been looked at. A carrier that moves the parcel to another point
+ * replaces it whole, and the mail already read describes the old one; it is not read again for that,
+ * which is what keeps the old point's street off the new one. The move's own mail is new mail.
  */
 function needsPickupScan(db: Database, parcelId: number, gap: PickupGap, messageCount: number): boolean {
   if (gap === 'none') return false
-  if (gap === 'thin' || gap === 'postcode') return true
   return scannedMessages(db, parcelId) < messageCount
 }
 
@@ -172,6 +168,45 @@ function fillPickup(carrier: PickupPoint | undefined, mail: MailPickupPoint): Pi
     // No lat/lon to carry: the guard above already refused every point that had any, which is how
     // "never overwrite coordinates with a guess" is kept - by never reaching a point that has them.
   }
+}
+
+/**
+ * The pickup point to store when the carrier answers with `carrier` and the parcel already has `stored`.
+ *
+ * The same point: every field the carrier gave wins, and every field it left blank keeps its stored
+ * value - the postcode and street the mail added, and the coordinates the map step found. Replacing it
+ * wholesale (as this once did) wiped all three every poll, so the mail was re-read and the map
+ * re-located the point every hour, and a reminder built in between went out with no address.
+ *
+ * Another point (a parcel redirected to a different box): the carrier's point, whole. Nothing of the
+ * old one is kept, least of all its coordinates, which would put the pin at the wrong door.
+ */
+export function mergeCarrierPickup(stored: PickupPoint | undefined, carrier: PickupPoint): PickupPoint {
+  if (!stored || !samePoint(stored, carrier)) return carrier
+  const pick = <K extends keyof PickupPoint>(k: K) => carrier[k] ?? stored[k]
+  const merged: PickupPoint = { kind: carrier.kind }
+  for (const k of ['name', 'street', 'city', 'postalCode'] as const) {
+    const v = pick(k)
+    if (v !== undefined) merged[k] = v
+  }
+  // Coordinates move as a pair: one half from the carrier and the other from the geocoder is no place.
+  const lat = carrier.lat !== undefined && carrier.lon !== undefined ? carrier.lat : stored.lat
+  const lon = carrier.lat !== undefined && carrier.lon !== undefined ? carrier.lon : stored.lon
+  if (lat !== undefined && lon !== undefined) { merged.lat = lat; merged.lon = lon }
+  return merged
+}
+
+/**
+ * Whether the carrier is still talking about the stored point. No carrier gives a point id, so this
+ * is the identifying fields: any of name, street and town that BOTH sides have must agree (in the
+ * spelling-tolerant sense of `sameStreet` and `sameTown`). A field only one side has says nothing
+ * either way - which is what lets SPS's bare `{ kind: 'parcelshop' }` keep the address the mail gave.
+ */
+function samePoint(a: PickupPoint, b: PickupPoint): boolean {
+  if (a.name && b.name && bare(a.name) !== bare(b.name)) return false
+  if (a.street && b.street && !sameStreet(a.street, b.street)) return false
+  if (a.city && b.city && !sameTown(a.city, b.city)) return false
+  return true
 }
 
 /**

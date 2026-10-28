@@ -1,10 +1,15 @@
 import { test, expect, beforeEach } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { openDb, type Database } from '../src/db/index.js'
-import { getParcel, insertParcel, updateParcelState, deleteParcel } from '../src/db/parcels.js'
+import { getParcel, insertParcel, updateParcelState, deleteParcel, setPickupCoords } from '../src/db/parcels.js'
 import { getPickupCode, needsPickupCodeCheck, recordPickupCode, pickupCodesFor } from '../src/db/pickup-codes.js'
 import { extractPickupCode } from '../src/ingest/extract.js'
 import { runPickupCodes } from '../src/core/pickup-code.js'
+import { runPoll } from '../src/core/poll.js'
+import type { Notification } from '../src/notify/types.js'
+import { bodyHttp, config, okResult, stubAdapter } from './poll-helpers.js'
 import type { CarrierId, PickupPoint } from '../src/core/types.js'
 
 let db: Database
@@ -389,21 +394,6 @@ test('a parcel whose mail has no pickup block is not read again on the next poll
   expect(reads).toBe(1)              // nothing new arrived, so nothing was opened again
 })
 
-test('a point the carrier replaces on every poll is refilled on every poll', async () => {
-  // `updateParcelState` replaces the pickup point wholesale, so the carrier's next answer wipes the
-  // street and postcode this scan added. Re-reading is what keeps the address on the page.
-  const thin: PickupPoint = { kind: 'parcelshop' }
-  const id = waiting(thin)
-  let reads = 0
-  const read = () => { reads++; return GLS_MAIL }
-  await runPickupCodes({ db, now: NOW, readMail: read })
-  expect(pickupOf(id)?.street).toBe(FROM_MAIL.street)
-  updateParcelState(db, id, { status: 'ready_for_pickup', pickup: thin })   // as the next poll does
-  await runPickupCodes({ db, now: NOW, readMail: read })
-  expect(pickupOf(id)?.street).toBe(FROM_MAIL.street)
-  expect(reads).toBe(2)
-})
-
 test('an unreadable .eml does not stop the parcel\'s other mail being tried for a location', async () => {
   const id = waiting()
   mail(id, '/mail/broken.eml', '2026-10-26T20:00:00Z')      // newer, so it is opened first
@@ -442,4 +432,63 @@ test('the point read from mail is what the parcel page then shows', async () => 
   const body = (await buildServer({ db, config }).inject({ method: 'GET', url: `/parcel/${id}` })).body
   expect(body).toContain('Príkladová 6')
   expect(body).toContain('Testville')
+})
+
+// --- what the carrier says next poll ------------------------------------------------------------
+
+/** Packeta's point as its API gives it every poll: a name, a street, a town, and never a postcode. */
+const PACKETA_POINT: PickupPoint = { kind: 'zbox', name: 'Z-BOX Testville', street: 'Prikladova 6', city: 'Testville' }
+
+/** A Packeta parcel the carrier says is ready at `point`, with the GLS fixture as its stored mail on disk. */
+function pollable(point: () => PickupPoint) {
+  const id = insertParcel(db, { carrier: 'packeta', trackingNumber: 'Z1234567891', source: 'manual' })
+  const path = join(mkdtempSync(join(tmpdir(), 'parcels-pickup-')), 'ready.eml')
+  writeFileSync(path, GLS_MAIL)
+  mail(id, path)
+  const sent: Notification[] = []
+  const poll = () => runPoll({
+    db, http: bodyHttp(), config, now: NOW, notifier: { send: async n => { sent.push(n) } },
+    adapters: [stubAdapter('packeta', ins => ins.map(i => okResult(i.number, [], { status: 'ready_for_pickup', pickup: point() })))],
+  })
+  return { id, poll, sent }
+}
+
+test('a second poll of an unchanged parcel keeps what the mail and the map added, and reads no mail', async () => {
+  const { id, poll } = pollable(() => PACKETA_POINT)
+  const first = await poll()
+  expect(first.codes?.points).toBe(1)
+  expect(pickupOf(id)?.postalCode).toBe('00001')
+  setPickupCoords(db, id, 48.1, 17.1)                  // as the map step does once it has located it
+
+  const second = await poll()
+  expect(second.codes).toBeUndefined()                 // nothing scanned: the mail was not opened again
+  expect(pickupOf(id)).toEqual({ ...PACKETA_POINT, postalCode: '00001', lat: 48.1, lon: 17.1 })
+})
+
+test('what the carrier does say about the same point still wins', async () => {
+  let point = PACKETA_POINT
+  const { id, poll } = pollable(() => point)
+  await poll()
+  setPickupCoords(db, id, 48.1, 17.1)
+  point = { ...PACKETA_POINT, name: 'Z-BOX TESTVILLE', postalCode: '00002' }
+  await poll()
+  expect(pickupOf(id)).toEqual({ ...PACKETA_POINT, name: 'Z-BOX TESTVILLE', postalCode: '00002', lat: 48.1, lon: 17.1 })
+})
+
+test('a parcel moved to another point takes the carrier\'s new point whole, and loses the old pin', async () => {
+  let point = PACKETA_POINT
+  const { id, poll } = pollable(() => point)
+  await poll()
+  setPickupCoords(db, id, 48.1, 17.1)
+  point = { kind: 'zbox', name: 'Z-BOX Testville', street: 'Other Street 9', city: 'Testville' }
+  await poll()
+  expect(pickupOf(id)).toEqual(point)
+})
+
+test('the first announcement of a point carries the address the mail supplied', async () => {
+  // GLS gives a Balikomat parcel no point at all; only the mail knows where it is. Read before the
+  // notifications are built, so the one banner that announces it can say where to go.
+  const { poll, sent } = pollable(() => undefined as unknown as PickupPoint)
+  await poll()
+  expect(sent.map(n => n.message).join('\n')).toContain(FROM_MAIL.street)
 })

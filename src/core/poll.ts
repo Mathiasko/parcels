@@ -10,7 +10,7 @@ import { buildNotifications } from '../notify/rules.js'
 import { ingestMessages, type IngestDeps, type IngestReport } from '../ingest/ingest.js'
 import { HttpTransportError, captureBodies } from './http.js'
 import { runMapPreview, summarizeMapPreview, type MapPreviewDeps, type MapPreviewReport } from './map-preview.js'
-import { runPickupCodes, type PickupCodeReport } from './pickup-code.js'
+import { mergeCarrierPickup, runPickupCodes, type PickupCodeReport } from './pickup-code.js'
 import { adoptUpdateOutcome, maybeCheckForUpdate, type UpdateCheck, type UpdateCheckOptions } from './update.js'
 import { isDormant, isDue, slotFor } from './backoff.js'
 import { dedupHash } from './dedup.js'
@@ -20,7 +20,7 @@ import { recordIngest } from '../db/ingest-status.js'
 import { carrierHealth, recordHealth, type HealthOutcome, type HealthRow } from '../db/health.js'
 import { failRun, finishRun, type RunCounts } from '../db/poll-runs.js'
 import {
-  listActive, markAttempted, markPolled, postcodeRejected, setNeedsPostcode, updateParcelState, type Parcel,
+  getParcel, listActive, markAttempted, markPolled, postcodeRejected, setNeedsPostcode, updateParcelState, type Parcel,
 } from '../db/parcels.js'
 
 export interface PollDeps {
@@ -173,10 +173,12 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   // Before the notifications, so an update found in this run is announced in this run rather than an
   // hour later. After the carriers, because a `git fetch` is not allowed to delay parcel tracking.
   report.update = updateStep(deps, cause)
+  // Before the notifications, so the banner that first announces a pickup point the carrier never
+  // located can already say where it is. Local file reads only; it costs the run nothing external.
+  report.codes = await pickupCodes(deps)
   if (deps.notifier) await notify(deps.notifier, db, report, now, deps.config.port)
   // Last, and after the notifications: this is the only step that deliberately sleeps (both services
   // it uses are free and rate-limited), and nothing else in the run depends on it.
-  report.codes = await pickupCodes(deps)
   report.map = await mapPreview(deps)
   return report
 }
@@ -211,9 +213,9 @@ function updateStep(deps: PollDeps, cause: Cause): UpdateCheck | undefined {
  * external; but it is still wrapped, because a malformed .eml must not be able to turn a successful
  * poll into a failed one.
  *
- * Its place in the run matters: AFTER the carriers (whose answer wins, and whose wholesale replace of
- * the pickup columns this pass then tops up) and BEFORE the map preview, so a point that only the mail
- * knew about is geocoded and drawn in the same run that found it.
+ * Its place in the run matters: AFTER the carriers (whose answer wins, and whose blanks this pass then
+ * fills), BEFORE the notifications (so the announcement carries the address) and BEFORE the map
+ * preview, so a point that only the mail knew about is geocoded and drawn in the same run that found it.
  */
 async function pickupCodes(deps: PollDeps): Promise<PickupCodeReport | undefined> {
   try {
@@ -438,7 +440,9 @@ function applyOk(
     status: r.status,
     statusRaw: r.statusRaw,
     statusDetail: r.statusDetail,
-    pickup: r.pickup,
+    // Merged into the point as stored NOW (inside this transaction), not as read before the fetch: the
+    // carrier's blanks must not wipe the postcode the mail added or the pin the map step found.
+    pickup: r.pickup && mergeCarrierPickup(getParcel(db, p.id)?.pickup, r.pickup),
     retainedTill: r.retainedTill,
     lastPolledAt: now,
     lastChangedAt: movedAt !== p.lastChangedAt ? movedAt : undefined,
