@@ -918,11 +918,13 @@ groups several parcels at one place, each parcel has its own. Opening it shows a
 
 - **Day**: today up to the deadline's day, which says `— last day` and is checked by default. With no
   deadline (most carriers never send one), today and the six days after it, today checked. A deadline
-  that is today or already past offers today only. A day with no time left is not offered, and when
-  some of today's times have gone it says from when it still works (`Today, from 13:00`).
-- **Time**: 9:00, 13:00 or 17:00, the first one still to come checked. The page has no script, so a
-  time that passed while the page sat open is refused when you submit, with the form open again and
-  the reason in it.
+  that is today or already past offers today only. When some of today's preset times have gone it
+  says from when it still works (`Today, from 13:00`, or `Today, after 17:00` once all three have);
+  from 23:00, today is not offered.
+- **Time**: 9:00, 13:00 or 17:00, the first one still to come checked, or **Other**, which shows a
+  time field for any time you like (after 17:00 on the last day, Other is all there is, filled in
+  with the next full hour). The page has no script, so a time that passed while the page sat open is
+  refused when you submit, with the form open again and the reason in it.
 
 **One click puts the event straight into Calendar.app** - the server does it with `osascript`, on this
 Mac - and the page says where it went: `Added Bratiska to Calendar “Home”: Wed 28 Oct, 13:00.` The
