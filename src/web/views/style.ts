@@ -141,16 +141,20 @@ form.inline{display:inline}
 .clock .due-now{color:var(--warn)}
 /* "Add to Calendar": a disclosure at the end of the parcel's clock line, one per parcel, at the size of the
    Maps link. A disclosure cannot sit inside the clock's paragraph, so the line is a wrapping row (.cline) of
-   the clock and the disclosure; opened, the disclosure takes a row of its own below the clock and its "·"
-   goes. Lifted above a card's stretched link like .sel and .got, so opening it does not open the parcel.
-   Nothing here takes the signal colour: the radios are ink (accent-color), the button is the quiet one. */
+   the clock and the disclosure; opened, the disclosure takes a row of its own below the clock. Its summary
+   is a small outlined button with a calendar icon (.calf-b, a span: Safari will not lay a summary out as flex), like "Mark as collected" but in full ink, so the "·"
+   before it is not shown. Lifted above a card's stretched link like .sel and .got, so opening it does not
+   open the parcel. Nothing here takes the signal colour: the radios are ink (accent-color), the button is
+   the quiet one. "Other" time: its field (.pick-t) shows only while its radio is checked. */
 .cline{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:.375rem;margin:.125rem 0 0}
 .cline .clock{margin:0}
-.cline .sep:has(+ .calf[open]){display:none}
+.cline .sep:has(+ .calf){display:none}
 .calf{position:relative;z-index:1;margin:0;font-size:.8125rem;line-height:1.3846}
 .calf[open]{flex-basis:100%}
-.calf summary{width:fit-content;padding:0;font-size:inherit;color:var(--ink-2)}
-.calf summary:hover{color:var(--ink)}
+.calf summary{width:fit-content;padding:0;font-size:inherit;list-style:none;border-radius:6px}
+.calf summary::-webkit-details-marker{display:none}
+.calf-b{display:inline-flex;align-items:center;gap:.375rem;height:1.625rem;padding:0 .625rem 0 .5rem;border:1px solid var(--edge);border-radius:6px;background:var(--surface);font-weight:500;color:var(--ink);transition:background-color .1s}
+.calf summary:hover .calf-b,.calf[open] .calf-b{background:var(--hover)}
 .calf-c{text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:3px}
 .calf-in{font-size:.8125rem;color:var(--ink-3)}
 .calf form{display:grid;justify-items:start;gap:.625rem;max-width:34rem;margin:.375rem 0 .25rem;padding:.75rem 1rem;background:var(--paper);border:1px solid var(--rule-s);border-radius:8px}
@@ -160,6 +164,8 @@ form.inline{display:inline}
 .pick{display:inline-flex;align-items:center;gap:.375rem;height:1.75rem;padding:0 .625rem 0 .5rem;border:1px solid var(--rule-s);border-radius:6px;background:var(--surface);font-size:.8125rem;font-weight:400;color:var(--ink);white-space:nowrap;cursor:pointer}
 .pick:hover{border-color:var(--ink-3)}
 .pick:has(input:checked){border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.pick-t{display:none;width:auto;height:1.75rem;padding:0 .5rem;border-color:var(--rule-s);font-size:.8125rem}
+.picks:has(input[value=other]:checked) .pick-t{display:block}
 .pick input{display:inline;width:auto;height:auto;margin:0;padding:0;border:0;background:none;accent-color:var(--ink)}
 .calf button{height:1.75rem;padding:0 .625rem;font-weight:500;color:var(--ink-2)}
 .calf button:hover{color:var(--ink)}

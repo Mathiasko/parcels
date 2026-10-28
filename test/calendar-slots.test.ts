@@ -54,9 +54,15 @@ describe('no deadline', () => {
     expect([s.day, s.time]).toEqual(['2026-10-26', '09:00'])
   })
 
-  test('once all of today\'s times have passed, Today is not offered and the default is tomorrow at 9:00', () => {
+  test('once all of today\'s presets have passed, Today is still offered for "Other", defaulting to the next full hour', () => {
     const s = pickupSlots(undefined, at(26, 17, 30))
-    expect(s.days[0]!.date).toBe('2026-10-27')
+    expect(s.days[0]).toMatchObject({ date: '2026-10-26', label: 'Today, after 17:00', times: [], first: '18:00' })
+    expect(s.days).toHaveLength(NO_DEADLINE_DAYS)
+    expect([s.day, s.time]).toEqual(['2026-10-26', '18:00'])
+  })
+
+  test('from 23:00 Today is not offered, and the default is tomorrow at 9:00', () => {
+    const s = pickupSlots(undefined, at(26, 23))
     expect(s.days[0]!.label).toBe('Tomorrow')
     expect(s.days).toHaveLength(NO_DEADLINE_DAYS - 1)
     expect([s.day, s.time]).toEqual(['2026-10-27', '09:00'])
@@ -80,8 +86,14 @@ describe('a deadline that is today or already past', () => {
     expect([s.day, s.time]).toEqual(['2026-10-26', '13:00'])
   })
 
-  test('after 17:00 there is nothing left to offer', () => {
+  test('after 17:00 only "Other" is left, from the next full hour', () => {
     const s = pickupSlots(at(26, 18), at(26, 17, 1))
+    expect(s.days.map(d => [d.label, d.times, d.first])).toEqual([['Today — last day', [], '18:00']])
+    expect([s.day, s.time]).toEqual(['2026-10-26', '18:00'])
+  })
+
+  test('from 23:00 there is nothing left to offer', () => {
+    const s = pickupSlots(at(26, 18), at(26, 23))
     expect(s.days).toEqual([])
     expect(s.day).toBeUndefined()
     expect(s.time).toBeUndefined()
@@ -97,8 +109,15 @@ describe('what the server accepts', () => {
     ['2026-10-26', '09:00', false],          // passed today
     ['2026-10-30', '09:00', false],          // after the deadline
     ['2026-10-25', '13:00', false],          // yesterday
-    ['2026-10-29', '10:00', false],          // not one of the three
+    ['2026-10-29', '10:00', true],           // "Other": any time
+    ['2026-10-26', '11:30', true],           // ... still to come today
+    ['2026-10-26', '10:59', false],
+    ['2026-10-26', '11:00', false],          // exactly now has passed
+    ['2026-10-29', '23:59', true],
+    ['2026-10-29', '24:00', false],
+    ['2026-10-29', '18:60', false],
     ['2026-10-29', '9:00', false],
+    ['2026-10-29', '09:00:00', false],
     ['29.10.2026', '09:00', false],
     ['', '', false],
   ])('%s %s -> %s', (day, time, ok) => {

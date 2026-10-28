@@ -1,7 +1,7 @@
 import type { CalendarFailureKind } from '../../core/calendar-app.js'
 import type { StoredCalendarEvent } from '../../db/calendar-events.js'
 import { parcelName, type Parcel } from '../../db/parcels.js'
-import { formatSlot, pickupSlots, slotAllowed, slotOf, timeLabel, PICKUP_TIMES } from '../calendar-slots.js'
+import { formatSlot, isTime, pickupSlots, slotAllowed, slotOf, timeLabel, PICKUP_TIMES } from '../calendar-slots.js'
 import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
 import { notice } from './layout.js'
@@ -34,6 +34,10 @@ export interface CalendarFormState {
  *
  * The defaults: the stored event's day and time while they are still offered, else the last day (or,
  * without a deadline, the first day) and its first time still to come.
+ *
+ * Besides the three presets there is "Other": a radio (`time=other`) and a time field (`at`) beside it,
+ * which CSS shows only while "Other" is checked; the server reads `at` only then. A time that is not a
+ * preset - a custom one stored or sent - is shown as "Other" with that time filled in.
  */
 export function calendarForm(p: Parcel, now: Date, state: CalendarFormState = {}, back?: 'home'): Html {
   if (!calendarOffered(p)) return html``
@@ -42,8 +46,9 @@ export function calendarForm(p: Parcel, now: Date, state: CalendarFormState = {}
   const stored = state.stored ? html`In Calendar: ${formatSlot(state.stored.startsAt, now)}` : undefined
   if (slots.days.length === 0) return stored ? html`<span class="calf-in">${stored}</span>` : html``
 
-  // When today is the only day, the times that have gone are not offered at all; otherwise all three are
-  // (they are shared by every day) and a past one is refused by the server, which says so in the form.
+  // When today is the only day, the presets that have gone are not offered at all (after 17:00, none
+  // are: only "Other"); otherwise all three are (they are shared by every day) and a past one is refused
+  // by the server, which says so in the form.
   const times: readonly string[] = slots.days.length === 1 ? slots.days[0]!.times : PICKUP_TIMES
   // What to check: a refused submission as it was sent (the error beside it explains what was wrong
   // with it), else the stored event's slot while it is still offered, else the defaults.
@@ -51,21 +56,27 @@ export function calendarForm(p: Parcel, now: Date, state: CalendarFormState = {}
   const kept = state.stored ? slotOf(state.stored.startsAt) : undefined
   const shown = (c: { day: string; time: string } | undefined) => c !== undefined && slots.days.some(d => d.date === c.day)
   const day = shown(sent) ? sent!.day : shown(kept) ? kept!.day : slots.day!
-  const time = sent && sent.day === day && times.includes(sent.time) ? sent.time
+  const time = sent && sent.day === day ? sent.time
     : kept && kept.day === day && slotAllowed(slots, day, kept.time) ? kept.time
-    : slots.days.find(d => d.date === day)!.times[0]!
+    : slots.days.find(d => d.date === day)!.first
+  const other = !times.includes(time)
   const radio = (field: 'day' | 'time', value: string, label: string, checked: boolean) =>
     html`<label class="pick"><input type="radio" name="${field}" value="${value}"${checked ? raw(' checked') : ''}> ${label}</label>`
 
-  return html`<details class="calf"${state.error !== undefined ? raw(' open') : ''}><summary>${
-    stored ? html`${stored} · <span class="calf-c">Change</span>` : 'Add to Calendar'}<span class="vh">: ${name}</span></summary>
+  return html`<details class="calf"${state.error !== undefined ? raw(' open') : ''}><summary><span class="calf-b">${CAL_ICON}${
+    stored ? html`${stored} · <span class="calf-c">Change</span>` : 'Add to Calendar'}</span><span class="vh">: ${name}</span></summary>
 <form method="post" action="/parcel/${p.id}/calendar">${back ? html`<input type="hidden" name="back" value="${back}">` : ''}${
     state.error !== undefined ? html`<p class="calf-err" role="alert">${glyph('problem')}<span>${state.error}</span></p>` : ''}
 <fieldset><legend>Day</legend><div class="picks">${slots.days.map(d => radio('day', d.date, d.label, d.date === day))}</div></fieldset>
-<fieldset><legend>Time</legend><div class="picks">${times.map(t => radio('time', t, timeLabel(t), t === time))}</div></fieldset>
+<fieldset><legend>Time</legend><div class="picks">${times.map(t => radio('time', t, timeLabel(t), t === time))}${
+    radio('time', 'other', 'Other', other)}<input class="pick-t" type="time" name="at" aria-label="Other time"${
+    other && isTime(time) ? html` value="${time}"` : ''}></div></fieldset>
 <button>Add to Calendar<span class="vh">: ${name}</span></button>
 </form></details>`
 }
+
+/** A calendar page with a plus, for the summary: the one control on the clock line, so it gets a picture. */
+const CAL_ICON = raw('<svg class="g" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2.75 6.5h10.5M5.5 1.75v2.5M10.5 1.75v2.5M8 8.25v3.5M6.25 10h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>')
 
 /**
  * What one press of "Add to Calendar" came to, kept by the server for the page the POST redirects to.

@@ -95,7 +95,7 @@ describe('the form on the dashboard', () => {
     const id = seed(h.db, { name: 'Bratiska', number: 'Z1172430119', pickup: ZBOX, retainedTill: AT_SIX })
     const [card] = cards((await h.get('/')).body)
     const line = /<div class="cline">[\s\S]*?<\/details><\/div>/.exec(card!)![0]
-    expect(line).toMatch(/^<div class="cline"><p class="clock"><b class="due">Collect by Thu 29 Oct<\/b> · <span class="t-2">3 days left<\/span><\/p><span class="sep" aria-hidden="true">·<\/span><details class="calf"><summary>Add to Calendar<span class="vh">: Bratiska<\/span><\/summary>/)
+    expect(line).toMatch(/^<div class="cline"><p class="clock"><b class="due">Collect by Thu 29 Oct<\/b> · <span class="t-2">3 days left<\/span><\/p><span class="sep" aria-hidden="true">·<\/span><details class="calf"><summary><span class="calf-b"><svg class="g" width="14" height="14"[^>]*>.*?<\/svg>Add to Calendar<\/span><span class="vh">: Bratiska<\/span><\/summary>/)
     expect(line).toContain(`<form method="post" action="/parcel/${id}/calendar"><input type="hidden" name="back" value="home">`)
     expect(line).not.toContain('<details class="calf" open')
     expect(line).toContain('<button>Add to Calendar<span class="vh">: Bratiska</span></button>')
@@ -115,7 +115,10 @@ describe('the form on the dashboard', () => {
       { value: '09:00', checked: true, label: '9:00' },
       { value: '13:00', checked: false, label: '13:00' },
       { value: '17:00', checked: false, label: '17:00' },
+      { value: 'other', checked: false, label: 'Other' },
     ])
+    // "Other" has its own time field, empty until a custom time is stored or sent.
+    expect(form).toContain('<input class="pick-t" type="time" name="at" aria-label="Other time">')
   })
 
   test('no deadline: a week from today, today checked at its next time, nothing called the last day', async () => {
@@ -133,7 +136,16 @@ describe('the form on the dashboard', () => {
     seed(h.db, { name: 'Last call', number: 'Z3', pickup: ZBOX, retainedTill: new Date('2026-10-26T17:00:00Z') })
     const [form] = forms((await h.get('/')).body)
     expect(radios(form!, 'day')).toEqual([{ value: '2026-10-26', checked: true, label: 'Today — last day' }])
-    expect(radios(form!, 'time').map(r => [r.value, r.checked])).toEqual([['13:00', true], ['17:00', false]])
+    expect(radios(form!, 'time').map(r => [r.value, r.checked])).toEqual([['13:00', true], ['17:00', false], ['other', false]])
+  })
+
+  test('a deadline today, after 17:00: only "Other", checked and filled in with the next full hour', async () => {
+    const h = harness({ clock: () => new Date('2026-10-26T16:20:00Z') })              // 17:20 in Bratislava
+    seed(h.db, { name: 'Last call', number: 'Z3', pickup: ZBOX, retainedTill: new Date('2026-10-26T22:00:00Z') })
+    const [form] = forms((await h.get('/')).body)
+    expect(radios(form!, 'day')).toEqual([{ value: '2026-10-26', checked: true, label: 'Today — last day' }])
+    expect(radios(form!, 'time')).toEqual([{ value: 'other', checked: true, label: 'Other' }])
+    expect(form).toContain('<input class="pick-t" type="time" name="at" aria-label="Other time" value="18:00">')
   })
 
   test('without a deadline it rides on the "Since" line; the footer keeps only the place\'s facts', async () => {
@@ -173,7 +185,7 @@ describe('the form on the dashboard', () => {
     const id = seed(h.db, { name: 'Bratiska', number: 'Z1', pickup: ZBOX, retainedTill: AT_SIX })
     saveCalendarEvent(h.db, { parcelId: id, uid: 'U', calendar: 'Home', startsAt: slotStart('2026-10-28', '13:00')!, createdAt: NOW })
     const [form] = forms((await h.get('/')).body)
-    expect(form).toContain('<summary>In Calendar: Wed 28 Oct, 13:00 · <span class="calf-c">Change</span><span class="vh">: Bratiska</span></summary>')
+    expect(form).toContain('In Calendar: Wed 28 Oct, 13:00 · <span class="calf-c">Change</span></span><span class="vh">: Bratiska</span></summary>')
     expect(checked(form!, 'day')).toEqual(['2026-10-28'])
     expect(checked(form!, 'time')).toEqual(['13:00'])
   })
@@ -181,7 +193,10 @@ describe('the form on the dashboard', () => {
   test('it sits above the card\'s stretched link, never takes the signal colour, and opens onto a row of its own', () => {
     expect(STYLE).toMatch(/\.calf\{[^}]*position:relative;z-index:1/)
     expect(STYLE).toMatch(/\.calf\[open\]\{[^}]*flex-basis:100%/)
-    expect(STYLE).toMatch(/\.cline \.sep:has\(\+ \.calf\[open\]\)\{display:none\}/)
+    expect(STYLE).toMatch(/\.cline \.sep:has\(\+ \.calf\)\{display:none\}/)
+    // "Other" shows its time field only while it is checked.
+    expect(STYLE).toMatch(/\.pick-t\{display:none/)
+    expect(STYLE).toContain('.picks:has(input[value=other]:checked) .pick-t{display:block}')
     const rules = STYLE.split('}').filter(r => /\.calf|\.pick/.test(r))
     expect(rules.join('}')).not.toContain('--signal')
     // Radios in ink, not the browser's blue: the signal hue means "waiting on you" and nothing else.
@@ -241,7 +256,7 @@ describe('POST /parcel/:id/calendar', () => {
     expect(n).toContain('<p>Added <strong>Bratiska</strong> to Calendar “Home”: Wed 28 Oct, 13:00.</p>')
     expect(n).not.toContain('class="notice warn"')
     // And the form now says where the event is.
-    expect(forms(page)[0]).toContain('<summary>In Calendar: Wed 28 Oct, 13:00 · <span class="calf-c">Change</span>')
+    expect(forms(page)[0]).toContain('In Calendar: Wed 28 Oct, 13:00 · <span class="calf-c">Change</span>')
   })
 
   test('the chosen calendar is the one asked for, and the notice names the one Calendar used', async () => {
@@ -251,6 +266,22 @@ describe('POST /parcel/:id/calendar', () => {
     expect(h.cal.adds[0]!.calendar).toBe('Work')
     expect(location(res)).toMatch(new RegExp(`^/parcel/${id}\\?calendar=[0-9a-f]{12}$`))
     expect(noticeOf((await h.get(location(res))).body)).toContain('to Calendar “Work”: Thu 29 Oct, 9:00.')
+  })
+
+  test('"Other" adds at the time typed beside it, and the form comes back with that time under "Other"', async () => {
+    const h = harness()
+    const id = seed(h.db, { name: 'Bratiska', number: 'Z1', pickup: ZBOX, retainedTill: AT_SIX })
+    // The time field is sent whichever radio is checked; only "Other" reads it.
+    await h.post(`/parcel/${id}/calendar`, { day: '2026-10-28', time: '13:00', at: '07:45' })
+    expect(getCalendarEvent(h.db, id)!.startsAt).toEqual(slotStart('2026-10-28', '13:00'))
+    const res = await h.post(`/parcel/${id}/calendar`, { day: '2026-10-29', time: 'other', at: '18:30' })
+    expect(getCalendarEvent(h.db, id)!.startsAt).toEqual(slotStart('2026-10-29', '18:30'))
+    const page = (await h.get(location(res))).body
+    expect(noticeOf(page)).toContain('Thu 29 Oct, 18:30')
+    const form = forms(page)[0]!
+    expect(form).toContain('In Calendar: Thu 29 Oct, 18:30')
+    expect(checked(form, 'time')).toEqual(['other'])
+    expect(form).toContain('aria-label="Other time" value="18:30">')
   })
 
   test('adding again replaces the event added before: the old uid and its calendar go with the new one', async () => {
@@ -343,8 +374,11 @@ describe('POST /parcel/:id/calendar', () => {
 
     test.each([
       [{}, 'Choose a day and a time.'],
-      [{ day: '2026-10-29' }, 'Choose a day and a time.'],
-      [{ day: '2026-10-29', time: '10:00' }, 'Choose one of the times listed.'],
+      [{ day: '2026-10-29' }, 'Choose a time, or type one beside Other.'],
+      [{ day: '2026-10-29', time: 'other', at: '' }, 'Choose a time, or type one beside Other.'],
+      [{ day: '2026-10-29', time: 'other', at: '25:00' }, 'Type the time as hours and minutes, such as 18:30.'],
+      [{ day: '2026-10-29', time: 'other', at: '6pm' }, 'Type the time as hours and minutes, such as 18:30.'],
+      [{ day: '2026-10-26', time: 'other', at: '10:30' }, '10:30 today has already passed. Choose a later time or another day.'],
       [{ day: '29.10.2026', time: '09:00' }, 'That day cannot be chosen. Choose one of the days listed.'],
       [{ day: '2026-10-25', time: '13:00' }, 'That day cannot be chosen. Choose one of the days listed.'],
     ])('%j: %s', async (fields, says) => {
@@ -487,7 +521,7 @@ describe('GET /parcel/:id/calendar.ics, the fallback', () => {
   test.each([
     '?day=2026-10-26&time=09:00',          // passed
     '?day=2026-10-30&time=09:00',          // after the deadline
-    '?day=2026-10-29&time=10:00',
+    '?day=2026-10-29&time=25:00',
     '?day=2026-10-29',
     '?time=09:00',
     '?day=x&time=y',

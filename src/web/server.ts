@@ -34,7 +34,7 @@ import { calendarListWhy, settingsPage, type CalendarList, type SettingsState } 
 import { CalendarFailure, osascriptCalendar, type CalendarClient } from '../core/calendar-app.js'
 import { calendarEventsFor, getCalendarEvent, saveCalendarEvent } from '../db/calendar-events.js'
 import { calendarOffered, type CalendarFormState, type CalendarOutcome } from './views/calendar-form.js'
-import { pickupSlots, slotAllowed, slotStart, timeLabel, type Slots } from './calendar-slots.js'
+import { isTime, pickupSlots, slotAllowed, slotStart, timeLabel, type Slots } from './calendar-slots.js'
 import { CARRIER_NAME, DISPLAY_ZONE } from './views/format.js'
 import {
   deliveryStats, getUnparsedMessage, listUnparsedMessages, rawResponsesFor,
@@ -137,8 +137,9 @@ interface Refused { parcelId: number; error: string; day: string; time: string }
  * Most often a time on today that passed while the page sat open: the page has no script to notice.
  */
 function slotRefusal(slots: Slots, day: string, time: string, at: Date): string {
-  if (day === '' || time === '') return 'Choose a day and a time.'
-  if (!/^\d{2}:\d{2}$/.test(time) || slotStart('2000-01-01', time) === undefined) return 'Choose one of the times listed.'
+  if (day === '') return 'Choose a day and a time.'
+  if (time === '') return 'Choose a time, or type one beside Other.'
+  if (!isTime(time)) return 'Type the time as hours and minutes, such as 18:30.'
   const offered = slots.days.find(d => d.date === day)
   const today = DateTime.fromJSDate(at, { zone: DISPLAY_ZONE }).toFormat('yyyy-LL-dd')
   if (offered) return `${timeLabel(time)}${day === today ? ' today' : ''} has already passed. Choose a later time or another day.`
@@ -469,7 +470,8 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const f = form(req)
     const back = text(f.back) === 'home'
     const day = text(f.day)
-    const time = text(f.time)
+    // "Other" sends its time in `at`; the field is on the page (hidden) whichever radio is checked.
+    const time = text(f.time) === 'other' ? text(f.at) : text(f.time)
     const at = now()
     const refuse = (error: string) => {
       const refused: Refused = { parcelId: parcel.id, error, day, time }
