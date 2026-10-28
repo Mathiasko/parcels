@@ -743,10 +743,12 @@ describe('GET /health: version', () => {
 // --- the index lede: it may only say "Nothing needs you." when the data can support it ----------------
 
 describe('GET /: the lede', () => {
+  /** The lede as read: its text, with any links reduced to their words. */
   const lede = async (db: Database) => {
     const body = (await get(db, '/')).body
-    return body.match(/<p class="lede">([^<]*)<\/p>/)?.[1]
+    return body.match(/<p class="lede">([\s\S]*?)<\/p>/)?.[1]?.replace(/<[^>]+>/g, '')
   }
+  const ledeMarkup = async (db: Database) => (await get(db, '/')).body.match(/<p class="lede">([\s\S]*?)<\/p>/)?.[1] ?? ''
   /** A parcel with a coded, known, unremarkable status: the quiet case the all-clear is for. */
   function moving(db: Database, number: string, carrier: CarrierId = 'posta'): number {
     const id = insertParcel(db, { carrier, trackingNumber: number, label: number, source: 'manual' })
@@ -766,7 +768,31 @@ describe('GET /: the lede', () => {
     const db = memDb()
     const id = moving(db, 'RR1')
     updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
-    expect(await lede(db)).toBe('1 ready for pickup. 1 in flight.')
+    expect(await lede(db)).toBe('1 in flight, ready for pickup.')
+  })
+
+  test('the parcels that want something are counted INSIDE the in-flight total, never beside it', async () => {
+    // "2 ready for pickup. 2 in flight." read as four parcels. The total comes first, once.
+    const db = memDb()
+    const a = moving(db, 'RR1')
+    const b = moving(db, 'RR2')
+    for (const id of [a, b]) updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
+    expect(await lede(db)).toBe('2 in flight, both ready for pickup.')
+    const c = moving(db, 'RR3')
+    expect(await lede(db)).toBe('3 in flight, 2 ready for pickup.')
+    updateParcelState(db, c, { status: 'out_for_delivery' })
+    expect(await lede(db)).toBe('3 in flight, 2 ready for pickup and 1 out for delivery.')
+    updateParcelState(db, c, { status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
+    expect(await lede(db)).toBe('3 in flight, all ready for pickup.')
+  })
+
+  test('attention is counted the same way, with the verb agreeing', async () => {
+    const db = memDb()
+    const a = moving(db, 'RR1')
+    updateParcelState(db, a, { status: 'failed_attempt' })
+    expect(await lede(db)).toBe('1 in flight, and it needs attention.')
+    moving(db, 'RR2')
+    expect(await lede(db)).toBe('2 in flight, 1 needs attention.')
   })
 
   test('an uncoded prose status is "no status", never a calm all-clear', async () => {
@@ -824,8 +850,11 @@ describe('GET /: the lede', () => {
     moving(db, 'RR1')
     db.prepare('INSERT INTO last_poll (id, polled_at_ms) VALUES (1, ?)').run(NOW.getTime() - 30 * 3_600_000)
     const text = await lede(db)
-    expect(text).toContain('The poller has not run lately')
-    expect(text).not.toContain('Nothing needs you')
+    // Plain words and the time it last looked, not the name of a background process.
+    const last = formatDateTime(new Date(NOW.getTime() - 30 * 3_600_000), NOW)
+    expect(text).toBe(`1 in flight. Not checked since ${last}, so this may be out of date — see Health.`)
+    expect(text).not.toMatch(/poller/i)
+    expect(await ledeMarkup(db)).toContain('see <a href="/health">Health</a>.')
   })
 
   test('an empty page has no lede at all, not "0 in flight"', async () => {

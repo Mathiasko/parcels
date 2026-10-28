@@ -310,8 +310,26 @@ function card(c: Card, ctx: PageCtx): Html {
 </article>`
 }
 
+/**
+ * The parcels that want something, as a clause of the in-flight total: "2 in flight, both ready for
+ * pickup." They are counted INSIDE the total, never beside it - "2 ready for pickup. 2 in flight." was
+ * read as four parcels.
+ */
+function inFlightClause(total: number, act: Array<{ n: number; one: string; many: string }>): string {
+  const head = `${total} in flight`
+  const present = act.filter(a => a.n > 0)
+  if (present.length === 0) return `${head}.`
+  // One kind, and it is every parcel: say "both"/"all" rather than repeat the number.
+  if (present.length === 1 && present[0]!.n === total) {
+    const a = present[0]!
+    if (total === 1) return a.one.startsWith('needs') ? `${head}, and it ${a.one}.` : `${head}, ${a.one}.`
+    return `${head}, ${total === 2 ? 'both' : 'all'} ${a.many}.`
+  }
+  return `${head}, ${listNames(present.map(a => `${a.n} ${a.n === 1 ? a.one : a.many}`))}.`
+}
+
 /** The index lede: what is known, and a calm all-clear only when the data can support it. See design-language §5.2. */
-export function indexLede(entries: Entry[], ctx: PageCtx): string {
+export function indexLede(entries: Entry[], ctx: PageCtx): Html {
   const { health, now } = ctx
   const n = (pred: (e: Entry) => boolean) => entries.filter(pred).length
   const ready = n(e => e.parcel.status === 'ready_for_pickup')
@@ -326,18 +344,26 @@ export function indexLede(entries: Entry[], ctx: PageCtx): string {
   const dormant = n(e => isDormant(e.parcel, now))
   const carriers = new Set(entries.map(e => e.parcel.carrier))
   const failing = health.filter(h => h.consecutiveFailures > 0 && carriers.has(h.carrier)).map(h => CARRIER_NAME[h.carrier])
-  const parts: string[] = []
-  const act = [ready && `${ready} ready for pickup`, ofd && `${ofd} out for delivery`, attn && `${attn} ${attn === 1 ? 'needs' : 'need'} attention`].filter(Boolean)
-  if (act.length) parts.push(`${act.join(', ')}.`)
-  parts.push(`${entries.length} in flight.`)
+  const overdue = ctx.poller?.overdue === true
+  const act = ready + ofd + attn
+  const parts: Array<Html | string> = [inFlightClause(entries.length, [
+    { n: ready, one: 'ready for pickup', many: 'ready for pickup' },
+    { n: ofd, one: 'out for delivery', many: 'out for delivery' },
+    { n: attn, one: 'needs attention', many: 'need attention' },
+  ])]
   if (noPostcode) parts.push(`${noPostcode} ${noPostcode === 1 ? 'needs' : 'need'} a postcode.`)
-  if (dormant) parts.push(`${dormant} ${dormant === 1 ? 'is' : 'are'} no longer polled (see Attention).`)
+  if (dormant) parts.push(html`${dormant} ${dormant === 1 ? 'is' : 'are'} no longer polled (see <a href="/attention">Attention</a>).`)
   if (unclassified) parts.push(`${unclassified} ${unclassified === 1 ? 'has' : 'have'} no status; read ${unclassified === 1 ? 'its' : 'their'} latest message.`)
   if (failing.length) parts.push(`${listNames(failing)} ${failing.length === 1 ? 'is' : 'are'} failing, so this may be out of date.`)
-  if (ctx.poller?.overdue) parts.push('The poller has not run lately, so this may be out of date (see Health).')
+  // Said in plain words with the time it last looked: "the poller" is the name of a background job,
+  // which is not something the person reading this should need to know exists.
+  if (overdue) {
+    const last = ctx.poller?.lastPollAt
+    parts.push(html`Not checked ${last ? `since ${formatDateTime(last, now)}` : 'lately'}, so this may be out of date — see <a href="/health">Health</a>.`)
+  }
   // The all-clear is earned: nothing waiting, nothing unreadable or unpolled, and nothing it depends on is broken.
-  if (!act.length && !unclassified && !failing.length && !noPostcode && !dormant && !ctx.poller?.overdue) parts.push('Nothing needs you.')
-  return parts.join(' ')
+  if (!act && !unclassified && !failing.length && !noPostcode && !dormant && !overdue) parts.push('Nothing needs you.')
+  return html`${parts.flatMap((p, i) => (i === 0 ? [p] : [' ', p]))}`
 }
 
 /**
