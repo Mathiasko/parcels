@@ -673,14 +673,49 @@ describe('archived parcels from old mail', () => {
   })
 })
 
+describe('GET /health: an error the carrier has recovered from', () => {
+  test('is de-emphasised as past when a later run was ok, and stays loud while it is still failing', async () => {
+    const db = memDb()
+    recordHealth(db, 'posta', 'transport', 'socket hang up', new Date('2026-10-26T08:00:00Z'))
+    recordHealth(db, 'posta', 'ok', undefined, new Date('2026-10-26T09:00:00Z'))
+    recordHealth(db, 'gls', 'transport', 'ETIMEDOUT', new Date('2026-10-26T08:00:00Z'))
+    const body = (await get(db, '/health')).body
+    const row = (id: string) => body.slice(body.indexOf(`data-carrier="${id}"`)).split('</tr>')[0]!
+    expect(row('posta')).toContain('<td class="recovered">')
+    expect(row('posta')).toMatch(/recovered/)
+    expect(row('posta')).toContain('socket hang up')                 // still readable, for whoever asks
+    expect(row('gls')).not.toContain('recovered')
+    expect(row('gls')).toContain('ETIMEDOUT')
+  })
+})
+
 describe('GET /health: mail ingest', () => {
   const webWith = (db: Database, imap?: Config['imap']) =>
     buildServer({ db, config: { ...config, imap }, now: () => NOW, notifier: { send: async () => {} } })
   const IMAP = { host: 'h', port: 993, user: 'u', pass: 'p', mailbox: 'parcels' }
 
-  test('no mailbox configured and no history: the section is absent', async () => {
+  test('no mailbox configured: the row is still there, says "not set up", and links to Settings', async () => {
     const body = (await webWith(memDb()).inject({ method: 'GET', url: '/health' })).body
-    expect(body).not.toContain('Mail ingest')
+    const row = body.slice(body.indexOf('id="ingest-health"')).split('</tr>')[0]!
+    expect(body).toContain('id="ingest-health"')
+    expect(row).toContain('Mail ingest')
+    expect(row).toMatch(/not set up<\/span>/)
+    expect(row).toContain('<a href="/settings">')
+    expect(row).not.toContain('class="bad"')                 // not set up is a fact, not a fault
+    // ...and the lede does not call the app all well while no mail can arrive.
+    const lede = /<p class="lede">([\s\S]*?)<\/p>/.exec(body)![1]!
+    expect(lede).toMatch(/Gmail is not connected yet/)
+  })
+
+  test('a mail error that has since recovered is shown as past, not as the current state', async () => {
+    const db = memDb()
+    recordIngest(db, { ok: false, error: 'Connection timed out' }, new Date('2026-10-26T09:00:00Z'))
+    recordIngest(db, { ok: true }, new Date('2026-10-26T10:00:00Z'))
+    const body = (await webWith(db, IMAP).inject({ method: 'GET', url: '/health' })).body
+    const row = body.slice(body.indexOf('id="ingest-health"')).split('</tr>')[0]!
+    expect(row).toContain('<td class="recovered">')
+    expect(row).toMatch(/recovered/)
+    expect(row).toContain('Connection timed out')
   })
 
   test('configured but never run: shows "no data"', async () => {

@@ -201,6 +201,7 @@ td .st{line-height:1.375rem}
 .board th[scope=rowgroup]{border-bottom:0;padding-top:1.25rem}
 .board tr.bad td{background:var(--warn-wash)}
 .board .why{display:block;margin-top:.125rem;overflow-wrap:anywhere}
+.board td.recovered{color:var(--ink-3)}
 .stats td:first-child{white-space:nowrap}
 /* the activity log: a run's state, when it started, who started it, and what it did */
 .runs td:first-child{width:9rem}

@@ -46,7 +46,7 @@ const bad = (h: HealthRow | undefined): boolean => h !== undefined && h.consecut
  * including it would make "all reporting" unreachable and "has never been polled" read as a fault;
  * it gets its own clause saying what it actually is.
  */
-function lede(rows: Map<CarrierId, HealthRow>, ids: CarrierId[]): string {
+function lede(rows: Map<CarrierId, HealthRow>, ids: CarrierId[], mailConfigured: boolean): Html {
   const polled = ids.filter(id => !isEmailOnlyCarrier(id))
   const byEmail = ids.filter(isEmailOnlyCarrier).map(id => CARRIER_NAME[id])
   const failing = polled.filter(id => bad(rows.get(id)))
@@ -59,7 +59,9 @@ function lede(rows: Map<CarrierId, HealthRow>, ids: CarrierId[]): string {
   const email = byEmail.length > 0
     ? ` ${byEmail.join(' and ')} ${byEmail.length === 1 ? 'is' : 'are'} not polled: ${byEmail.length === 1 ? 'its' : 'their'} updates arrive by email.`
     : ''
-  return head + tail + email
+  // A board of green carriers is not "all well" while no mail can arrive: say it, and where to fix it.
+  const mail = mailConfigured ? '' : html` Gmail is not connected yet, so no parcels arrive by email (see <a href="/settings">Settings</a>).`
+  return html`${head + tail + email}${mail}`
 }
 
 /** Which part of the app acted. Named for what the user did, not for the process that did it. */
@@ -257,21 +259,35 @@ export function healthPage(
 ): Html {
   const byCarrier = new Map(rows.map(r => [r.carrier, r]))
   const ids = Object.keys(CARRIER_NAME) as CarrierId[]
-  const showIngest = ingest.configured || ingest.status !== undefined
   const ing = ingest.status
   // The last-error column appears only when some row has an error: otherwise it is a column of dashes.
   const anyError = rows.some(r => r.lastErrorAt) || Boolean(ing?.lastErrorAt)
   const cols = anyError ? 4 : 3
-  const err = (at: Date | undefined, detail?: string): Html => at
-    ? html`<td>${formatDateTime(at, ctx.now)}${detail ? html`<span class="meta why">${detail}</span>` : ''}</td>` : html`<td class="meta">—</td>`
-  const errCell = (at: Date | undefined, detail?: string, kind?: string): Html => anyError
-    ? err(at, [kind, detail].filter(Boolean).join(' · ') || undefined) : html``
-  const ingestState = !ing ? state('nodata', 'no data') : ing.consecutiveFailures > 0 ? state('failing', 'failing', ing.consecutiveFailures) : state('ok', 'ok')
+  // An error followed by a later ok run has healed itself: it is history, not the state. It stays
+  // readable (it is often the answer to "why did that parcel not update this morning?") but quiet,
+  // so a green row does not sit next to what looks like a live fault.
+  const err = (at: Date | undefined, detail: string | undefined, okAt: Date | undefined): Html => {
+    if (!at) return html`<td class="meta">—</td>`
+    const why = detail ? html`<span class="meta why">${detail}</span>` : ''
+    return okAt && okAt > at
+      ? html`<td class="recovered">${formatDateTime(at, ctx.now)} · recovered since${why}</td>`
+      : html`<td>${formatDateTime(at, ctx.now)}${why}</td>`
+  }
+  const errCell = (at: Date | undefined, okAt: Date | undefined, detail?: string, kind?: string): Html => anyError
+    ? err(at, [kind, detail].filter(Boolean).join(' · ') || undefined, okAt) : html``
+  const ingestState = !ingest.configured ? state('nodata', 'not set up')
+    : !ing ? state('nodata', 'no data')
+    : ing.consecutiveFailures > 0 ? state('failing', 'failing', ing.consecutiveFailures) : state('ok', 'ok')
+  // Mail not set up is a fact about this install, not a fault: no wash, and the way to set it up.
+  const ingestBad = ingest.configured && ing !== undefined && ing.consecutiveFailures > 0
+  const ingestLastOk = !ingest.configured
+    ? html`not set up<span class="meta why"><a href="/settings">Connect Gmail in Settings</a></span>`
+    : ing?.lastOkAt ? formatDateTime(ing.lastOkAt, ctx.now) : 'never'
   const pollState = !poller.lastPollAt ? state('nodata', 'no data') : poller.overdue ? state('attention', 'not running?') : state('ok', 'ok')
 
   return layout('Health', '/health', html`
 <h1>Health</h1>
-<p class="lede">${lede(byCarrier, ids)}</p>
+<p class="lede">${lede(byCarrier, ids, ingest.configured)}</p>
 ${scroller('Carrier and system health', html`<table class="board"><thead><tr><th scope="col">State</th><th scope="col">Name</th><th scope="col">Last ok</th>${anyError ? html`<th scope="col">Last error</th>` : ''}</tr></thead>
 <tbody><tr class="grp"><th scope="rowgroup" colspan="${cols}">Carriers</th></tr>${ids.map(id => {
     // An email-only carrier is listed, because leaving it off would be its own small lie (the user
@@ -282,12 +298,12 @@ ${scroller('Carrier and system health', html`<table class="board"><thead><tr><th
     }
     const h = byCarrier.get(id)
     return html`<tr data-carrier="${id}"${bad(h) ? html` class="bad"` : ''}><td>${verdict(h)}</td><td>${CARRIER_NAME[id]}</td>
-<td>${h?.lastOkAt ? formatDateTime(h.lastOkAt, ctx.now) : 'never'}</td>${errCell(h?.lastErrorAt, h?.lastErrorDetail, h?.lastErrorKind)}</tr>`
+<td>${h?.lastOkAt ? formatDateTime(h.lastOkAt, ctx.now) : 'never'}</td>${errCell(h?.lastErrorAt, h?.lastOkAt, h?.lastErrorDetail, h?.lastErrorKind)}</tr>`
   })}
 <tr class="grp"><th scope="rowgroup" colspan="${cols}">System</th></tr>
-<tr id="poller-health"${poller.overdue ? html` class="bad"` : ''}><td>${pollState}</td><td>Poller</td><td>${poller.lastPollAt ? formatDateTime(poller.lastPollAt, ctx.now) : 'never'}</td>${anyError ? html`<td class="meta">—</td>` : ''}</tr>${
-  showIngest ? html`<tr id="ingest-health"${ing && ing.consecutiveFailures > 0 ? html` class="bad"` : ''}><td>${ingestState}</td><td>Mail ingest</td>
-<td>${ing?.lastOkAt ? formatDateTime(ing.lastOkAt, ctx.now) : 'never'}</td>${errCell(ing?.lastErrorAt, ing?.lastError)}</tr>` : ''}</tbody></table>`)}${
+<tr id="poller-health"${poller.overdue ? html` class="bad"` : ''}><td>${pollState}</td><td>Poller</td><td>${poller.lastPollAt ? formatDateTime(poller.lastPollAt, ctx.now) : 'never'}</td>${anyError ? html`<td class="meta">—</td>` : ''}</tr>
+<tr id="ingest-health"${ingestBad ? html` class="bad"` : ''}><td>${ingestState}</td><td>Mail ingest</td>
+<td>${ingestLastOk}</td>${errCell(ing?.lastErrorAt, ing?.lastOkAt, ing?.lastError)}</tr></tbody></table>`)}${
   poller.overdue ? html`<p class="meta">No poll has completed for over 2 hours of the 07:00-21:00 day. Parcels are not being updated: check that the launchd poller agent is loaded and that the Node path in its plist still exists.</p>` : ''}
 ${runsPanel(runs, ctx)}
 ${activityPanel(activity, ctx)}
