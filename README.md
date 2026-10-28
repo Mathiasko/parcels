@@ -31,6 +31,10 @@ On a fresh Mac:
    box at the top of that page is the rest of the installation, click by click - the same steps as
    [below](#what-no-script-can-do-for-you).
 
+In a Terminal window it shows numbered steps, a ✓ or ! for each thing it checks, and a spinner while
+it installs and builds; if a step fails, it prints the end of that step's output and where the whole
+log is. Set `NO_COLOR=1` for plain text, which is also what it prints into a pipe or a log.
+
 `setup.sh` is idempotent, needs **no sudo**, and never overwrites an existing `config.json`, so
 re-running it is always safe. `scripts/setup.sh --config-only` writes just the config and stops.
 

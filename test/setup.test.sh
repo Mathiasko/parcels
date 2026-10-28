@@ -125,6 +125,24 @@ check "setup.sh with no terminal and no postcode stops"     bash -c "! PARCELS_C
 check "and writes nothing then either"                      test ! -e "$NOTTY"
 check "setup.sh rejects an unknown flag"                    bash -c "! '$SETUP' --wat </dev/null"
 
+# --- the terminal UI (scripts/lib/ui.sh) -------------------------------------------------------------
+# At a terminal: colour, marks, numbered steps. Anywhere else: the plain text, with not one escape code,
+# because a log or a pipe would show every one of them as garbage.
+UI_LIB="$ROOT/scripts/lib/ui.sh"
+ESC=$'\033'
+plain_out="$(run_setup "$EXISTING" 2>&1)"
+check "without a terminal the output has no escape codes"  bash -c "! grep -q \"\$2\" <<< \"\$1\"" _ "$plain_out" "$ESC"
+check "and keeps the plain step headings"                  bash -c "grep -qx '== Checking the machine' <<< \"\$1\"" _ "$plain_out"
+ui_out="$(PARCELS_CONFIG="$EXISTING" FORCE_COLOR=1 "$SETUP" --config-only </dev/null 2>&1)"
+check "FORCE_COLOR turns the UI on: numbered steps"         bash -c "grep -q 'Step 1 of 2' <<< \"\$1\" && grep -q 'Step 2 of 2' <<< \"\$1\"" _ "$ui_out"
+check "with a check mark on what was found"                 bash -c "grep -q '✓.*macOS' <<< \"\$1\"" _ "$ui_out"
+check "and in colour"                                       bash -c "grep -q \"\$2\" <<< \"\$1\"" _ "$ui_out" "$ESC"
+check "NO_COLOR is honoured at a terminal too"              bash -c "grep -q 'NO_COLOR' '$UI_LIB'"
+check "the UI never reads input itself"                     bash -c "! grep -nE '^[^#]*\bread\b' '$UI_LIB'"
+check "a quiet step that fails returns its status"          bash -c "FORCE_COLOR=1 bash -c '. \"$UI_LIB\"; ui_run step bash -c \"echo boom; exit 3\"' >/dev/null 2>&1; test \$? = 3"
+check "and shows what it said, and where the log is"        bash -c "FORCE_COLOR=1 bash -c '. \"$UI_LIB\"; ui_run step bash -c \"echo boom; exit 3\"' 2>&1 | grep -q boom && FORCE_COLOR=1 bash -c '. \"$UI_LIB\"; ui_run step false' 2>&1 | grep -q 'The whole log'"
+check "without the UI a step streams its own output"        bash -c "bash -c '. \"$UI_LIB\"; ui_run step echo streamed' 2>&1 | grep -qx streamed"
+
 # --- node discovery: one bad candidate must not strand the machine -----------------------------------
 # A toolchain (Codex, an Electron app) can put a private node first on PATH with no npm beside it.
 # Taking that one and giving up stranded a real user whose Mac had a perfectly good Node elsewhere.
