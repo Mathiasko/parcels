@@ -51,7 +51,7 @@ check "no script re-implements the nvm search"       bash -c "! grep -l 'nvm/ver
 check "each sourcing script calls require_node"      bash -c "for f in '$SETUP' '$UPDATE' '$INSTALL' '$RUNSH'; do grep -qE '^ *require_node ' \"\$f\" || exit 1; done"
 
 # --- setup.sh and config.json ------------------------------------------------------------------------
-# --config-only stops before `npm install` and before launchd, so nothing here installs or loads
+# --config-only stops before `npm ci` and before launchd, so nothing here installs or loads
 # anything. PARCELS_CONFIG keeps every write inside the temp directory.
 run_setup() { PARCELS_CONFIG="$1" PARCELS_POSTCODE="${2-}" "$SETUP" --config-only </dev/null; }
 
@@ -65,7 +65,7 @@ check "setup.sh does not overwrite an existing config.json" test "$(cat "$EXISTI
 check "setup.sh says it is keeping the existing file"      bash -c "grep -qi 'keeping it' <<< \"\$1\"" _ "$out"
 check "setup.sh did not leak the stored password"          bash -c "! grep -q SECRET <<< \"\$1\"" _ "$out"
 check "setup.sh did not prompt for a postcode"             bash -c "! grep -qi 'your postcode' <<< \"\$1\"" _ "$out"
-check "--config-only does not install or load anything"    bash -c "! grep -qiE 'npm install|bootstrapped|building dist' <<< \"\$1\"" _ "$out"
+check "--config-only does not install or load anything"    bash -c "! grep -qiE 'npm (install|ci)|bootstrapped|building dist' <<< \"\$1\"" _ "$out"
 
 FRESH="$TMP/fresh.json"
 run_setup "$FRESH" 85101 >/dev/null 2>&1
@@ -207,7 +207,11 @@ check "and explains that a tarball cannot be pulled"         bash -c "grep -qi '
 
 # --- update.sh can only fast-forward -----------------------------------------------------------------
 check "update.sh pulls with --ff-only and nothing else"  bash -c "! grep -nE '^[^#]*git_? pull' '$UPDATE' | grep -qv -- '--ff-only'"
-check "update.sh never merges or rebases"                bash -c "! grep -nE '^[[:space:]]*git_? (merge|rebase|reset|checkout|clean)' '$UPDATE'"
+# The one checkout there is: putting back package-lock.json when npm's rewrite of it is the whole of the
+# difference (see update.sh). It names that file and nothing else.
+check "update.sh never merges, rebases or discards an edit"  bash -c "! grep -nE '^[[:space:]]*git_? (merge|rebase|reset|checkout|clean)' '$UPDATE' | grep -vq 'git_ checkout --quiet HEAD -- package-lock.json\$'"
+check "its one checkout is guarded by the lock-only test"    bash -c "grep -B3 'git_ checkout --quiet HEAD -- package-lock.json' '$UPDATE' | grep -q 'LOCK_ONLY\" = 1'"
+check "setup.sh uses npm ci, not npm install"                bash -c "grep -qE '^[^#]*run_npm .* ci' '$SETUP' && ! grep -qE '^[^#]*run_npm .* install' '$SETUP'"
 check "update.sh refuses a divergent branch"             grep -q 'diverged' "$UPDATE"
 check "update.sh uses npm ci, not npm install"           bash -c "grep -qE '^[^#]*run_npm .* ci' '$UPDATE' && ! grep -qE '^[^#]*run_npm .* install' '$UPDATE'"
 check "update.sh reinstalls the agents after pulling"    bash -c "p=\$(grep -n 'git_ pull' '$UPDATE' | grep -v '^[0-9]*:#' | head -1 | cut -d: -f1); a=\$(grep -n 'install-agents.sh\"' '$UPDATE' | tail -1 | cut -d: -f1); test -n \"\$p\" -a -n \"\$a\" -a \"\$p\" -lt \"\$a\""

@@ -113,7 +113,7 @@ above. Requires Node 24 or newer.
 development.
 
 ```sh
-npm install        # use /Users/you/.nvm/versions/node/v24.21.0/bin/npm, see above
+npm ci             # use /Users/you/.nvm/versions/node/v24.21.0/bin/npm, see above; `ci`, so package-lock.json is never rewritten
 npm run build        # tsc, then copies src/db/schema.sql into dist/
 npm test             # 1,200+ tests, no network, no launchd, no real config.json
 npm run typecheck
@@ -562,7 +562,7 @@ means it refuses rather than guesses:
 
 | It stops when | Because |
 |---|---|
-| the working tree is dirty | An update must not be the thing that eats a local edit. It names the files. |
+| the working tree is dirty | An update must not be the thing that eats a local edit. It names the files, on `/health` too. **One exception:** `package-lock.json` changed on its own is set aside, not refused - npm rewrites it by itself (npm 12, which Node 26 ships, adds a line to it on `npm install`), and the update reinstalls from the new one with `npm ci` anyway. Beside a changed `package.json` it is refused like any other edit. |
 | the branch has diverged from its upstream | It only ever fast-forwards. A merge commit made by an update script is one nobody reviewed. |
 | the branch tracks nothing, or the directory is not a checkout | There is nowhere to pull from. An unpacked tarball is replaced by hand, keeping `config.json` and `data/`. |
 

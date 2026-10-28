@@ -126,6 +126,22 @@ out="$("$DIRTY/scripts/update.sh" --check --porcelain 2>/dev/null)"; status=$?
 check "porcelain on a dirty tree fails"                       test "$status" != 0
 check "and is blocked, not reported as up to date"            bash -c "grep -qx 'state blocked' <<< \"\$1\"" _ "$out"
 check "the local edit is still there"                         grep -q 'nobody asked to lose' "$DIRTY/README.md"
+check "the reason names the file"                             bash -c "grep -qx 'reason the working tree has uncommitted changes (README.md), so nothing was updated.' <<< \"\$1\"" _ "$out"
+
+# npm rewriting package-lock.json by itself (npm 12 adds "hasInstallScript") is not a local edit.
+LOCK="$TMP/lock"
+install "$LOCK" "$BASE_HEAD" || { echo "FAIL could not prepare the lock-file clone"; exit 1; }
+sed -i '' 's/"lockfileVersion": 3,/"lockfileVersion": 3, "x-npm-rewrote-this": true,/' "$LOCK/package-lock.json"
+out="$("$LOCK/scripts/update.sh" --check --porcelain 2>/dev/null)"; status=$?
+check "package-lock.json changed alone does not block the check" test "$status" = 0
+check "it reports the update instead"                            bash -c "grep -qx 'state behind' <<< \"\$1\"" _ "$out"
+check "and a check leaves the lock file as npm left it"          grep -q 'x-npm-rewrote-this' "$LOCK/package-lock.json"
+
+# ... but beside a changed package.json it is somebody changing the dependencies, and that is refused.
+echo ' ' >> "$LOCK/package.json"
+out="$("$LOCK/scripts/update.sh" --check --porcelain 2>/dev/null)"; status=$?
+check "package-lock.json with package.json is refused"           test "$status" != 0
+check "naming both files"                                        bash -c "grep -qx 'reason the working tree has uncommitted changes (package-lock.json, package.json), so nothing was updated.' <<< \"\$1\"" _ "$out"
 
 # --- the wrapper: stubs for the updater and the rebuild ----------------------------------------------
 # Both live OUTSIDE the clone, so a `git reset --hard` inside it cannot restore the real ones.

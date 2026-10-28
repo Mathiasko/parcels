@@ -5,7 +5,7 @@
 #   scripts/setup.sh --config-only   prerequisites and config.json only: no npm install, no launchd
 #
 # Idempotent and safe to re-run. It never overwrites config.json (that file holds your App Password),
-# npm install is a no-op when nothing changed, and install-agents.sh replaces what is registered
+# npm ci installs exactly what package-lock.json says, and install-agents.sh replaces what is registered
 # rather than adding to it. No sudo anywhere: the only root-owned part of this app is the optional
 # parcels.local hostname, which is a separate script you run yourself.
 #
@@ -129,8 +129,10 @@ offer_brew_formula terminal-notifier terminal-notifier \
 
 # --- 2. dependencies --------------------------------------------------------------------------------
 if [ "$config_only" = 0 ]; then
-  step "Installing dependencies (npm install)"
-  run_npm "$ROOT" install
+  # `ci`, not `install`: install can rewrite package-lock.json (a newer npm adds its own metadata), and a
+  # tracked file changed by the installer is a dirty tree that blocks every update after it.
+  step "Installing dependencies (npm ci)"
+  run_npm "$ROOT" ci
 fi
 
 # --- 3. config.json ---------------------------------------------------------------------------------

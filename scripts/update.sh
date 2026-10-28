@@ -11,7 +11,8 @@
 #
 #   - a dirty working tree      -> stop, and name the files. An update must never be the thing that
 #                                  eats a local edit, and `git pull` into a dirty tree either fails
-#                                  halfway or quietly merges.
+#                                  halfway or quietly merges. The one exception is package-lock.json
+#                                  changed ALONE, which npm does by itself (see below).
 #   - a divergent branch        -> stop. --ff-only, never a merge: this is a deployment, and a merge
 #                                  commit made by an update script is one nobody reviewed.
 #   - no upstream, or no repo   -> stop and say so. A tarball cannot be updated in place.
@@ -111,10 +112,23 @@ say "at version $BEFORE on branch $BRANCH"
 # config.json, data/ and dist/ are gitignored, so none of them can make the tree dirty; anything that
 # shows up here is a real edit to tracked code, and the user is the only one who knows what it was for.
 DIRTY="$(git_ status --porcelain --untracked-files=no)"
+# Except package-lock.json on its own. npm rewrites it without being asked: a newer npm than the one
+# that wrote it adds metadata on `npm install` (npm 12, which Node 26 ships, adds `hasInstallScript`),
+# and setup.sh ran `npm install` until it switched to `npm ci`. Nobody chose that change, and `npm ci`
+# below installs from the lock file of the commit being pulled, so it is set aside rather than refused -
+# but only when it is the WHOLE difference: a package.json changed beside it means somebody changed the
+# dependencies on purpose, and that is refused like any other edit.
+LOCK_ONLY=0
+if [[ "$DIRTY" =~ ^[\ M][\ M]\ package-lock\.json$ ]]; then LOCK_ONLY=1; DIRTY=""; fi
 [ -z "$DIRTY" ] || {
+  # Named, so the Health page (and a support bundle) says WHICH files: these are paths of the app's own
+  # tracked files, never anything of the user's. The first three, and how many more.
+  n="$(printf '%s\n' "$DIRTY" | wc -l | tr -d ' ')"
+  files="$(printf '%s\n' "$DIRTY" | cut -c4- | head -3 | paste -sd, - | sed 's/,/, /g')"
+  [ "$n" -le 3 ] || files="$files and $((n - 3)) more"
   pline "state blocked"
-  pline "reason the working tree has uncommitted changes, so nothing was updated."
-  echo "update: the working tree has uncommitted changes, so nothing was updated." >&2
+  pline "reason the working tree has uncommitted changes ($files), so nothing was updated."
+  echo "update: the working tree has uncommitted changes ($files), so nothing was updated." >&2
   echo "$DIRTY" | sed 's/^/  /' >&2
   echo "  Commit, stash or discard them, then run this again." >&2
   exit 1
@@ -180,6 +194,10 @@ fi
 echo "updating $(git_ rev-list --count "HEAD..$UPSTREAM") commit(s) ..."
 # --ff-only turns a surprise into an error instead of a merge commit. The checks above should have
 # caught every case, but this is the one that is enforced by git rather than by this script.
+if [ "$LOCK_ONLY" = 1 ]; then
+  echo "setting aside package-lock.json, which npm rewrote by itself (npm ci reinstalls from the new one) ..."
+  git_ checkout --quiet HEAD -- package-lock.json
+fi
 git_ pull --ff-only --quiet
 
 # `ci`, not `install`: it installs exactly what package-lock.json says, which is what the commit we
