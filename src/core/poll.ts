@@ -158,7 +158,8 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
 
     const fetched = await fetchCarrier(adapter, parcels, http)
     try {
-      const applied = db.transaction(() => applyCarrier(db, carrier, fetched, now, cause))()
+      // IMMEDIATE, so the check for deleted parcels inside and the writes after it see the same rows.
+      const applied = db.transaction(() => applyCarrier(db, carrier, dropDeleted(db, fetched), now, cause)).immediate()
       report.newEvents.push(...applied.newEvents)
       if (applied.failure) report.failures.push({ carrier, reason: applied.failure })
     } catch (err) {
@@ -335,6 +336,21 @@ async function fetchCarrier(adapter: CarrierAdapter, parcels: Parcel[], http: Ht
     }
   }
   return out
+}
+
+/**
+ * The fetched chunks minus the parcels deleted while their carrier was being asked (the web deletes
+ * while the poller awaits the network). Their events and raw bodies would fail the foreign key, and
+ * that one throw would roll back every other parcel of the carrier with it. A chunk left with nobody
+ * in it is dropped whole: what it says about the carrier's health is about a parcel nobody wants.
+ */
+function dropDeleted(db: Database, fetched: Fetched[]): Fetched[] {
+  const exists = db.prepare('SELECT 1 FROM parcels WHERE id = ?')
+  return fetched.flatMap(f => {
+    const chunk = f.chunk.filter(p => exists.get(p.id) !== undefined)
+    if (chunk.length === f.chunk.length) return [f]
+    return chunk.length === 0 ? [] : [{ ...f, chunk }]
+  })
 }
 
 function applyCarrier(

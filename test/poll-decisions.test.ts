@@ -2,7 +2,7 @@
 // bookkeeping, raw-response pruning, and containment of a carrier whose result cannot be stored.
 import { test, expect, describe } from 'vitest'
 import { runPoll } from '../src/core/poll.js'
-import { findParcel, setNeedsPostcode, updateParcelState } from '../src/db/parcels.js'
+import { deleteParcel, findParcel, setNeedsPostcode, updateParcelState } from '../src/db/parcels.js'
 import type { HttpClient } from '../src/core/types.js'
 import { carrierHealth } from '../src/db/health.js'
 import {
@@ -49,6 +49,29 @@ test('a not_found answer stamps the poll and nothing else, so it cannot undo a c
 
   const p = findParcel(db, 'posta', 'RA000000001SK')!
   expect(p).toMatchObject({ status: 'delivered', statusRaw: 'new', statusDetail: 'signed', lastPolledAt: NOW })
+})
+
+test('a parcel deleted while its carrier is being asked does not cost the rest of the batch', async () => {
+  const db = memDb()
+  const gone = addParcel(db, 'posta', 'RA000000001SK')
+  addParcel(db, 'posta', 'RA000000002SK')
+  const lone = addParcel(db, 'packeta', 'Z0000000001')
+  // The user deletes them from the web while the requests are in flight.
+  const posta = stubAdapter('posta', ins => {
+    deleteParcel(db, gone)
+    return ins.map(i => okResult(i.number, [ev('2026-10-26 09:00:00', 'in_transit', 1, i.number)]))
+  }, 100)
+  const packeta = stubAdapter('packeta', ins => {
+    deleteParcel(db, lone)
+    return ins.map(i => okResult(i.number, [ev('2026-10-26 09:00:00', 'in_transit')]))
+  })
+
+  const report = await runPoll({ db, http: bodyHttp(), adapters: [posta, packeta], config, now: NOW })
+
+  expect(report.failures).toEqual([])
+  expect(findParcel(db, 'posta', 'RA000000002SK')).toMatchObject({ status: 'in_transit', lastPolledAt: NOW })
+  expect(report.newEvents.map(e => e.description)).toEqual(['RA000000002SK'])
+  expect(carrierHealth(db).map(h => [h.carrier, h.consecutiveFailures])).toEqual([['posta', 0]])
 })
 
 test('keeps only the last 5 raw responses per parcel', async () => {
