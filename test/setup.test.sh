@@ -90,7 +90,8 @@ check "a missing optional never stops the run"            bash -c "! grep -nE 'e
 
 # The closing instructions name the port the config actually has, everywhere a URL is printed.
 PORTED="$TMP/ported.json"
-printf '{"defaultPostalCode":"85101","port":9123,"imap":{"host":"h","port":993,"user":"u","pass":"p","mailbox":"parcels"}}\n' > "$PORTED"
+# No mail account in it: the Gmail steps are printed only while there is none to connect.
+printf '{"defaultPostalCode":"85101","port":9123}\n' > "$PORTED"
 out="$(run_setup "$PORTED" 2>&1)"
 check "the closing message uses the configured port"      bash -c "grep -q '127.0.0.1:9123' <<< \"\$1\"" _ "$out"
 check "the parcels.local URL uses it too"                 bash -c "grep -q 'parcels.local:9123' <<< \"\$1\"" _ "$out"
@@ -110,8 +111,11 @@ in_order() { # in_order <text> <pattern...>  every pattern is present, each firs
 }
 README_TODO="$(sed -n '/^### What no script can do for you/,/^Updating an installed copy/p' "$ROOT/README.md")"
 CLOSING="$(awk '/^== (Installed|Config written)/ { p = 1 } p' <<< "$out")"
-check "closing message: filter, Show in IMAP, App Password, /settings" in_order "$CLOSING" gmail-filter.xml 'Show in IMAP' apppasswords /settings
+check "closing message: filter, Show in IMAP, App Password, /settings" in_order "$CLOSING" gmail-filter.xml 'Show in IMAP' apppasswords 'Save settings'
 check "README: filter, Show in IMAP, App Password, /settings"          in_order "$README_TODO" gmail-filter.xml 'Show in IMAP' apppasswords /settings
+check "closing message names every button of the import, in order"   in_order "$CLOSING" 'Import filters' 'Choose File' 'Open file' 'Apply new filters to existing email' 'Create filters'
+check "and says nothing about Gmail once mail is connected"            bash -c "! grep -q 'Import filters' <<< \"\$1\"" _ "$(run_setup "$EXISTING" 2>&1)"
+check "setup.sh opens a browser only from a real terminal"            bash -c "grep -B1 -A0 'open \"\$SETTINGS_URL\"' '$SETUP' >/dev/null && grep -q '\[ -t 1 \] && \[ -z \"\${PARCELS_NO_OPEN:-}\" \]' '$SETUP'"
 
 BAD="$TMP/bad.json"
 check "setup.sh refuses a postcode that is not five digits" bash -c "! PARCELS_CONFIG='$BAD' PARCELS_POSTCODE=not-a-code '$SETUP' --config-only </dev/null"

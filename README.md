@@ -14,12 +14,22 @@ The full design and its rationale are in
 
 ## Install
 
-On a fresh Mac, from a real Terminal window:
+On a fresh Mac:
 
-```sh
-git clone https://github.com/Mathiasko/parcels.git && cd parcels
-scripts/setup.sh
-```
+1. Open **Terminal** (Spotlight: ⌘-Space, type `Terminal`, Return).
+2. Paste this and press Return:
+
+   ```sh
+   git clone https://github.com/Mathiasko/parcels.git ~/parcels && cd ~/parcels && scripts/setup.sh
+   ```
+
+   If macOS says `git` needs the **command line developer tools**, click **Install**, wait for it
+   to finish, and paste the line again.
+3. Answer its questions: your **postcode** (five digits), and **y** when it offers to install Node
+   or the notification helper.
+4. When it finishes, it **opens the Settings page in your browser**. The **How to connect Gmail**
+   box at the top of that page is the rest of the installation, click by click - the same steps as
+   [below](#what-no-script-can-do-for-you).
 
 `setup.sh` is idempotent, needs **no sudo**, and never overwrites an existing `config.json`, so
 re-running it is always safe. `scripts/setup.sh --config-only` writes just the config and stops.
@@ -52,20 +62,34 @@ A test asserts the script only ever *prints* that line, never runs it.
 
 These need a browser, a GUI prompt or a password, and the script lists them when it finishes.
 
-Connect Gmail in this order — each step needs the one before it, and doing them the other way round
-makes the first connection test fail with "the mailbox is not there":
+Connecting Gmail takes about five minutes. The Settings page shows these same steps with a link
+for each, and `setup.sh` opens it when it finishes. Do them in this order - the label has to exist,
+visible to IMAP, before the first connection test, or that test says "the mailbox is not there":
 
-1. **The Gmail filter and label.** Import [`gmail-filter.xml`](gmail-filter.xml) (Settings → Filters
-   and Blocked Addresses → Import filters) and tick **Also apply filter to matching conversations**:
-   import alone labels nothing that has already arrived. Then Settings → Labels: check the `parcels`
-   label is there and tick **Show in IMAP** for it. Add your own shops' domains to the filter while
-   you are there.
-2. **An App Password.** Make one at <https://myaccount.google.com/apppasswords> (2-step
-   verification must be on first).
-3. **The Settings page.** On the dashboard open `/settings`, enter your Gmail address and the App
-   Password, and Save. Saving tests the connection and answers in one line; that answer is the only
-   thing that proves ingest works — a wrong password or a hidden label otherwise looks exactly like
-   "no new mail".
+1. **Label your shipping emails** with the filter in [`gmail-filter.xml`](gmail-filter.xml).
+   1. Download it from the Settings page (the `gmail-filter.xml` link in the guide), or use the one
+      in this folder.
+   2. In Gmail, click the **gear icon** → **See all settings** → **Filters and Blocked Addresses**
+      (or go straight to <https://mail.google.com/mail/u/0/#settings/filters>; `u/0` is the first
+      account you are signed in to).
+   3. At the bottom of that page, click **Import filters**.
+   4. Click **Choose File** and pick `gmail-filter.xml`.
+   5. Click **Open file**. Gmail lists the filter it found.
+   6. Tick **Apply new filters to existing email**. Import alone labels nothing that has already
+      arrived, and an empty label looks exactly like a broken one.
+   7. Click **Create filters**.
+   8. Open **Settings → Labels**, find `parcels`, and make sure **Show in IMAP** is ticked.
+
+   Add your own shops' domains to the filter while you are there, before or after importing.
+2. **Make an App Password.** 2-Step Verification must be on first
+   (<https://myaccount.google.com/signinoptions/twosv>).
+   1. Open <https://myaccount.google.com/apppasswords>.
+   2. Type a name such as `Parcels` and click **Create**.
+   3. Copy the 16-letter password it shows. Google shows it once.
+3. **Paste it on the Settings page** (`/settings` on the dashboard): your Gmail address and the App
+   Password, then **Save settings**. Saving tests the connection and answers in one line at the top
+   of the page; that answer is the only thing that proves ingest works - a wrong password or a
+   hidden label otherwise looks exactly like "no new mail".
 
 The rest is optional:
 

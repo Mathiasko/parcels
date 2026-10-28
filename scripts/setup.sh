@@ -207,35 +207,72 @@ PORT="$("$NODE" -e '
   } catch { process.stdout.write("8787") }
 ' "$CONFIG")"
 
+# Whether a mail account is saved yet: the one thing left that matters, and the reason to open the page.
+MAIL_SET="$("$NODE" -e '
+  try { process.stdout.write(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).imap ? "1" : "0") }
+  catch { process.stdout.write("0") }
+' "$CONFIG")"
+SETTINGS_URL="http://127.0.0.1:$PORT/settings"
+
 # --config-only did not install the dependencies or the agents, so it must not claim to have.
-[ "$config_only" = 0 ] && HEADLINE="Installed. Four things are left, and none of them can be scripted:" \
-                       || HEADLINE="Config written. Run setup.sh with no flags to install the rest. Then:"
+if [ "$config_only" = 1 ]; then
+  HEADLINE="Config written. Run setup.sh with no flags to install the rest, then connect Gmail."
+elif [ "$MAIL_SET" = 1 ]; then
+  HEADLINE="Installed. Gmail is already connected; the dashboard is at http://127.0.0.1:$PORT"
+else
+  HEADLINE="Installed. One thing is left: connect Gmail, which takes about five minutes."
+fi
 
 cat <<EOF
 
 == $HEADLINE
-
-1. Open the dashboard:  http://127.0.0.1:$PORT
-   It binds loopback only and has no password, by design.
-
-2. Connect Gmail, in this order:
-   a. In Gmail, import gmail-filter.xml (Settings, Filters and Blocked Addresses, Import filters)
-      and tick "Also apply filter to matching conversations" - import alone labels nothing that has
-      already arrived. Then in Settings, Labels, check the parcels label is there and tick
-      "Show in IMAP" for it.
-   b. Make an App Password at https://myaccount.google.com/apppasswords (2-step verification first).
-   c. Open http://127.0.0.1:$PORT/settings, enter your Gmail address and the App Password, and Save.
-      Saving tests the connection; read the one-line answer.
-   Until that is done the app still works; you just add parcels by hand on /add.
-
-3. Optional, needs a password prompt in a real Terminal:
-     sudo scripts/install-hostname.sh
-   That gives you http://parcels.local:$PORT instead of an IP address.
-
-4. Optional, one-time macOS approval for nicer notifications: in a real Terminal window run
-     terminal-notifier -title x -message y
-   and approve the prompt. Without it the app falls back to osascript, which works but has no app
-   identity and no click-through. Check which one is live with: node dist/cli.js notify-test
-
-Then: scripts/update.sh pulls and reinstalls later. README.md has the rest.
 EOF
+
+[ "$MAIL_SET" = 1 ] || cat <<EOF
+
+Open $SETTINGS_URL - the "How to connect Gmail" box at the top of that page
+walks you through it, with a link for every step. In short:
+
+  1. Label your shipping emails.
+     a. On the Settings page, click gmail-filter.xml. It downloads to your Downloads folder.
+     b. In Gmail: gear icon -> See all settings -> Filters and Blocked Addresses.
+     c. At the bottom of that page, click Import filters.
+     d. Click Choose File and pick gmail-filter.xml in Downloads.
+     e. Click Open file.
+     f. Tick "Apply new filters to existing email", so the mail you already have is labelled too.
+     g. Click Create filters.
+     h. Settings -> Labels: find parcels and make sure "Show in IMAP" is ticked.
+  2. Make an App Password (2-Step Verification must be on).
+     a. Open https://myaccount.google.com/apppasswords
+     b. Type a name such as Parcels and click Create.
+     c. Copy the 16-letter password it shows.
+  3. Back on the Settings page, enter your Gmail address and the App Password, click Save settings,
+     and read the one-line answer at the top.
+
+Until then the app still works: add parcels by hand on /add.
+EOF
+
+cat <<EOF
+
+Optional, each in a real Terminal window:
+  - A nicer address, http://parcels.local:$PORT instead of the IP (asks for your password):
+      sudo scripts/install-hostname.sh
+  - Notifications with the app's name and click-through: run
+      terminal-notifier -title x -message y
+    and approve the macOS prompt. Check which one is live with: node dist/cli.js notify-test
+
+Later, Health -> Check for updates (or scripts/update.sh) installs a newer version. README.md has the rest.
+EOF
+
+# A fresh install from a real Terminal: open the page that finishes it, once the web agent answers (it
+# was bootstrapped seconds ago). Not under --config-only, which started no server; not without a
+# terminal, so a test or a script never opens a browser; not once mail is set up, so a re-run does not.
+if [ "$config_only" = 0 ] && [ "$MAIL_SET" = 0 ] && [ -t 1 ] && [ -z "${PARCELS_NO_OPEN:-}" ]; then
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    curl -fsS -o /dev/null --max-time 1 "$SETTINGS_URL" 2>/dev/null && break
+    sleep 1
+  done
+  echo
+  echo "Opening $SETTINGS_URL in your browser ..."
+  open "$SETTINGS_URL" 2>/dev/null || echo "  (could not open it: paste the address into your browser)"
+fi

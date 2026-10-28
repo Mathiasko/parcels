@@ -2,10 +2,12 @@
 <!--
   A Gmail filter that labels shipping mail `parcels`, in Gmail's own export format.
 
-  Import it at Settings, Filters and Blocked Addresses, Import filters, and TICK
-  "Also apply filter to matching conversations" - import by itself labels nothing that has already
-  arrived, so without that tick the app sees an empty label and cannot tell that from a broken one.
-  Then Settings, Labels, tick "Show in IMAP" for `parcels`, or IMAP cannot see it at all.
+  Import it in Gmail: gear icon, See all settings, Filters and Blocked Addresses, then at the bottom
+  Import filters, Choose File (this file), Open file, and TICK "Apply new filters to existing email"
+  before Create filters - import by itself labels nothing that has already arrived, so without that
+  tick the app sees an empty label and cannot tell that from a broken one. Then Settings, Labels,
+  tick "Show in IMAP" for `parcels`, or IMAP cannot see it at all. The Settings page of the app has
+  these steps with a link for each, and serves this file as a download.
 
   The whole query is ONE property, `hasTheWord`, and that is the entire point of this file.
   Gmail's filter FORM has separate From / Subject / Has-the-words boxes and it ANDs them together,
