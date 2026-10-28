@@ -22,6 +22,14 @@ export type CanonicalStatus =
   | 'delivered'   | 'failed_attempt' | 'returning' | 'returned'
   | 'problem'     | 'unknown'
 
+/**
+ * The statuses a parcel never leaves: nothing polls it again and it moves to history. One list so the
+ * poller's tiers, the active/history queries and the views cannot disagree about which they are.
+ */
+export const TERMINAL_STATUSES: readonly CanonicalStatus[] = ['delivered', 'returned']
+
+export const isTerminalStatus = (s: CanonicalStatus): boolean => TERMINAL_STATUSES.includes(s)
+
 export interface FetchInput { number: string; postalCode?: string }
 
 export type FetchResult =

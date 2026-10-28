@@ -1,5 +1,5 @@
 import type { Database } from './index.js'
-import type { CanonicalStatus, CarrierId, PickupPoint } from '../core/types.js'
+import { TERMINAL_STATUSES, type CanonicalStatus, type CarrierId, type PickupPoint } from '../core/types.js'
 import { canonicalNumber } from '../carriers/registry.js'
 import { logAction, logStatusChange, UNATTRIBUTED, type Cause } from './activity-log.js'
 import { orphanParcelMessages, discardRaw } from './messages.js'
@@ -72,6 +72,9 @@ type Row = Record<string, string | number | null>
 const iso = (d: Date | undefined) => d?.toISOString() ?? null
 const date = (v: string | number | null) => (v === null ? undefined : new Date(v as string))
 const opt = <T>(v: T | null): T | undefined => (v === null ? undefined : v)
+
+/** `TERMINAL_STATUSES` as an SQL list. Inlined, not bound: they are our own constants, never input. */
+const TERMINAL_SQL = TERMINAL_STATUSES.map(s => `'${s}'`).join(', ')
 
 function toParcel(r: Row): Parcel {
   const pickup: PickupPoint | undefined = r.pickup_kind === null
@@ -151,7 +154,7 @@ export function getParcel(db: Database, id: number): Parcel | undefined {
 export function listActive(db: Database): Parcel[] {
   const rows = db.prepare(`
     SELECT * FROM parcels
-    WHERE archived_at IS NULL AND status NOT IN ('delivered', 'returned')
+    WHERE archived_at IS NULL AND status NOT IN (${TERMINAL_SQL})
     ORDER BY id
   `).all() as Row[]
   return rows.map(toParcel)
@@ -334,7 +337,7 @@ export interface DeliveredFilter {
  * first by delivery, or by first-seen for those. Date bounds apply to the same instant.
  */
 export function listDelivered(db: Database, f: DeliveredFilter = {}): Parcel[] {
-  const where = ["(status IN ('delivered', 'returned') OR archived_at IS NOT NULL)"]
+  const where = [`(status IN (${TERMINAL_SQL}) OR archived_at IS NOT NULL)`]
   const args: (string | number)[] = []
   if (f.carrier) { where.push('carrier = ?'); args.push(f.carrier) }
   if (f.q) {

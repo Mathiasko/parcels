@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon'
-import { isEmailOnlyCarrier } from './types.js'
+import { isEmailOnlyCarrier, isTerminalStatus } from './types.js'
 import type { Parcel } from '../db/parcels.js'
 
 const HOUR = 3_600_000
@@ -23,7 +23,7 @@ export function slotFor(now: Date): number {
   return Math.min(Math.max(hour - FIRST_HOUR, 0), SLOT_COUNT - 1)
 }
 
-const isTerminal = (p: Parcel): boolean => p.status === 'delivered' || p.status === 'returned'
+const isTerminal = (p: Parcel): boolean => isTerminalStatus(p.status)
 
 /** Parcels the carrier is about to hand over (or hold only briefly) are polled every slot, whatever their age. */
 function isUrgent(p: Parcel, now: Date): boolean {
