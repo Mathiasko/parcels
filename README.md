@@ -910,23 +910,35 @@ backfill command.
 
 ### Add to Calendar
 
-A parcel that is **ready for pickup with a deadline** (Packeta and Slovenská pošta give one) has an
-`Add to Calendar` link on its deadline line, on the dashboard card and on the parcel page; on a card
-that groups several parcels at one place, each parcel has its own. It downloads
-`/parcel/<id>/calendar.ics`, an all-day event on the deadline day (in Bratislava time) that Calendar
-syncs to your phone:
+Every parcel that is **ready for pickup** and not archived has an `Add to Calendar` link, on the
+dashboard card and on the parcel page; on a card that groups several parcels at one place, each parcel
+has its own. It downloads `/parcel/<id>/calendar.ics`, an all-day event (in Bratislava time) that
+Calendar syncs to your phone.
+
+**With a deadline** (Packeta and Slovenská pošta give one), the link is on the deadline line and the
+event is on the deadline day, with two reminders: 09:00 the day before and 09:00 on the day; one whose
+moment has already passed when you download is left out.
+
+**Without one**, the event is a nudge to collect it soon: **today** with a reminder at **17:00** if
+you download it before 17:00, otherwise **tomorrow** with a reminder at **09:00**. Its description says
+`<carrier> gave no pickup deadline — collect it soon` instead of a deadline. The link sits beside the
+sentence that says the carrier gave no deadline (the card's footer, or the pickup panel on the parcel
+page); on a card holding several parcels that footer is shared, so each parcel's link is on its own
+`Since …` line instead.
+
+Either way:
 
 - title `Pick up: <name>`, the pickup address as the location (with a pin when the carrier gave
   coordinates), the Apple Maps link as the URL, and a description with the carrier, the tracking
-  number, the Z-BOX code if one is stored, and the deadline with its time when the carrier gave one;
-- two reminders, at 09:00 the day before and 09:00 on the day (correct on the days the clocks
-  change); one whose moment has already passed when you download is left out;
-- a stable UID per parcel and a SEQUENCE that grows with every download, so downloading again after the
-  deadline or the place changed updates the same event instead of adding a second one.
+  number and the Z-BOX code if one is stored; the code is never in the title or a reminder;
+- reminders at the local time on the days the clocks change too (09:00 is 8 or 10 hours after
+  midnight on those days, 17:00 is 16 or 18);
+- a stable UID per parcel and a SEQUENCE that grows with every download, so downloading again - after
+  the deadline arrived, or the place changed - updates the same event instead of adding a second one.
 
 It is a plain GET that reads the database and nothing else, behind the same Host check as every page.
-Parcels without a deadline, archived ones and ones not waiting for collection have no link, and the
-address answers with the ordinary not-found page.
+Archived parcels and ones not waiting for collection have no link, and the address answers with the
+ordinary not-found page.
 
 Adding by hand: with the carrier left on auto-detect the number must match exactly one carrier's
 shape. **Choosing a carrier explicitly overrides that check**, in the web page and in the CLI alike.

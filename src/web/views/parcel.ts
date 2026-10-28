@@ -12,8 +12,8 @@ import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
 import {
-  mapsUrl, markForm, noDeadlineNote, parcelName, pickupClock, pickupCodeLine, pickupSummary, refreshBanner, undoForm,
-  type RefreshNote,
+  mapsUrl, markForm, noDeadlineNote, parcelName, pickupClock, pickupCodeLine, pickupFacts, pickupSummary, refreshBanner,
+  undatedCalendarLinks, undoForm, type RefreshNote,
 } from './index.js'
 import type { TileGrid } from '../../core/slippy.js'
 
@@ -108,8 +108,21 @@ function pickupPanel(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx, map
   // carrier gave one, else how long it has waited - which is only true while it is waiting.
   const { out: clock, urgency } = p.retainedTill || ready ? pickupClock({ parcel: p, last }, ctx.now) : { out: html``, urgency: 'none' }
   const note = ready ? noDeadlineNote([{ parcel: p, last }]) : ''
+  const facts = pickupFacts(note, ready ? undatedCalendarLinks([{ parcel: p, last }]) : [], maps)
   return html`<section class="pk" aria-label="Pickup point"><div class="pk-h${ready ? '' : raw(' plain')}${ready && urgency === 'now' ? raw(' due-now') : ''}"><div class="where">${where}</div>${ready ? statusIndicator('ready_for_pickup') : html`<span class="meta">Pickup point</span>`}</div>
-<div class="pk-b">${clock}${ready ? pickupCodeLine(code) : ''}${ready && map ? mapPanel(map, where) : ''}${note || maps ? html`<p class="meta">${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps <span aria-hidden="true">↗</span></a>` : ''}</p>` : ''}</div></section>`
+<div class="pk-b">${clock}${ready ? pickupCodeLine(code) : ''}${ready && map ? mapPanel(map, where) : ''}${facts ? html`<p class="meta">${facts}</p>` : ''}</div></section>`
+}
+
+/**
+ * A parcel waiting for collection at a place the carrier did not name has no pickup panel, so the facts
+ * that panel would carry - no deadline, and the calendar reminder that calls for - get a line of their
+ * own under the parcel's details. Nothing at all for a parcel with a deadline: its clock is not shown
+ * here either, the dashboard card has it.
+ */
+function placelessFacts(p: Parcel, last: StoredEvent | undefined): Html {
+  if (p.status !== 'ready_for_pickup' || pickupSummary(p) || p.retainedTill) return html``
+  const facts = pickupFacts(noDeadlineNote([{ parcel: p, last }]), undatedCalendarLinks([{ parcel: p, last }]), undefined)
+  return facts ? html`<p class="meta">${facts}</p>` : html``
 }
 
 /**
@@ -212,7 +225,7 @@ ${statusBox(statusLine(p, events, mark))}
   // Said on every email-only parcel, with or without events: it is why there is no refresh button and
   // why the timeline is whatever the mail said, which is not guessable from the page otherwise.
   isEmailOnlyCarrier(p.carrier) ? html`<p class="meta">Never polled: updates arrive by email, in ${CARRIER_NAME[p.carrier]}'s own words.</p>` : ''}
-${refreshBanner(note, ctx.now, 'Asking the carrier about this parcel.')}${postcodeNotice(p)}${pickupPanel(p, last, ctx, map, code)}
+${placelessFacts(p, last)}${refreshBanner(note, ctx.now, 'Asking the carrier about this parcel.')}${postcodeNotice(p)}${pickupPanel(p, last, ctx, map, code)}
 ${timelineSection(p, events, ctx)}
 ${rawSection(raws, ctx)}
 ${deleteSection(p)}

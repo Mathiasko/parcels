@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { buildServer } from '../src/web/server.js'
 import { calendarFilename, parcelCalendar } from '../src/web/calendar.js'
 import { calendarUrl, mapsUrl } from '../src/web/views/index.js'
-import { insertParcel, setArchived, updateParcelState, type Parcel } from '../src/db/parcels.js'
+import { getParcel, insertParcel, setArchived, updateParcelState, type Parcel } from '../src/db/parcels.js'
 import { recordPickupCode } from '../src/db/pickup-codes.js'
 import { appendEvents } from '../src/db/events.js'
 import type { Database } from '../src/db/index.js'
@@ -133,16 +133,89 @@ describe('dates and alarms in the display zone', () => {
   })
 })
 
+describe('a parcel the carrier gave no deadline: a reminder to collect it soon', () => {
+  const open = (o: Partial<Parcel> = {}) => parcel({ retainedTill: undefined, ...o })
+  /** Mon 26 Oct 2026 in Bratislava (CET, UTC+1) at a given local hour and minute. */
+  const local = (h: number, m = 0) => new Date(Date.UTC(2026, 9, 26, h - 1, m))
+
+  test('before 17:00: an all-day event today, with one reminder at 17:00', () => {
+    const ics = parcelCalendar(open(), '799874', local(11))
+    expect(prop(ics, 'DTSTART')).toBe('DTSTART;VALUE=DATE:20261026')
+    expect(prop(ics, 'DTEND')).toBe('DTEND;VALUE=DATE:20261027')
+    expect(triggers(ics)).toEqual(['PT17H'])
+    expect(alarms(ics)[0]).toContain('DESCRIPTION:Pick up: Bratiska')
+  })
+
+  test('a minute before 17:00 is still today; at 17:00 it is tomorrow, reminded at 09:00', () => {
+    expect(prop(parcelCalendar(open(), undefined, local(16, 59)), 'DTSTART')).toBe('DTSTART;VALUE=DATE:20261026')
+    const evening = parcelCalendar(open(), undefined, local(17))
+    expect(prop(evening, 'DTSTART')).toBe('DTSTART;VALUE=DATE:20261027')
+    expect(prop(evening, 'DTEND')).toBe('DTEND;VALUE=DATE:20261028')
+    expect(triggers(evening)).toEqual(['PT9H'])
+    expect(alarms(evening)[0]).toContain('DESCRIPTION:Pick up: Bratiska')
+  })
+
+  test('the same title, place, pin, link and code; the description says there is no deadline', () => {
+    const ics = parcelCalendar(open(), '799874', local(11))
+    expect(prop(ics, 'SUMMARY')).toBe('SUMMARY:Pick up: Bratiska')
+    expect(prop(ics, 'LOCATION')).toBe('LOCATION:Z-BOX\\, Bottova 6\\, Bratislava')
+    expect(prop(ics, 'GEO')).toBe('GEO:48.1452;17.1257')
+    expect(prop(ics, 'URL')).toBe(`URL:${mapsUrl(open())}`)
+    expect(prop(ics, 'DESCRIPTION')).toBe('DESCRIPTION:Packeta · Z1172430119\\nOpen the box with 799874\\nPacketa gave no pickup deadline — collect it soon')
+    for (const a of alarms(ics)) expect(a.join('\n')).not.toContain('799874')
+  })
+
+  test('the same UID as the deadline version, so a deadline that arrives later replaces this event', () => {
+    const before = parcelCalendar(open(), undefined, local(11))
+    const after = parcelCalendar(parcel(), undefined, local(12))
+    expect(prop(before, 'UID')).toBe('UID:parcel-7-Z1172430119@parcels.local')
+    expect(prop(after, 'UID')).toBe(prop(before, 'UID'))
+    const seq = (s: string) => Number(prop(s, 'SEQUENCE')!.slice('SEQUENCE:'.length))
+    expect(seq(after)).toBeGreaterThan(seq(before))
+  })
+
+  test('on the day the clocks go back (Sun 25 Oct 2026), 17:00 is eighteen hours after midnight', () => {
+    const ics = parcelCalendar(open(), undefined, new Date('2026-10-25T10:00:00Z'))     // 11:00 CET
+    expect(prop(ics, 'DTSTART')).toBe('DTSTART;VALUE=DATE:20261025')
+    expect(triggers(ics)).toEqual(['PT18H'])
+  })
+
+  test('downloaded the evening before the clocks go back, 09:00 on the day is ten hours after midnight', () => {
+    const ics = parcelCalendar(open(), undefined, new Date('2026-10-24T15:30:00Z'))     // Sat 17:30 CEST
+    expect(prop(ics, 'DTSTART')).toBe('DTSTART;VALUE=DATE:20261025')
+    expect(triggers(ics)).toEqual(['PT10H'])
+  })
+
+  test('on the day the clocks go forward (Sun 29 Mar 2026), 17:00 is sixteen hours after midnight', () => {
+    const ics = parcelCalendar(open(), undefined, new Date('2026-03-29T09:00:00Z'))     // 11:00 CEST
+    expect(prop(ics, 'DTSTART')).toBe('DTSTART;VALUE=DATE:20260329')
+    expect(triggers(ics)).toEqual(['PT16H'])
+  })
+
+  test('downloaded the evening before the clocks go forward, 09:00 on the day is eight hours after midnight', () => {
+    const ics = parcelCalendar(open(), undefined, new Date('2026-03-28T16:30:00Z'))     // Sat 17:30 CET
+    expect(prop(ics, 'DTSTART')).toBe('DTSTART;VALUE=DATE:20260329')
+    expect(triggers(ics)).toEqual(['PT8H'])
+  })
+
+  test('the local date decides, not the UTC one: 00:30 local on Tuesday is Tuesday', () => {
+    const ics = parcelCalendar(open(), undefined, new Date('2026-10-26T23:30:00Z'))     // Tue 27 Oct 00:30 CET
+    expect(prop(ics, 'DTSTART')).toBe('DTSTART;VALUE=DATE:20261027')
+    expect(triggers(ics)).toEqual(['PT17H'])
+  })
+})
+
 describe('when the calendar is offered', () => {
-  test('ready for pickup, not archived, with a deadline', () => {
+  test('ready for pickup and not archived, with a deadline or without one', () => {
     expect(calendarUrl(parcel())).toBe('/parcel/7/calendar.ics')
+    expect(calendarUrl(parcel({ retainedTill: undefined }))).toBe('/parcel/7/calendar.ics')
   })
 
   test.each<[string, Partial<Parcel>]>([
     ['not ready', { status: 'in_transit' }],
     ['delivered', { status: 'delivered' }],
-    ['no deadline', { retainedTill: undefined }],
     ['archived', { archivedAt: new Date('2026-10-25T10:00:00Z') }],
+    ['archived, without a deadline', { archivedAt: new Date('2026-10-25T10:00:00Z'), retainedTill: undefined }],
   ])('not when %s', (_, o) => {
     expect(calendarUrl(parcel(o))).toBeUndefined()
   })
@@ -181,6 +254,9 @@ function seed(db: Database, o: {
 }
 
 const link = (id: number) => `<a class="cal" href="/parcel/${id}/calendar.ics">Add to Calendar</a>`
+const parcelOf = (db: Database, id: number): Parcel => getParcel(db, id)!
+/** The Maps link as it appears in an attribute: HTML-escaped. */
+const mapsHref = (p: Parcel): string => mapsUrl(p)!.replace(/&/g, '&amp;')
 const cards = (body: string): string[] => body.split('<article class="card').slice(1).map(s => s.split('</article>')[0]!)
 const blocks = (card: string): string[] => card.split('<li').slice(1).map(s => s.split('</li>')[0]!)
 
@@ -204,6 +280,18 @@ describe('GET /parcel/:id/calendar.ics', () => {
     expect(triggers(body)).toEqual(['-PT15H', 'PT9H'])
   })
 
+  test('a ready parcel with no deadline: 200, the reminder event', async () => {
+    const db = memDb()
+    const id = seed(db, { name: 'Open-ended', number: 'Z2', pickup: ZBOX })
+    const res = await get(db, `/parcel/${id}/calendar.ics`)
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-disposition']).toBe('attachment; filename="pick-up-open-ended.ics"')
+    // NOW is Mon 26 Oct, 11:00 in Bratislava: today, reminded at 17:00.
+    expect(prop(res.body, 'DTSTART')).toBe('DTSTART;VALUE=DATE:20261026')
+    expect(triggers(res.body)).toEqual(['PT17H'])
+    expect(prop(res.body, 'DESCRIPTION')).toBe('DESCRIPTION:Packeta · Z2\\nPacketa gave no pickup deadline — collect it soon')
+  })
+
   test('it goes through the same security hooks as every page', async () => {
     const db = memDb()
     const id = seed(db, { name: 'Bratiska', number: 'Z1172430119', pickup: ZBOX, retainedTill: AT_SIX })
@@ -217,7 +305,6 @@ describe('GET /parcel/:id/calendar.ics', () => {
 
   test.each<[string, (db: Database) => string]>([
     ['not ready for pickup', db => `/parcel/${seed(db, { name: 'Moving', number: 'Z1', status: 'in_transit', pickup: ZBOX, retainedTill: AT_SIX })}/calendar.ics`],
-    ['ready, but no deadline', db => `/parcel/${seed(db, { name: 'Open-ended', number: 'Z2', pickup: ZBOX })}/calendar.ics`],
     ['archived', db => {
       const id = seed(db, { name: 'Old', number: 'Z3', pickup: ZBOX, retainedTill: AT_SIX })
       setArchived(db, id, NOW)
@@ -249,20 +336,45 @@ describe('the Add to Calendar link', () => {
     const db = memDb()
     const a = seed(db, { name: 'Parcel A', number: 'Z100', pickup: ZBOX, retainedTill: AT_SIX })
     const b = seed(db, { name: 'Parcel B', number: 'Z200', pickup: ZBOX, retainedTill: ALL_DAY })
-    const c = seed(db, { name: 'Parcel C', number: 'Z300', pickup: ZBOX })              // no deadline: no link
+    const c = seed(db, { name: 'Parcel C', number: 'Z300', pickup: ZBOX })              // no deadline: on its own clock line
     const [shared] = cards((await get(db, '/')).body)
     const byName = (n: string) => blocks(shared!).find(x => x.includes(`>${n}</a></h3>`))!
+    const clockOf = (n: string) => byName(n).split('<p class="clock">')[1]!.split('</p>')[0]!
     expect(byName('Parcel A')).toContain(link(a))
     expect(byName('Parcel A')).not.toContain(link(b))
     expect(byName('Parcel B')).toContain(link(b))
-    expect(byName('Parcel C')).not.toContain('calendar.ics')
-    expect(shared!.match(/>Add to Calendar<\/a>/g)).toHaveLength(2)
-    expect(shared).not.toContain(`/parcel/${c}/calendar.ics`)
+    expect(clockOf('Parcel C')).toBe(`Since Mon 26 Oct, 06:00 · ${link(c)}`)
+    expect(shared!.match(/>Add to Calendar<\/a>/g)).toHaveLength(3)
+    // The footer is shared by all three, so it carries no parcel's link (that would need its name again).
+    const footer = shared!.split('<p class="card-f meta">')[1]!.split('</p>')[0]!
+    expect(footer).toBe(`Packeta did not give a pickup deadline. <a href="${mapsHref(parcelOf(db, c))}">Open in Apple Maps <span aria-hidden="true">↗</span></a>`)
+  })
+
+  test('a one-parcel card with no deadline: the link is in the footer, beside the note', async () => {
+    const db = memDb()
+    const id = seed(db, { name: 'Open-ended', number: 'Z2' })                          // no place, no deadline
+    const [only] = cards((await get(db, '/')).body)
+    expect(only).toContain(`<p class="card-f meta">Packeta did not give a pickup deadline. ${link(id)}</p>`)
+    expect(only!.match(/calendar\.ics/g)).toHaveLength(1)
+    expect(only!.split('<p class="clock">')[1]!.split('</p>')[0]).toBe('Since Mon 26 Oct, 06:00')
+  })
+
+  test('two parcels at one place, both without a deadline: one link each, in its own block, none in the footer', async () => {
+    const db = memDb()
+    const a = seed(db, { name: 'Parcel A', number: 'Z100', pickup: ZBOX })
+    const b = seed(db, { name: 'Parcel B', number: 'Z200', pickup: ZBOX })
+    const [shared] = cards((await get(db, '/')).body)
+    const byName = (n: string) => blocks(shared!).find(x => x.includes(`>${n}</a></h3>`))!
+    expect(byName('Parcel A')).toContain(`<p class="clock">Since Mon 26 Oct, 06:00 · ${link(a)}</p>`)
+    expect(byName('Parcel B')).toContain(`<p class="clock">Since Mon 26 Oct, 06:00 · ${link(b)}</p>`)
+    expect(byName('Parcel A')).not.toContain(link(b))
+    expect(shared!.split('<p class="card-f meta">')[1]!.split('</p>')[0]).not.toContain('calendar.ics')
   })
 
   test('absent from the dashboard when no parcel qualifies', async () => {
     const db = memDb()
-    seed(db, { name: 'Open-ended', number: 'Z2', pickup: ZBOX })                             // ready, no deadline
+    const old = seed(db, { name: 'Old', number: 'Z2', pickup: ZBOX })                       // ready, but archived
+    setArchived(db, old, NOW)
     seed(db, { name: 'Moving', number: 'Z1', status: 'in_transit', pickup: ZBOX, retainedTill: AT_SIX })
     const body = (await get(db, '/')).body
     expect(body).not.toContain('calendar.ics')
@@ -278,9 +390,25 @@ describe('the Add to Calendar link', () => {
     expect(body).toContain('Open in Apple Maps')
   })
 
+  test('on the parcel page of a ready parcel with no deadline, beside the note in the pickup panel', async () => {
+    const db = memDb()
+    const id = seed(db, { name: 'Open-ended', number: 'Z2', pickup: ZBOX })
+    const body = (await get(db, `/parcel/${id}`)).body
+    expect(body).toContain(`<p class="meta">Packeta did not give a pickup deadline. ${link(id)} · <a href="${mapsHref(parcelOf(db, id))}">Open in Apple Maps`)
+    expect(body.match(/>Add to Calendar<\/a>/g)).toHaveLength(1)
+  })
+
+  test('on the parcel page of a ready parcel with no deadline and no place, on a line of its own', async () => {
+    const db = memDb()
+    const id = seed(db, { name: 'Open-ended', number: 'Z2' })
+    const body = (await get(db, `/parcel/${id}`)).body
+    expect(body).toContain(`<p class="meta">Packeta did not give a pickup deadline. ${link(id)}</p>`)
+    expect(body.match(/>Add to Calendar<\/a>/g)).toHaveLength(1)
+  })
+
   test.each<[string, (db: Database) => number]>([
-    ['no deadline', db => seed(db, { name: 'Open-ended', number: 'Z2', pickup: ZBOX })],
     ['not ready', db => seed(db, { name: 'Moving', number: 'Z1', status: 'in_transit', pickup: ZBOX, retainedTill: AT_SIX })],
+    ['not ready, without a deadline', db => seed(db, { name: 'Moving', number: 'Z1', status: 'in_transit', pickup: ZBOX })],
     ['archived', db => {
       const id = seed(db, { name: 'Old', number: 'Z3', pickup: ZBOX, retainedTill: AT_SIX })
       setArchived(db, id, NOW)

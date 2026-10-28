@@ -41,13 +41,38 @@ export function mapsUrl(p: Parcel): string | undefined {
 }
 
 /**
- * The parcel's calendar file, offered only when there is a day to put in a calendar: the parcel is
- * waiting for collection, is not archived, and the carrier gave a deadline. The route answers 404 for
- * anything this returns undefined for, so a link and its target can never disagree.
+ * The parcel's calendar file, offered for every parcel waiting for collection that is not archived. With
+ * a deadline the event is that day; without one it is a nudge to collect it soon (web/calendar.ts). The
+ * route answers 404 for anything this returns undefined for, so a link and its target can never disagree.
  */
 export function calendarUrl(p: Parcel): string | undefined {
-  const offered = p.status === 'ready_for_pickup' && p.archivedAt === undefined && p.retainedTill !== undefined
+  const offered = p.status === 'ready_for_pickup' && p.archivedAt === undefined
   return offered ? `/parcel/${p.id}/calendar.ics` : undefined
+}
+
+/**
+ * The calendar link for a parcel with NO deadline, which has no "Collect by" line to ride on: it goes
+ * beside the sentence that says the carrier gave none - the footer of a card of one, or the parcel
+ * page's pickup panel. A card that holds several parcels does not use this: its footer is shared, and
+ * telling the links apart there would mean printing each parcel's name a second time (§6.1, "a name is
+ * printed once"), so each one rides on its own parcel's clock line instead (`pickupClock`).
+ */
+export function undatedCalendarLinks(entries: Entry[]): Html[] {
+  return entries.flatMap(e => {
+    const cal = e.parcel.retainedTill ? undefined : calendarUrl(e.parcel)
+    return cal ? [html`<a class="cal" href="${cal}">Add to Calendar</a>`] : []
+  })
+}
+
+/**
+ * The line of facts under a pickup: that the carrier gave no deadline, the calendar links that sentence
+ * calls for, and the Maps link. Empty when there is nothing to say. One function for the dashboard card
+ * and the parcel page, so the two cannot drift.
+ */
+export function pickupFacts(note: string, calendar: Html[], maps: string | undefined): Html | undefined {
+  const links = [...calendar, ...(maps ? [html`<a href="${maps}">Open in Apple Maps <span aria-hidden="true">↗</span></a>`] : [])]
+  if (!note && links.length === 0) return undefined
+  return html`${note}${note && links.length ? ' ' : ''}${links.flatMap((l, i) => (i === 0 ? [l] : [html` · `, l]))}`
 }
 
 /**
@@ -173,12 +198,13 @@ export type Urgency = 'none' | 'soon' | 'now'
  *
  * The parcel page prints this same line, so a deadline is worded one way wherever it appears.
  *
- * The deadline line also carries "Add to Calendar", because the calendar event IS this deadline: it
- * belongs to one parcel, so it cannot go in a card's footer (facts about the place, shared by every
- * parcel waiting there), and putting it here keeps one link per parcel on a shared card without adding
- * a line to any block.
+ * The deadline line also carries "Add to Calendar", because the calendar event IS this deadline, and
+ * putting it here keeps one link per parcel on a shared card without adding a line to any block. A
+ * parcel with no deadline normally has its link beside "did not give a pickup deadline" instead
+ * (`undatedCalendarLinks`); `undatedCal` puts it on this line, which is what a card holding several
+ * parcels asks for.
  */
-export function pickupClock(e: Entry, now: Date): { out: Html; urgency: Urgency } {
+export function pickupClock(e: Entry, now: Date, undatedCal = false): { out: Html; urgency: Urgency } {
   const p = e.parcel
   if (p.retainedTill) {
     const d = calendarDaysBetween(now, p.retainedTill)
@@ -192,9 +218,11 @@ export function pickupClock(e: Entry, now: Date): { out: Html; urgency: Urgency 
     }
   }
   const since = sinceOf(e)
-  if (!since) return { urgency: 'none', out: html`` }
+  const cal = undatedCal ? calendarUrl(p) : undefined
+  const link = cal ? html`<a class="cal" href="${cal}">Add to Calendar</a>` : undefined
+  if (!since) return { urgency: 'none', out: link ? html`<p class="clock">${link}</p>` : html`` }
   const days = Math.floor((now.getTime() - since.getTime()) / 86_400_000)
-  return { urgency: 'none', out: html`<p class="clock">Since ${formatDateTime(since, now)}${days >= 1 ? html` · <b>${plural(days, 'day')}</b>` : ''}</p>` }
+  return { urgency: 'none', out: html`<p class="clock">Since ${formatDateTime(since, now)}${days >= 1 ? html` · <b>${plural(days, 'day')}</b>` : ''}${link ? html` · ${link}` : ''}</p>` }
 }
 
 const listNames = (names: string[]): string =>
@@ -326,7 +354,7 @@ function cardEntry(c: Card, e: Entry, ctx: PageCtx): Html {
       e.last.location ? html` <span class="loc">· ${e.last.location}</span>` : ''}</div>`
   return html`<li>${c.placed ? html`<h3 class="who"><a href="/parcel/${p.id}">${parcelName(p)}</a></h3>` : ''}
 <span class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span></span>
-${sentence}${pickupClock(e, ctx.now).out}${pickupCodeLine(e.code)}${postcodeRejected(p)
+${sentence}${pickupClock(e, ctx.now, c.members.length > 1).out}${pickupCodeLine(e.code)}${postcodeRejected(p)
     ? html`<p class="meta t-warn">${glyph('problem')} Postcode needed: <a class="sel" href="/parcel/${p.id}">set one</a> to resume full tracking.</p>`
     : ''}${p.status === 'ready_for_pickup' ? markForm(p, 'Mark as collected', 'home') : ''}</li>`
 }
@@ -348,11 +376,10 @@ function card(c: Card, ctx: PageCtx): Html {
   const ready = c.members.some(m => m.parcel.status === 'ready_for_pickup')
   const note = ready ? noDeadlineNote(c.members) : ''
   const maps = ready ? c.members.map(m => mapsUrl(m.parcel)).find(u => u !== undefined) : undefined
+  const facts = pickupFacts(note, c.members.length > 1 ? [] : undatedCalendarLinks(c.members), maps)
   return html`<article class="card">
 <div class="card-h${dueNow ? raw(' due-now') : ''}">${cardHead(c)}${cardChip(c)}</div>
-<ul class="card-l">${c.members.map(m => cardEntry(c, m, ctx))}</ul>${note || maps
-    ? html`<p class="card-f meta">${note}${note && maps ? ' ' : ''}${maps ? html`<a href="${maps}">Open in Apple Maps <span aria-hidden="true">↗</span></a>` : ''}</p>`
-    : ''}
+<ul class="card-l">${c.members.map(m => cardEntry(c, m, ctx))}</ul>${facts ? html`<p class="card-f meta">${facts}</p>` : ''}
 </article>`
 }
 

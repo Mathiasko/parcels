@@ -354,7 +354,8 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   })
 
   /**
-   * The parcel's pickup deadline as a calendar file (see web/calendar.ts). A GET with no side effects and
+   * A parcel waiting for collection as a calendar file: its deadline day, or a nudge to collect it soon
+   * when the carrier gave none (see web/calendar.ts). A GET with no side effects and
    * no network: it reads the database and builds a string, so it needs no POST, and it sits behind the
    * same Host check and headers as every page. Offered on exactly the parcels `calendarUrl` links it for;
    * anything else is the ordinary 404 page, "no such parcel" only when there is none. Nothing is logged:
