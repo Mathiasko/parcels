@@ -305,6 +305,34 @@ describe('web core: faithful rendering', () => {
     }
   })
 
+  test('the add form is made for pasting a tracking number and knows the default postcode', async () => {
+    const body = (await get(memDb(), '/add')).body
+    const number = /<input name="number"[^>]*>/.exec(body)![0]
+    for (const attr of ['autofocus', 'autocapitalize="characters"', 'spellcheck="false"', 'autocomplete="off"']) {
+      expect(number, attr).toContain(attr)
+    }
+    const postcode = /<input name="postcode"[^>]*>/.exec(body)![0]
+    expect(postcode).toContain('placeholder="81101 (default)"')     // the real default, not the word "default"
+    expect(postcode).toContain('inputmode="numeric"')
+  })
+
+  test('the assign forms on /attention share the field rules, but only /add takes the focus', async () => {
+    const db = memDb()
+    db.prepare('INSERT INTO messages (message_id, subject, parsed_ok, parse_note) VALUES (?, ?, 0, ?)').run('<a@x>', 'Your parcel', 'no tracking number')
+    const body = (await get(db, '/attention')).body
+    const number = /<input name="number"[^>]*>/.exec(body)![0]
+    expect(number).toContain('autocapitalize="characters"')
+    expect(number).not.toContain('autofocus')
+    expect(/<input name="postcode"[^>]*>/.exec(body)![0]).toContain('placeholder="81101 (default)"')
+  })
+
+  test('the parcel page postcode box brings up a number pad', async () => {
+    const db = memDb()
+    const id = parcel(db, { carrier: 'gls', number: '12345678901' })
+    const body = (await get(db, `/parcel/${id}`)).body
+    expect(/<input name="postcode"[^>]*>/.exec(body)![0]).toContain('inputmode="numeric"')
+  })
+
   test('requests with a foreign Host header are refused (DNS rebinding)', async () => {
     const app = buildServer({ db: memDb(), config })
     const bad = await app.inject({ method: 'GET', url: '/', headers: { host: 'evil.example' } })

@@ -71,15 +71,15 @@ function clearSection(messages: UnparsedMessage[]): Html {
  * A refused assign comes back open, with its error and what was typed, because that is the one the
  * reader was in the middle of.
  */
-function assignFold(m: UnparsedMessage, error?: AttentionError): Html {
+function assignFold(m: UnparsedMessage, error: AttentionError | undefined, defaultPostcode: string | undefined): Html {
   const mine = error?.messageId === m.id
   return html`<details class="asg"${mine ? raw(' open') : ''}><summary>Assign to a parcel…</summary>
-  <form method="post" action="/attention/${m.id}/assign">${parcelFields(mine ? error.values : {})}
+  <form method="post" action="/attention/${m.id}/assign">${parcelFields(mine ? error.values : {}, { defaultPostcode })}
   <p><button class="pri">Assign to a parcel</button></p></form></details>`
 }
 
 export function attentionPage(
-  messages: UnparsedMessage[], dormant: Parcel[], ctx: PageCtx, error?: AttentionError,
+  messages: UnparsedMessage[], dormant: Parcel[], ctx: PageCtx, error?: AttentionError, defaultPostcode?: string,
 ): Html {
   return layout('Attention', '/attention', html`
 <h1>Needs attention</h1>
@@ -90,7 +90,7 @@ ${messages.map(m => html`<div class="item">
   <h3>${m.subject ?? '(no subject)'}</h3>
   <div class="meta">${m.from ?? 'unknown sender'}${m.receivedAt ? html` · ${formatDateTime(m.receivedAt, ctx.now)}` : ''}${m.note ? html` · ${m.note}` : ''}</div>
   ${error?.messageId === m.id ? notice('warn', html`<p>${error.message}</p>`, true) : ''}
-  <div class="acts">${assignFold(m, error)}
+  <div class="acts">${assignFold(m, error, defaultPostcode)}
   <form method="post" action="/attention/${m.id}/dismiss"><button class="link">Dismiss<span class="vh"> ${m.subject ?? '(no subject)'}</span></button></form></div>
 </div>`)}`}</div>
 <h2>Dormant parcels</h2>

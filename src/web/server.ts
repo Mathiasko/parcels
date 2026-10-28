@@ -458,18 +458,18 @@ export function buildServer(deps: WebDeps): FastifyInstance {
 
   const attention = (reply: FastifyReply, error?: AttentionError, status = 200) =>
     send(reply, attentionPage(
-      listUnparsedMessages(db), listActive(db).filter(p => isDormant(p, now())), ctx(), error,
+      listUnparsedMessages(db), listActive(db).filter(p => isDormant(p, now())), ctx(), error, config.defaultPostalCode,
     ), status)
   app.get('/attention', async (_req, reply) => attention(reply))
 
-  app.get('/add', async (_req, reply) => send(reply, addPage(ctx())))
+  app.get('/add', async (_req, reply) => send(reply, addPage(ctx(), undefined, undefined, config.defaultPostalCode)))
 
   app.post('/add', async (req, reply) => {
     const f = form(req)
     const values = { number: text(f.number), carrier: text(f.carrier), label: text(f.label), postcode: text(f.postcode) }
     const result = addParcel(db, config, { ...values, source: 'manual' })
     if (result.ok) return reply.redirect(`/parcel/${result.id}`, 303)
-    return send(reply, addPage(ctx(), result.message, values), result.status)
+    return send(reply, addPage(ctx(), result.message, values, config.defaultPostalCode), result.status)
   })
 
   /**

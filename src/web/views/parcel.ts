@@ -57,7 +57,7 @@ function timeline(events: StoredEvent[], ctx: PageCtx): Html {
 
 function postcodeForm(p: Parcel): Html {
   return html`<form class="inl" method="post" action="/parcel/${p.id}/postcode">
-  <input name="postcode" value="${p.postalCode ?? ''}" size="8" aria-label="Postcode"><button>Save postcode</button></form>`
+  <input name="postcode" value="${p.postalCode ?? ''}" size="8" inputmode="numeric" aria-label="Postcode"><button>Save postcode</button></form>`
 }
 
 /** A rejected or just-changed postcode is a notice with the fix inside it; otherwise the form lives in the details column. */
