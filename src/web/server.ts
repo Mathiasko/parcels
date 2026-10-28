@@ -14,7 +14,7 @@ import { parseTile } from '../core/slippy.js'
 import { readTile, tileDirFor } from '../core/tiles.js'
 import { isDormant } from '../core/backoff.js'
 import { recordPollRun, runPoll, type PollDeps } from '../core/poll.js'
-import { getRun, listRuns, reapStaleRuns, runningRun, startRun, type PollRun } from '../db/poll-runs.js'
+import { failRun, getRun, listRuns, reapStaleRuns, runningRun, startRun, type PollRun } from '../db/poll-runs.js'
 import { allAdapters } from '../carriers/registry.js'
 import { createNotifier } from '../notify/send.js'
 import type { Notifier } from '../notify/types.js'
@@ -626,6 +626,19 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       return reply.redirect(live ? `${back}?run=${live.id}` : `${back}?busy=1`, 303)
     }
     refreshing = true
+    try {
+      return await startRefresh(reply, target, parcelIds, back)
+    } catch (err) {
+      // Anything that throws before the background run owns the guard (opening the run row, logging
+      // the press, starting the poll) must hand it back here: nothing else ever would, and every later
+      // click would be told a refresh is already running for the rest of this process's life.
+      refreshing = false
+      throw err
+    }
+  })
+
+  /** Everything after the guard is taken. Once `work` exists, releasing the guard is its job. */
+  const startRefresh = async (reply: FastifyReply, target: string, parcelIds: number[], back: string) => {
     // Read the mailbox too, but only for the whole-dashboard refresh. This is what the button is for
     // on a new install: with no parcels yet, polling carriers can do nothing, and without this the
     // only way to turn mail into parcels was to wait for the next hourly run. A single-parcel
@@ -644,16 +657,24 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     logAction(db, {
       kind: 'refresh', count: parcelIds.length, scope: target === '' ? 'all' : 'one',
     }, { actor: 'web', runId, at: now() })
-    const work = recordPollRun(db, runId, runPoll({
-      db, config, parcelIds, forceAll: true, ingest,
-      http: deps.http ?? createHttpClient(),
-      adapters: deps.adapters ?? allAdapters(),
-      notifier: deps.notifier ?? createNotifier(config.notifier),
-      now: now(),
-      // A status change found by the button is the WEB acting, not the hourly poller: the whole point
-      // of attributing these is that "it changed while I was looking at it" is a different fact.
-      cause: { actor: 'web', runId, at: now() },
-    }), now)
+    let work: Promise<unknown>
+    try {
+      work = recordPollRun(db, runId, runPoll({
+        db, config, parcelIds, forceAll: true, ingest,
+        http: deps.http ?? createHttpClient(),
+        adapters: deps.adapters ?? allAdapters(),
+        notifier: deps.notifier ?? createNotifier(config.notifier),
+        now: now(),
+        // A status change found by the button is the WEB acting, not the hourly poller: the whole point
+        // of attributing these is that "it changed while I was looking at it" is a different fact.
+        cause: { actor: 'web', runId, at: now() },
+      }), now)
+    } catch (err) {
+      // Building the poll's dependencies threw, so the row is open and nothing will ever run it: close
+      // it as what it is, rather than leave Health showing a run in progress until it goes stale.
+      try { failRun(db, runId, `the refresh could not start: ${err instanceof Error ? err.message : String(err)}`, now()) } catch { /* the 500 says enough */ }
+      throw err
+    }
     // Nothing awaits `work` on the request path, so its rejection has to be dealt with here or it is an
     // unhandled rejection that takes the process down. `recordPollRun` has already written it to the run
     // row by this point, which is where the user will see it; this only keeps the server alive and puts
@@ -662,7 +683,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       console.error(`${new Date().toISOString()} POST /refresh: run ${runId} failed:`, err)
     }).finally(() => { refreshing = false }))
     return reply.redirect(`${back}?run=${runId}`, 303)
-  })
+  }
 
   /**
    * One check: a `git fetch` and nothing else (`scripts/update.sh --check` moves remote-tracking refs

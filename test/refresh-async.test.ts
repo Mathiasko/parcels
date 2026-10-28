@@ -112,6 +112,44 @@ describe('the refresh is asynchronous', () => {
     expect(listRuns(db, 10)).toHaveLength(2)
   })
 
+  test('a refresh that fails before its run even starts does not wedge the button', async () => {
+    // Opening the run row and building the poll both happen after the guard is taken. If either
+    // throws, the request is a 500 - but the next click must still start a run, not say "busy" for
+    // the rest of the process's life.
+    const failures: Array<[string, (db: Database) => { app: ReturnType<typeof server>; heal: () => void }]> = [
+      ['opening the run row', db => {
+        db.exec("CREATE TEMP TRIGGER boom BEFORE INSERT ON poll_runs BEGIN SELECT RAISE(ABORT, 'disk full'); END")
+        return { app: server(db, { adapters: [slowAdapter(Promise.resolve())], http: bodyHttp() }), heal: () => db.exec('DROP TRIGGER boom') }
+      }],
+      ['building the poll', db => {
+        let broken = true
+        const deps: WebDeps = { db, config, now: () => NOW, notifier: { send: async () => {} }, adapters: [slowAdapter(Promise.resolve())] }
+        // Read only when a refresh builds its poll, so the server starts fine and the click is what fails.
+        Object.defineProperty(deps, 'http', { get: () => { if (broken) throw new Error('no network stack'); return bodyHttp() } })
+        return { app: buildServer(deps), heal: () => { broken = false } }
+      }],
+    ]
+    for (const [what, breakIt] of failures) {
+      const db = memDb()
+      parcel(db)
+      const { app, heal } = breakIt(db)
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        const broken = await app.inject({ method: 'POST', url: '/refresh', ...form({}) })
+        expect(broken.statusCode, what).toBe(500)
+      } finally {
+        spy.mockRestore()
+      }
+      // A run row the failure left behind is closed, not left reading as "running" on Health.
+      expect(listRuns(db, 10).every(r => r.finishedAt !== undefined), what).toBe(true)
+      heal()
+
+      const next = await app.inject({ method: 'POST', url: '/refresh', ...form({}) })
+      expect(next.headers.location, what).toMatch(/^\/\?run=\d+$/)     // not `?busy=1`
+      await refreshIdle(app)
+    }
+  })
+
   test('a single-parcel refresh still lands back on that parcel, which shows the run in progress', async () => {
     const db = memDb()
     const id = parcel(db)
