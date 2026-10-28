@@ -274,6 +274,19 @@ describe('the page follows the update while it runs', () => {
     expect(body).toContain('9f8e7d6')
   })
 
+  test('after a successful update the page no longer says "behind" or offers Update now', async () => {
+    const db = memDb()
+    recordUpdateCheck(db, parseUpdateCheck(BEHIND), new Date(NOW.getTime() - 3_600_000))
+    statusFile({
+      state: 'ok', startedAt: new Date(NOW.getTime() - 120_000).toISOString(),
+      finishedAt: new Date(NOW.getTime() - 5_000).toISOString(), from: 'ffa1f20', to: '9f8e7d6',
+    })
+    const body = await health(db)
+    expect(body).not.toContain('action="/update"')
+    expect(body).not.toMatch(/commits? behind/)
+    expect(body).toMatch(/up to date/)
+  })
+
   test('a run that stopped answering stops the loop too, and is not left looking busy for ever', async () => {
     const db = memDb()
     statusFile({

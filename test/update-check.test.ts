@@ -507,6 +507,38 @@ describe('the outcome reaches the activity log', () => {
     expect(entries(db)[0]!.detail).toContain('9f8e7d6')
   })
 
+  test('a successful update makes the stored check current at the new commit, so the page stops offering it', () => {
+    const db = memDb()
+    recordUpdateCheck(db, parseUpdateCheck(BEHIND), new Date(NOW.getTime() - 3_600_000))
+    const to = '9f8e7d6c5b4a39281706f5e4d3c2b1a099887766'
+    const finishedAt = new Date(NOW.getTime() - 60_000)
+    statusFile({ state: 'ok', startedAt: new Date(NOW.getTime() - 180_000), from: 'ffa1f20', to, finishedAt })
+    adoptUpdateOutcome(db, dir, NOW, { actor: 'web' })
+    const check = getUpdateCheck(db)!
+    expect(check.state).toBe('current')
+    expect(check.behind).toBe(0)
+    expect(check.changes).toEqual([])
+    expect(check.localSha).toBe(to)
+    expect(check.checkedAt).toEqual(finishedAt)
+    expect(check.upstream).toBe('origin/main')       // what it is current WITH is unchanged
+  })
+
+  test('a failed update leaves the check alone: the commits are still there to install', () => {
+    const db = memDb()
+    recordUpdateCheck(db, parseUpdateCheck(BEHIND), new Date(NOW.getTime() - 3_600_000))
+    statusFile({ state: 'failed', from: 'ffa1f20', to: 'ffa1f20', rollback: 'ok', exit: 1, finishedAt: NOW })
+    adoptUpdateOutcome(db, dir, NOW, { actor: 'web' })
+    expect(getUpdateCheck(db)!.state).toBe('behind')
+  })
+
+  test('a check made after the update finished is newer news, and is not overwritten', () => {
+    const db = memDb()
+    statusFile({ state: 'ok', startedAt: new Date(NOW.getTime() - 180_000), from: 'ffa1f20', to: '9f8e7d6', finishedAt: new Date(NOW.getTime() - 120_000) })
+    recordUpdateCheck(db, parseUpdateCheck(BEHIND), new Date(NOW.getTime() - 60_000))   // upstream moved on again
+    adoptUpdateOutcome(db, dir, NOW, { actor: 'web' })
+    expect(getUpdateCheck(db)!.state).toBe('behind')
+  })
+
   test('a failed update that was rolled back is recorded as exactly that', () => {
     const db = memDb()
     statusFile({ state: 'failed', from: 'ffa1f20', to: 'ffa1f20', rollback: 'ok', exit: 1, finishedAt: NOW })

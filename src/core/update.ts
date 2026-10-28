@@ -5,7 +5,8 @@ import type { Database } from '../db/index.js'
 import type { Cause, UpdateLogOutcome } from '../db/activity-log.js'
 import { logAction } from '../db/activity-log.js'
 import {
-  dueForUpdateCheck, loggedUpdateStart, markUpdateLogged, recordUpdateCheck, UPDATE_CHECK_INTERVAL_MS,
+  dueForUpdateCheck, loggedUpdateStart, markUpdateLogged, recordUpdateCheck, recordUpdateInstalled,
+  UPDATE_CHECK_INTERVAL_MS,
 } from '../db/update-state.js'
 import { repoRoot } from './version.js'
 
@@ -460,7 +461,8 @@ const LOG_OUTCOME: Record<Exclude<UpdateOutcome, 'running'>, (run: UpdateRun) =>
 }
 
 /**
- * Turns a finished update into one activity-log entry, and returns what the status file says.
+ * Turns a finished update into one activity-log entry, and returns what the status file says. A
+ * successful one also brings the stored check up to date (see `recordUpdateInstalled`), once.
  *
  * The process that started the update does not live to record how it went - that is the point of
  * detaching it - so the recording happens on the next look, like `reapStaleRuns`: whichever of
@@ -492,6 +494,9 @@ export function adoptUpdateOutcome(
         ...(run.from !== undefined && { from: run.from }),
         ...(run.to !== undefined && { to: run.to }),
       }, cause)
+      // The check stored before the update still says "behind" and still offers the button; what was
+      // installed is the upstream it was behind, so the answer is now "current" at the new commit.
+      if (outcome === 'ok') recordUpdateInstalled(db, run.to, run.finishedAt ?? now)
       markUpdateLogged(db, key, now)
     }
   } catch (err) {

@@ -121,3 +121,23 @@ export function markUpdateLogged(db: Database, startedAt: string, at: Date): voi
     ON CONFLICT (id) DO UPDATE SET logged_started_at = excluded.logged_started_at
   `).run(at.toISOString(), startedAt)
 }
+
+/**
+ * Records that an update has just installed `sha`: the stored check becomes `current` at that commit.
+ *
+ * Without this, /health kept the check from BEFORE the update - "2 commits behind" and an Update now
+ * button - for up to a day, until the next daily check, on a copy that had just installed those very
+ * commits. The update fetched and moved to the upstream tip, so "current" is what a check made at
+ * `at` would have said. Where it is current WITH (branch, upstream) is left as the last check found it.
+ *
+ * Only a check older than the update is replaced: one made after it finished is newer news, and the
+ * upstream may well have moved on again since.
+ */
+export function recordUpdateInstalled(db: Database, sha: string | undefined, at: Date): void {
+  db.prepare(`
+    UPDATE update_check SET
+      state = 'current', behind = 0, changes = NULL, reason = NULL,
+      local_sha = @sha, remote_sha = @sha, checked_at = @at
+    WHERE id = 1 AND checked_at <= @at
+  `).run({ sha: sha ?? null, at: at.toISOString() })
+}
