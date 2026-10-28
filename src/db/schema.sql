@@ -66,6 +66,10 @@ CREATE TABLE IF NOT EXISTS messages (
                                      -- reprocessable. `parse_note` says why. See ingest/extract.ts.
   parcel_id    INTEGER REFERENCES parcels(id)
 );
+-- A parcel's own mail is read by parcel on every poll (the pickup-code scan) and on every delete;
+-- without this each of those is a scan of the whole mailbox. An existing database gains it on its
+-- next open, like a new table: this file is applied idempotently every time.
+CREATE INDEX IF NOT EXISTS messages_parcel ON messages(parcel_id);
 
 CREATE TABLE IF NOT EXISTS carrier_health (
   carrier              TEXT PRIMARY KEY,

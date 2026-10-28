@@ -44,6 +44,23 @@ test('openDb enables WAL and foreign keys, and reopens a file-backed database', 
   }
 })
 
+test('a database from before the messages_parcel index gains it on the next open', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'parcels-db-'))
+  try {
+    const path = join(dir, 'p.db')
+    openDb(path).close()
+    const raw = new BetterSqlite3(path)
+    raw.exec('DROP INDEX IF EXISTS messages_parcel')
+    raw.close()
+    const db = openDb(path)
+    const plan = db.prepare('EXPLAIN QUERY PLAN SELECT raw_path FROM messages WHERE parcel_id = ?').all(1) as { detail: string }[]
+    expect(plan.map(p => p.detail).join(' ')).toContain('USING INDEX messages_parcel')
+    db.close()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('openDb creates a missing parent directory', () => {
   const dir = mkdtempSync(join(tmpdir(), 'parcels-db-'))
   try {
