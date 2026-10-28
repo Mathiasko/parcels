@@ -141,7 +141,7 @@ placeholders makes the poller fail against Gmail every hour. No block at all is 
 account configured" state, and it is what `setup.sh` writes.)
 
 After that first file exists, **`/settings` edits it for you** — the postcode, the notifier, the map
-preview and the whole `imap` block, with a **Test mail connection** button that says in one line
+preview, the calendar for pickups and the whole `imap` block, with a **Test mail connection** button that says in one line
 whether mail ingest actually works. Saving validates the result with the same rules `loadConfig`
 applies and writes the file atomically at `0600`, keeping any key it does not recognise, so the page
 cannot leave behind a `config.json` that stops the app from starting. `port` and `dbPath` are shown
@@ -158,6 +158,7 @@ at the start of every run, so a change reaches mail ingest and the carriers at t
 | `port` | Dashboard port, default `8787`. |
 | `notifier` | `auto` (default), `terminal-notifier` or `osascript`. `auto` tries terminal-notifier and falls back to osascript. |
 | `mapPreview` | `true` (default) or `false`. The pickup-point map. `false` stops all geocoding and tile fetching and removes the map from the page. See [Pickup point maps](#pickup-point-maps). |
+| `pickupCalendar` | The Calendar.app calendar [Add to Calendar](#add-to-calendar) puts pickups into, by name. `""` (the default) or no key: the first calendar you can write to. |
 | `imap` | Optional. Without it, no mail is read and parcels are added by hand. See below. |
 
 ```json
@@ -819,7 +820,8 @@ that would have made that incident self-diagnosing reads:
 - **What you did.** Dismissing mail (how many, and whether it was one sender or the whole queue),
   deleting a parcel (and the status it was in), assigning an email to a parcel, saving settings,
   pressing refresh, marking a parcel collected and undoing that (with the status it moved from and
-  back to), and the outcome of an **update** (including a rollback, and the commits it moved
+  back to), adding a pickup to Calendar (the day and time, and whether it replaced an earlier event -
+  not the calendar's name, and never the locker code), and the outcome of an **update** (including a rollback, and the commits it moved
   between). "Where did my parcel go" is answerable with *you deleted it on Tuesday*: the log
   holds **no foreign key** to `parcels`, precisely so that it outlives the row it talks about.
 - **Nothing in it is private.** Ids, counts, carriers, canonical statuses and words from this app's own
@@ -905,39 +907,61 @@ backfill command.
   parcel is not re-read from disk every hour.
 - **The code is deliberately kept out of notifications and out of `data/poll.log`.** It opens a
   physical locker, and notification banners render on the lock screen. The one place it leaves the
-  app is the description of an [Add to Calendar](#add-to-calendar) event you download yourself, and
-  even there it is kept out of the event's title and its reminders, which are what a lock screen shows.
+  app is the description of an [Add to Calendar](#add-to-calendar) event you add yourself, and even
+  there it is kept out of the event's title and its alert, which are what a lock screen shows.
 
 ### Add to Calendar
 
-Every parcel that is **ready for pickup** and not archived has an `Add to Calendar` link, on the
-dashboard card and on the parcel page; on a card that groups several parcels at one place, each parcel
-has its own. It downloads `/parcel/<id>/calendar.ics`, an all-day event (in Bratislava time) that
-Calendar syncs to your phone.
+Every parcel that is **ready for pickup** and not archived has **Add to Calendar** at the end of its
+clock line (`Collect by …` or `Since …`), on the dashboard card and on the parcel page; on a card that
+groups several parcels at one place, each parcel has its own. Opening it shows a small form:
 
-**With a deadline** (Packeta and Slovenská pošta give one), the link is on the deadline line and the
-event is on the deadline day, with two reminders: 09:00 the day before and 09:00 on the day; one whose
-moment has already passed when you download is left out.
+- **Day**: today up to the deadline's day, which says `— last day` and is checked by default. With no
+  deadline (most carriers never send one), today and the six days after it, today checked. A deadline
+  that is today or already past offers today only. A day with no time left is not offered, and when
+  some of today's times have gone it says from when it still works (`Today, from 13:00`).
+- **Time**: 9:00, 13:00 or 17:00, the first one still to come checked. The page has no script, so a
+  time that passed while the page sat open is refused when you submit, with the form open again and
+  the reason in it.
 
-**Without one**, the event is a nudge to collect it soon: **today** with a reminder at **17:00** if
-you download it before 17:00, otherwise **tomorrow** with a reminder at **09:00**. Its description says
-`<carrier> gave no pickup deadline — collect it soon` instead of a deadline. The link sits beside the
-sentence that says the carrier gave no deadline (the card's footer, or the pickup panel on the parcel
-page); on a card holding several parcels that footer is shared, so each parcel's link is on its own
-`Since …` line instead.
+**One click puts the event straight into Calendar.app** - the server does it with `osascript`, on this
+Mac - and the page says where it went: `Added Bratiska to Calendar “Home”: Wed 28 Oct, 13:00.` The
+event is 30 minutes at that time, titled `Pick up: <name>`, at the pickup address, with the Apple Maps
+link as its URL and a description holding the carrier, the tracking number, the Z-BOX code if one is
+stored, and the real deadline (`Collect by Thu 29 Oct, 18:00`, or that the carrier gave none). It has
+**one alert, at its start**: the time you chose is the reminder. The code is never in the title or the
+alert. Calendar syncs it to your phone like any other event.
 
-Either way:
+Adding again for the same parcel **replaces** the event added before (the summary then reads
+`In Calendar: Wed 28 Oct, 13:00 · Change`) instead of adding a second one; if you deleted the old one
+by hand, that is fine. Deleting a parcel or marking it collected **never touches your calendar**: a
+stale entry you can delete is better than this app removing things from your calendar unasked.
 
-- title `Pick up: <name>`, the pickup address as the location (with a pin when the carrier gave
-  coordinates), the Apple Maps link as the URL, and a description with the carrier, the tracking
-  number and the Z-BOX code if one is stored; the code is never in the title or a reminder;
-- reminders at the local time on the days the clocks change too (09:00 is 8 or 10 hours after
-  midnight on those days, 17:00 is 16 or 18);
-- a stable UID per parcel and a SEQUENCE that grows with every download, so downloading again - after
-  the deadline arrived, or the place changed - updates the same event instead of adding a second one.
+**The permission prompt.** The first time, macOS asks whether **node** may control **Calendar**.
+Allow it. The server waits up to a minute for your answer; if it gives up first, answer the prompt and
+add the event again. If you said no, or want to check, it is in **System Settings → Privacy & Security
+→ Automation → node → Calendar**; the page says exactly that when Calendar refuses.
 
-It is a plain GET that reads the database and nothing else, behind the same Host check as every page.
-Archived parcels and ones not waiting for collection have no link, and the address answers with the
+**Which calendar.** `/settings` → *Calendar for pickups* lists the calendars you can write to (Calendar
+is asked when the page opens, briefly). Unset, it is the first of them, and every success notice names
+the calendar it used, so a wrong default is visible at once. Calendar lets two calendars share a name
+(say, `Home` in iCloud and in Google); the list marks such a name, and adding to it is refused until
+you rename one or choose another. A chosen calendar that no longer exists is reported too. If the list
+cannot be read (the permission is off, or Calendar did not answer), the page says why and keeps the
+stored choice. It is saved as `pickupCalendar` in `config.json`.
+
+**The download fallback.** Whenever adding fails, the notice also offers **Download the event
+instead**: `/parcel/<id>/calendar.ics?day=YYYY-MM-DD&time=HH:MM`, the same event as a file, served
+`inline` so Safari opens it straight into Calendar's own Add dialog. The day and time must be one the
+form offers right now (anything else is a 400); with neither, it is the form's default (the last day
+at 9:00), so an old link still works. It is a plain GET that reads the database and nothing else; the
+file's UID is stable per parcel and its SEQUENCE grows with every download, so downloading again
+updates the same event.
+
+Adding is an ordinary POST behind the same Host and cross-site checks as every other button. Times
+are worked out in Bratislava time and handed to Calendar as a wall-clock day and time, which assumes
+this Mac is in that time zone - as every page of the app already does when it prints a time. Archived
+parcels and ones not waiting for collection have no form, and both addresses answer with the
 ordinary not-found page.
 
 Adding by hand: with the carrier left on auto-detect the number must match exactly one carrier's
@@ -1010,7 +1034,9 @@ Everything lives under `data/` (gitignored):
   `imap_state` (how far each mailbox has been read; see
   [Only the new mail is read](#only-the-new-mail-is-read)), `update_check` (what the last
   update check found and what has already been said about it; see
-  [The daily check](#the-daily-check)), and a few bookkeeping tables.
+  [The daily check](#the-daily-check)), `calendar_events` (the Calendar.app event each parcel was
+  last added as, so adding again replaces it; see [Add to Calendar](#add-to-calendar)), and a few
+  bookkeeping tables.
   Every parcel ever tracked stays there; archiving only hides it from the in-flight list.
 - `data/mail/` holds the raw `.eml` files, `0600` inside a `0700` directory. A dismissed message's
   file is deleted, so this directory holds mail that became a parcel, mail still waiting on
