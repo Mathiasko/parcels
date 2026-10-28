@@ -88,6 +88,14 @@ check "setup.sh offers terminal-notifier"                 grep -q 'terminal-noti
 check "setup.sh says how to get git when it is absent"    grep -q 'xcode-select --install' "$SETUP"
 check "a missing optional never stops the run"            bash -c "! grep -nE 'exit 1' '$SETUP' | grep -qiE 'terminal-notifier|git '"
 
+# The closing instructions name the port the config actually has, everywhere a URL is printed.
+PORTED="$TMP/ported.json"
+printf '{"defaultPostalCode":"85101","port":9123,"imap":{"host":"h","port":993,"user":"u","pass":"p","mailbox":"parcels"}}\n' > "$PORTED"
+out="$(run_setup "$PORTED" 2>&1)"
+check "the closing message uses the configured port"      bash -c "grep -q '127.0.0.1:9123' <<< \"\$1\"" _ "$out"
+check "the parcels.local URL uses it too"                 bash -c "grep -q 'parcels.local:9123' <<< \"\$1\"" _ "$out"
+check "no URL in the closing message says 8787"           bash -c "! grep -qE ':8787' <<< \"\$1\"" _ "$out"
+
 BAD="$TMP/bad.json"
 check "setup.sh refuses a postcode that is not five digits" bash -c "! PARCELS_CONFIG='$BAD' PARCELS_POSTCODE=not-a-code '$SETUP' --config-only </dev/null"
 check "and writes nothing when it refuses"                  test ! -e "$BAD"
