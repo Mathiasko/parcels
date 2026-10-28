@@ -231,6 +231,8 @@ td .st{line-height:1.375rem}
 details{margin:.25rem 0}
 summary{font-size:.8125rem;color:var(--ink-3);cursor:pointer;padding:.25rem 0}
 /* the destructive action: last on the page, below a rule of its own, and quiet until it is opened */
+.adv{margin:1.5rem 0 0;border-top:1px solid var(--rule);padding-top:.5rem}
+.adv>.fields,.adv>.stats{margin:.75rem 0}
 .del{margin:3rem 0 0;border-top:1px solid var(--rule);padding-top:.75rem}
 .del p{max-width:34rem;color:var(--ink-2);margin:.5rem 0 .75rem}
 /* Clearing the whole attention queue. Above the items (hundreds of them put anything below the list

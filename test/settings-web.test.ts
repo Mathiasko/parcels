@@ -107,6 +107,89 @@ describe('GET /settings', () => {
   })
 })
 
+describe('the settings page speaks to the person setting up Gmail', () => {
+  test('the account field is a Gmail address that a password manager understands', async () => {
+    const body = (await harness().get('/settings')).body
+    expect(body).toContain('Gmail address<input type="email" name="imapUser"')
+    expect(body).toMatch(/<input type="email" name="imapUser"[^>]*autocomplete="username"/)
+    expect(body).toMatch(/<input type="email" name="imapUser"[^>]*placeholder="you@gmail.com"/)
+    expect(body).toContain('Gmail label<input name="imapMailbox"')
+  })
+
+  test('the App Password box asks for a NEW password, so Safari does not offer the Google one', async () => {
+    const body = (await harness().get('/settings')).body
+    expect(body).toMatch(/<input type="password" name="imapPass"[^>]*autocomplete="new-password"/)
+    expect(body).not.toMatch(/name="imapPass"[^>]*autocomplete="off"/)
+  })
+
+  test('Save is the one primary action, and it comes after the fields', async () => {
+    const body = (await harness().get('/settings')).body
+    expect(body.match(/class="pri"/g)).toHaveLength(1)
+    const save = body.indexOf('<button class="pri">Save settings</button>')
+    expect(save).toBeGreaterThan(body.indexOf('name="imapPass"'))
+    expect(save).toBeGreaterThan(body.indexOf('name="defaultPostalCode"'))
+    // The connection test is still there, as a secondary button after Save.
+    const test = body.indexOf('<form method="post" action="/settings/test"><button>')
+    expect(test).toBeGreaterThan(save)
+  })
+
+  test('the technical parts are under a collapsed Advanced, and nothing outside it is jargon', async () => {
+    const h = harness()
+    const body = (await h.get('/settings?saved=1')).body
+    const start = body.indexOf('<details class="adv"><summary>Advanced</summary>')
+    expect(start).toBeGreaterThan(-1)
+    const advanced = body.slice(start, body.indexOf('</details>', start))
+    expect(advanced).toContain('name="notifier"')
+    expect(advanced).toContain('<table class="stats">')
+    const outside = body.replace(advanced, '')
+    for (const jargon of [/config\.json/, /launchctl/, /separate process/, /\bpoller\b/i, /terminal-notifier/, /osascript/, h.path]) {
+      expect(outside).not.toMatch(jargon)
+    }
+  })
+})
+
+describe('saving runs the connection test', () => {
+  test('a save that changed the mail settings is tested at once, and the answer is on the page it lands on', async () => {
+    const h = harness({}, fakeImap([], { exists: 7 }))
+    const res = await h.post('/settings', fields({ imapMailbox: 'zasielky' }))
+    expect(res.statusCode).toBe(303)
+    expect(res.headers.location).toMatch(/^\/settings\?saved=1&test=\d+$/)
+    expect(h.seen).toHaveLength(1)
+    expect(h.seen[0]!.mailbox).toBe('zasielky')
+    const page = (await h.get(String(res.headers.location))).body
+    expect(page).toMatch(/Saved\./)
+    expect(page).toMatch(/Connected/)
+    expect(page).toContain('zasielky')
+    expect(page).not.toContain(PASS)
+    // Reading the page again dials nothing: the answer was found by the save.
+    await h.get(String(res.headers.location))
+    expect(h.seen).toHaveLength(1)
+    // ...and the button now offers to test again.
+    expect(page).toContain('<button>Test again</button>')
+  })
+
+  test('a save that touched no mail setting does not dial the mail server', async () => {
+    const h = harness()
+    const res = await h.post('/settings', fields({ defaultPostalCode: '04001' }))
+    expect(res.headers.location).toBe('/settings?saved=1')
+    expect(h.seen).toEqual([])
+  })
+
+  test('a failing test after a save is shown too, with what to do', async () => {
+    const err = Object.assign(new Error('Invalid credentials (Failure)'), { authenticationFailed: true })
+    const h = harness({}, fakeImap([], { connectError: err }))
+    const res = await h.post('/settings', fields({ imapPass: 'zyxwvutsrqponmlk' }))
+    const page = (await h.get(String(res.headers.location))).body
+    expect(page).toMatch(/Authentication failed/)
+    expect(page).toContain('https://myaccount.google.com/apppasswords')
+  })
+
+  test('a stale or forged test id shows no result', async () => {
+    const body = (await harness().get('/settings?saved=1&test=999')).body
+    expect(body).not.toMatch(/Connected|Authentication failed/)
+  })
+})
+
 describe('POST /settings', () => {
   test('saves, redirects, and the page then shows what is on disk rather than what the process started with', async () => {
     const h = harness()
@@ -302,7 +385,8 @@ describe('POST /settings/test', () => {
     const h = harness({}, fakeImap([]))
     await h.post('/settings', fields({ imapMailbox: 'zasielky', imapUser: 'other@gmail.com', imapPass: 'zyxwvutsrqponmlk' }))
     await h.post('/settings/test')
-    expect(h.seen).toEqual([{ ...IMAP, user: 'other@gmail.com', mailbox: 'zasielky', pass: 'zyxwvutsrqponmlk' }])
+    const saved = { ...IMAP, user: 'other@gmail.com', mailbox: 'zasielky', pass: 'zyxwvutsrqponmlk' }
+    expect(h.seen).toEqual([saved, saved])          // once by the save itself, once by Test again
   })
 
   test('the password is in no outcome of the test, not even the one the server echoes back', async () => {

@@ -29,10 +29,11 @@ export interface SettingsState {
 
 const APP_PASSWORDS = 'https://myaccount.google.com/apppasswords'
 
+/** The notifier choices, said as what they do. Only under Advanced; "Automatic" is right for everyone. */
 const NOTIFIER_LABEL: Record<string, string> = {
-  auto: 'auto (terminal-notifier, else osascript)',
-  'terminal-notifier': 'terminal-notifier',
-  osascript: 'osascript',
+  auto: 'Automatic (recommended)',
+  'terminal-notifier': 'terminal-notifier only',
+  osascript: 'Built-in macOS notifications only',
 }
 
 const option = (value: string, label: string, current: string): Html =>
@@ -51,7 +52,7 @@ function testResult(r: ImapProbeResult): Html {
   switch (r.kind) {
     case 'not_configured':
       return notice('neutral', html`<p><strong>No mail account is configured.</strong></p>
-<p>Nothing was tried. Fill in the mail connection below and save it, or leave it empty and add parcels by hand.</p>`, true)
+<p>Nothing was tried. Fill in your Gmail details below and save them, or leave them empty and add parcels by hand.</p>`, true)
 
     case 'ok':
       return r.messages === 0
@@ -60,7 +61,7 @@ function testResult(r: ImapProbeResult): Html {
 <p class="meta">The connection, the password and the label are all fine, so this is not a fault: a Gmail filter that matches nothing looks exactly like this. Check that the filter's action is <strong>Apply the label: ${r.mailbox}</strong>, and that <strong>Also apply filter to matching conversations</strong> was ticked when you made it, which is what back-fills the label with mail you already have.</p>`, true)
         : notice('neutral', html`<p class="st t-ok">${glyph('delivered')}Connected</p>
 <p><strong>${r.user}</strong> — the label <strong>${r.mailbox}</strong> has <strong>${r.messages}</strong> ${r.messages === 1 ? 'message' : 'messages'}.</p>
-<p class="meta">Authenticated, the label is visible to IMAP, and its messages are readable. Mail ingest has everything it needs; new mail becomes parcels at the next poll.</p>`, true)
+<p class="meta">Signed in, the label is visible, and its emails can be read. Everything is in place: new shipping emails become parcels at the next hourly check.</p>`, true)
 
     case 'auth':
       return notice('warn', html`<p><strong>Authentication failed for ${r.user}.</strong></p>
@@ -73,7 +74,7 @@ function testResult(r: ImapProbeResult): Html {
 
     case 'network':
       return notice('warn', html`<p><strong>Could not reach <span class="mono">${r.host}</span> on port <span class="mono">${r.port}</span>.</strong></p>
-<p>A network, DNS or TLS problem rather than a mail one: nothing was authenticated, so the password was never in question. Check that this machine is online, and that the host and port below are right (Gmail is <span class="mono">imap.gmail.com</span> on <span class="mono">993</span>).</p>${why(r.detail)}`, true)
+<p>A network problem rather than a mail one: nothing was signed in to, so the password was never in question. Check that this Mac is online. If it is, check the mail server and port under Advanced below (for Gmail they are <span class="mono">imap.gmail.com</span> and <span class="mono">993</span>).</p>${why(r.detail)}`, true)
 
     case 'unknown':
       return notice('warn', html`<p><strong>The mail server refused the request.</strong></p>
@@ -84,58 +85,74 @@ function testResult(r: ImapProbeResult): Html {
 /** What the button is about to do, in the saved values, so the test is never a black box. */
 function testTarget(v: SettingsValues): Html {
   if (!v.imapConfigured) {
-    return html`<p class="meta">No mail account is saved yet, so there is nothing to test.</p>`
+    return html`<p class="meta">No Gmail account is saved yet, so there is nothing to test.</p>`
   }
-  return html`<p class="meta">Connects to <span class="mono">${v.imapHost}</span> on port <span class="mono">${v.imapPort}</span> as <span class="mono">${v.imapUser}</span> and opens <span class="mono">${v.imapMailbox}</span> read-only, exactly as a poll does: it counts what is in the mailbox and marks nothing as read. It uses the settings <strong>as they are saved</strong>, not unsaved edits below.</p>`
+  return html`<p class="meta">Signs in as <span class="mono">${v.imapUser}</span> and counts the emails under the label <span class="mono">${v.imapMailbox}</span>, without changing or marking anything. It uses the settings <strong>as they are saved</strong>, not unsaved changes above.</p>`
 }
 
+/**
+ * The settings page, written for the person who has just been handed this Mac rather than for its
+ * author. What a first-time reader needs - the Gmail address, the App Password, the label, the
+ * postcode - is in plain sight with one primary button after it. The things they will never need to
+ * touch (the notifier, the mail server's host and port, what is fixed at startup) are under a closed
+ * "Advanced", because a page that opens with `config.json` and `launchctl` reads as "not for you".
+ *
+ * Saving a change to the mail settings tests it straight away (see POST /settings), so the answer to
+ * "did that work?" is on the page the save lands on; "Test again" re-asks without saving.
+ */
 export function settingsPage(
   v: SettingsValues, runtime: RuntimeFacts, ctx: PageCtx, state: SettingsState = {},
 ): Html {
   return layout('Settings', '/settings', html`
 <div class="col"><h1>Settings</h1>
-<p class="lede">What this tracker reads out of <span class="mono">config.json</span>. A save takes effect in this page and the rest of the web server at once; the poller is a separate process that re-reads the file at the start of every run, so mail ingest and the carriers follow at the next hourly poll.</p>
-${state.configError ? notice('warn', html`<p><strong>The config file on disk cannot be loaded.</strong></p>
+<p class="lede">Connect your Gmail so parcels are added from your shipping emails, and set the postcode some carriers need. A save takes effect at once on these pages; the hourly check in the background picks it up on its next run.</p>
+${state.configError ? notice('warn', html`<p><strong>The saved settings cannot be loaded.</strong></p>
 <p>${state.configError}</p>
-<p class="meta">The poller is failing on the same file. Correcting the fields below and saving replaces it with a file that loads.</p>`) : ''}
+<p class="meta">Parcels are not being checked until this is fixed. Correcting the fields below and saving puts things right.</p>`) : ''}
 ${state.error ? notice('warn', html`<p>${state.error}</p><p class="meta">Nothing was saved.</p>`, true) : ''}
-${state.saved ? notice('neutral', html`<p>Saved to <span class="mono">${runtime.configPath}</span>.</p>`, true) : ''}
-
-<h2>Mail connection test</h2>
+${state.saved ? notice('neutral', html`<p>Saved.</p>`, true) : ''}
 ${state.test ? testResult(state.test) : ''}
-<form method="post" action="/settings/test"><button class="pri">Test mail connection</button></form>
-${testTarget(v)}
 
 <form method="post" action="/settings">
-<h2>General</h2>
+<h2>Gmail</h2>
+<p class="meta">The app reads the emails Gmail files under one label, signing in with an App Password rather than your Google password. To stop reading mail, clear these fields and the mail server under Advanced.</p>
 <div class="fields">
-<label>Default postcode<input name="defaultPostalCode" value="${v.defaultPostalCode}" size="8" inputmode="numeric" pattern="[0-9]{3} ?[0-9]{2}" required><span class="meta hint">GLS and DPD need one to answer; a parcel can override it.</span></label>
-<label>Notifier<select name="notifier">${NOTIFIERS.map(n => option(n, NOTIFIER_LABEL[n] ?? n, v.notifier))}</select></label>
-<label class="wide">Pickup map preview<select name="mapPreview">${option('true', 'On', String(v.mapPreview))}${option('false', 'Off', String(v.mapPreview))}</select><span class="meta hint">Off removes the map and stops all geocoding and tile fetching.</span></label>
-</div>
-
-<h2>Mail connection</h2>
-<p class="meta">Clear all four fields to turn mail ingest off and add parcels by hand.</p>
-<div class="fields">
-<label>Host<input name="imapHost" value="${v.imapHost}" autocapitalize="off" spellcheck="false"></label>
-<label>Port<input name="imapPort" value="${v.imapPort}" size="6" inputmode="numeric"></label>
-<label class="wide">Account<input name="imapUser" value="${v.imapUser}" autocapitalize="off" spellcheck="false"></label>
-<label class="wide">Mailbox<input name="imapMailbox" value="${v.imapMailbox}" autocapitalize="off" spellcheck="false"><span class="meta hint">The Gmail label, which must be ticked "Show in IMAP". A nested label is <span class="mono">parent/child</span>.</span></label>
-<label class="wide">App Password <span class="meta">${v.passSet ? '(set)' : '(not set)'}</span><input type="password" name="imapPass" autocomplete="off" spellcheck="false">${
+<label class="wide">Gmail address<input type="email" name="imapUser" value="${v.imapUser}" autocomplete="username" placeholder="you@gmail.com" autocapitalize="off" spellcheck="false"></label>
+<label class="wide">App Password <span class="meta">${v.passSet ? '(set)' : '(not set)'}</span><input type="password" name="imapPass" autocomplete="new-password" spellcheck="false">${
     v.passSet
-      ? html`<span class="meta hint">Stored, and never shown again. Leave this blank to keep it; type a new one to replace it.</span>`
+      ? html`<span class="meta hint">Saved, and never shown again. Leave this blank to keep it; type a new one to replace it.</span>`
       : html`<span class="meta hint">A 16-character App Password from <a href="${APP_PASSWORDS}">myaccount.google.com/apppasswords</a>, not your Google password. Spaces are ignored.</span>`
   }</label>
+<label class="wide">Gmail label<input name="imapMailbox" value="${v.imapMailbox}" autocapitalize="off" spellcheck="false"><span class="meta hint">The label your parcel emails are filed under. In Gmail's label settings it must have "Show in IMAP" ticked. A label inside another is written <span class="mono">parent/child</span>.</span></label>
 </div>
-<p><button class="pri">Save settings</button></p>
-</form>
 
-<h2>Fixed until the server restarts</h2>
+<h2>Parcels</h2>
+<div class="fields">
+<label>Default postcode<input name="defaultPostalCode" value="${v.defaultPostalCode}" size="8" inputmode="numeric" pattern="[0-9]{3} ?[0-9]{2}" required><span class="meta hint">GLS and DPD need one to answer; a parcel can have its own.</span></label>
+<label>Pickup map<select name="mapPreview">${option('true', 'On', String(v.mapPreview))}${option('false', 'Off', String(v.mapPreview))}</select><span class="meta hint">Off removes the map and stops looking addresses up online.</span></label>
+</div>
+
+<details class="adv"><summary>Advanced</summary>
+<p class="meta">Nothing here normally needs changing.</p>
+<div class="fields">
+<label>Mail server<input name="imapHost" value="${v.imapHost}" autocapitalize="off" spellcheck="false"></label>
+<label>Port<input name="imapPort" value="${v.imapPort}" size="6" inputmode="numeric"></label>
+<label class="wide">Notifications<select name="notifier">${NOTIFIERS.map(n => option(n, NOTIFIER_LABEL[n] ?? n, v.notifier))}</select><span class="meta hint">How desktop notifications are shown.</span></label>
+</div>
+<p class="meta">Fixed while the app is running:</p>
 <table class="stats"><tbody>
 <tr><td>Port</td><td class="mono">${runtime.port}</td></tr>
 <tr><td>Database</td><td class="mono">${runtime.dbPath}</td></tr>
-<tr><td>Config file</td><td class="mono">${runtime.configPath}</td></tr>
+<tr><td>Settings file</td><td class="mono">${runtime.configPath}</td></tr>
 </tbody></table>
-<p class="meta">These two are read once, at startup: the server is already listening on that port and the database is already open, so no form can move them. Edit <span class="mono">config.json</span> and restart the web agent (<span class="mono">launchctl kickstart -k gui/$(id -u)/local.parcels.web</span>) to change either.</p>
+<p class="meta">The app opens these once, when it starts, so no form can move them. Changing one means editing the settings file and restarting the app: ask whoever set this Mac up.</p>
+</details>
+
+<p><button class="pri">Save settings</button></p>
+</form>
+
+<h2>Test the Gmail connection</h2>
+${testTarget(v)}
+<form method="post" action="/settings/test"><button>${state.test ? 'Test again' : 'Test connection'}</button></form>
 </div>`, ctx)
 }

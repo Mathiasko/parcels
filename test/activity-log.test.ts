@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fakeImap } from './imap-fake.js'
 import { afterEach, describe, expect, test } from 'vitest'
 import { openDb, type Database } from '../src/db/index.js'
 import {
@@ -341,7 +342,10 @@ describe('saving settings records which fields changed and never a value', () =>
     const configPath = join(dir, 'config.json')
     writeFileSync(configPath, `${JSON.stringify(doc(), null, 2)}\n`, { mode: 0o600 })
     const db = memDb()
-    const app = buildServer({ db, config, configPath, now: () => NOW, notifier: { send: async () => {} } })
+    // A save that changes the mail settings tests the connection: a fake mailbox, so nothing is dialled.
+    const app = buildServer({
+      db, config, configPath, now: () => NOW, notifier: { send: async () => {} }, imapClient: () => fakeImap([]).client,
+    })
     const res = await app.inject({
       method: 'POST', url: '/settings', ...form({
         defaultPostalCode: '90031', notifier: 'osascript', mapPreview: 'true',

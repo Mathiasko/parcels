@@ -496,8 +496,21 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     ctx(), { ...state, configError: file.error },
   ), status)
 
-  app.get('/settings', async (req, reply) =>
-    settings(reply, current(), { saved: one((req.query as Record<string, unknown>).saved) === '1' }))
+  /**
+   * The connection test a save ran, kept for the page the save redirects to. One slot, in memory: the
+   * redirect needs somewhere to find the answer (the page must not dial the mail server itself just
+   * because it was loaded or reloaded), and only the latest save's answer is worth showing. It holds
+   * the probe's result, which never contains the password (see `probeImap`).
+   */
+  let saveTest: { id: number; test: ImapProbeResult } | undefined
+  let saveTests = 0
+
+  app.get('/settings', async (req, reply) => {
+    const query = req.query as Record<string, unknown>
+    const testId = one(query.test)
+    const test = saveTest !== undefined && testId === String(saveTest.id) ? saveTest.test : undefined
+    return settings(reply, current(), { saved: one(query.saved) === '1', ...(test && { test }) })
+  })
 
   app.post('/settings', async (req, reply) => {
     const f = form(req)
@@ -511,7 +524,18 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     config = { ...saved, port: config.port, dbPath: config.dbPath }
     // Only after the file was written, and only the field NAMES: see `changedSettingFields`. A rejected
     // save returned above and records nothing, because nothing was saved.
-    logAction(db, { kind: 'settings_saved', fields: changedSettingFields(file.doc, result.doc) }, acted())
+    const changed = changedSettingFields(file.doc, result.doc)
+    logAction(db, { kind: 'settings_saved', fields: changed }, acted())
+    // A save that touched the mail settings is tested at once, so "did that work?" is answered on the
+    // page it lands on rather than three polls later on /health. A save of the postcode alone does not
+    // dial anything: nothing about the mailbox changed, and a test can take seconds when offline.
+    const mailChanged = changed.some(f => f === 'imap' || f.startsWith('imap.'))
+    if (mailChanged && config.imap) {
+      const imap = config.imap
+      saveTests += 1
+      saveTest = { id: saveTests, test: await probeImap({ config: imap, client: deps.imapClient?.(imap) }) }
+      return reply.redirect(`/settings?saved=1&test=${saveTest.id}`, 303)
+    }
     return reply.redirect('/settings?saved=1', 303)
   })
 
@@ -520,7 +544,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    * page must not do that because it was prefetched or reloaded.
    *
    * It tests the settings as SAVED, not as typed, so the answer is about the configuration the poller
-   * will use. `probeImap` opens the mailbox read-only, never rejects, and keeps the App Password out
+   * will use. A save of the mail settings runs the same probe by itself; this is "Test again". `probeImap` opens the mailbox read-only, never rejects, and keeps the App Password out
    * of its result, so a failure is an answer on the page and not a 500 with a credential in the log.
    */
   app.post('/settings/test', async (_req, reply) => {
