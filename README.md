@@ -102,25 +102,28 @@ absolute path:
 /Users/you/.nvm/versions/node/v24.21.0/bin/node dist/cli.js list
 ```
 
-The launchd plists already name that path, because launchd supplies only
+The launchd plists name an absolute path too — whichever usable Node `scripts/lib/node.sh` finds,
+which may be Homebrew's rather than nvm's — because launchd supplies only
 `PATH=/usr/bin:/bin:/usr/sbin:/sbin`. Every `node ...` in this README means the absolute path
 above. Requires Node 24 or newer.
 
 ## Build and test by hand
 
-`scripts/setup.sh` does the first three of these for you; these are the individual steps, for
+`scripts/setup.sh` does the first two of these for you; these are the individual steps, for
 development.
 
 ```sh
 npm install        # use /Users/you/.nvm/versions/node/v24.21.0/bin/npm, see above
 npm run build        # tsc, then copies src/db/schema.sql into dist/
-npm test             # 780+ tests, no network, no launchd, no real config.json
+npm test             # 1,200+ tests, no network, no launchd, no real config.json
 npm run typecheck
 ```
 
 The shell scripts are tested too: `test/install-agents.test.sh` renders the plists into a temp
-directory, and `test/setup.test.sh` exercises `setup.sh` and `update.sh` against a temp config and a
-throwaway clone. Both run under `npm test` through a small `.test.ts` wrapper so they cannot rot.
+directory, `test/setup.test.sh` exercises `setup.sh` and `update.sh` against a temp config and a
+throwaway clone, `test/update-run.test.sh` checks the dashboard's update wrapper, and
+`test/install-hostname.test.sh` checks the hostname script's port reading without root. Each runs
+under `npm test` through a small `.test.ts` wrapper so they cannot rot.
 
 ## Configure
 
@@ -180,8 +183,8 @@ marked as read. Messages already seen are skipped by Message-ID.
 It is also **incremental**: see [Only the new mail is read](#only-the-new-mail-is-read).
 
 **Set it up on `/settings`, and prove it with the Test mail connection button.** Every way this can
-go wrong is otherwise silent: an App Password that was revoked surfaces three polls later on
-`/health`, a label that is not ticked "Show in IMAP" is indistinguishable from "no new mail", and a
+go wrong is otherwise silent: an App Password that was revoked shows up only on `/health`, and as a
+notification three polls later, a label that is not ticked "Show in IMAP" is indistinguishable from "no new mail", and a
 filter that labels nothing looks exactly like an empty label. The button turns all of that into one
 sentence. It connects with the settings as **saved** (not as typed), opens the mailbox with
 `EXAMINE`, counts what is in it, and answers with one of:
@@ -213,17 +216,21 @@ Setup, in this order:
    separate From / Subject / Has-the-words boxes and it **ANDs them together**, so a filter built as
    `From: (the carrier domains)` plus `Subject: (odoslaná)` matches **nothing at all** — no single
    message satisfies both — and it fails exactly like a filter that is simply not matching yet. The
-   shipped file is one OR-expression in `hasTheWord`, with no `from:` or `subject:` operator inside
-   it: bare terms match anywhere in the message, the sender address included. If you edit it in the
-   Gmail UI afterwards, keep every term in **Has the words**. `test/gmail-filter.test.ts` pins this.
+   shipped file puts everything in `hasTheWord`, where `from:(...)` and `subject:(...)` groups can be
+   combined freely: mail **from a carrier**, OR mail **from a known shop AND with shipping wording in
+   the subject**, OR shipping wording in the subject from anyone. There are no bare terms, because a
+   bare term matches the whole message body ("na ceste" — "on the way" — once labelled a friend's
+   email). If you edit it in the Gmail UI afterwards, keep everything in **Has the words**.
+   `test/gmail-filter.test.ts` pins this.
 
    **Add your own shops' domains**, because the filter covers e-shop dispatch wording but cannot
    know where you shop. A filter matching only carrier domains (`packeta.sk`, `dpd.sk`,
    `gls-group.eu`, ...) never labels the shop's own "your order has been dispatched" mail, and that
    mail is often the *first* notice of a parcel, days before the carrier writes, and sometimes the
    only one. Gmail ignores diacritics (`odoslana` matches `odoslaná`) but does **not** stem, so the
-   word forms are listed one by one (`odoslana`, `odoslane`, `expedovana`, `expedovane`, ...); add
-   forms, and `mtbiker.sk`-style domains, in the same `OR` chain.
+   word forms are listed one by one (`odoslana`, `odoslane`, `expedovana`, `expedovane`, ...). Add
+   your shops to the shops' `from:(alza.sk OR mtbiker.sk OR ...)` group, and word forms to the
+   `subject:(...)` lists.
 
    The app can use that shop mail: when a sender is not a carrier it looks for a **carrier named in
    the mail together with a labelled tracking number of that carrier's shape** (for example
@@ -259,12 +266,14 @@ Notes on behaviour:
   simply junk (a verification notice with no tracking number in it) can be **dismissed**, one at a
   time or in bulk: see [Clearing the attention queue](#clearing-the-attention-queue).
 - Deleting a parcel (`/parcel/:id`) removes it with its events, stored carrier responses and pickup
-  reminder, but **not** the emails it came from: those are unlinked and marked parsed. The ingest
-  dedupes by Message-ID, so deleting the message rows would let the next poll recreate the parcel.
+  reminder, but **not** the email rows it came from: those are unlinked and marked parsed (their
+  stored `.eml` copies are deleted). The ingest dedupes by Message-ID, so deleting the message rows
+  would let the next poll recreate the parcel.
 - If ingest fails three runs in a row you get one notification per outage, and the Health page
   shows the last error. A revoked App Password does not fail silently.
 - Raw messages are kept as `data/mail/<id>.eml` (files `0600` in a `0700` directory), except for
-  dismissed ones, whose copy is deleted (see [Clearing the attention queue](#clearing-the-attention-queue)).
+  dismissed ones and those of a deleted parcel, whose copy is deleted (see
+  [Clearing the attention queue](#clearing-the-attention-queue)).
   After a parser change, `node dist/cli.js reprocess` re-runs extraction over stored messages that
   produced no parcel, without needing the mail on the server.
 - An App Password is not scope-limited by Google: it can read and send as the whole account. The
@@ -394,7 +403,8 @@ newsletters the filter caught — hundreds of them. Each item has its own **Dism
 list there is a collapsed **Clear this queue (N emails)** disclosure holding two bulk actions:
 
 - **Dismiss all N emails.**
-- **Dismiss *n* from `sender`**, for each sender with more than one message waiting, busiest first.
+- **Dismiss *n* from `sender`**, for each sender with more than one message waiting, busiest first
+  (the busiest 12; the rest are covered by **Dismiss all**).
   Most of the queue is usually a handful of senders, so this is the one people actually want. The
   match is the **exact sender address**, never the domain: `gmail.com` can hold two unrelated people.
 
@@ -442,7 +452,8 @@ for any shop nobody writes an adapter for.
 A parcel that is **ready for pickup** can show a small static map of the place, with a marker on it,
 next to the "Open in Apple Maps" link. It is plain `<img>` tags and CSS: no JavaScript, no map
 library, and the page's Content-Security-Policy still forbids scripts and allows images only from
-this server (`default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'`).
+this server (`default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self';
+frame-ancestors 'none'`).
 
 **Viewing a page never touches the internet.** Everything the map needs is fetched during a poll and
 read from disk afterwards. That is the whole design, and it is what keeps the dashboard from
@@ -460,10 +471,11 @@ says what this application is, at most one Nominatim request per second, and eve
 nothing is ever asked twice. Volume is capped per run (at most 5 addresses and 3 points' worth of
 tiles per poll), so a backlog is spread over several hours rather than sent in a burst.
 
-Only the hourly poller does this, never the dashboard and never the "Refresh now" button: the
-one-request-per-second limit can only be kept if a single process is doing the asking. A pickup point
-that appears between polls therefore shows its address and maps link straight away, and gains its map
-at the next poll.
+Only a full poll does this — the hourly poller, or `node dist/cli.js poll`, which builds exactly the
+same run — never the dashboard and never the "Refresh now" button. Two polls never overlap (one
+refuses to start while another is running), which is what keeps the one-request-per-second limit. A
+pickup point that appears between polls therefore shows its address and maps link straight away, and
+gains its map at the next poll.
 
 Packeta already sends coordinates for some points, and those are used as they are, with no geocoding.
 A pickup point with only a *name* ("Z-BOX Bratislava, Hlavna 6") and no town is never geocoded: a
@@ -557,8 +569,8 @@ means it refuses rather than guesses:
 of them is touched by a pull. **There is no migration step to run**: the schema migrates itself when
 the database is next opened, which the poller and the web server do on start.
 
-`--check` is the only part that reaches the network, and all it does is `git fetch` — remote-tracking
-refs move, the working tree and the branch do not.
+`--check` reaches the network only to `git fetch` — remote-tracking refs move, the working tree and
+the branch do not. The update itself also pulls and runs `npm ci`, which download.
 
 The version and commit that are actually running are shown at the bottom of `/health`, so a bug
 report can say which code it is about. It reads `package.json` and `git rev-parse` once at startup,
@@ -569,7 +581,7 @@ and says `unknown` rather than failing if the checkout is not a repo.
 Needing a terminal to update means never updating. So `/health` has an **Update** section, and it is
 the whole feature:
 
-- it says what this copy is running (version and commit), whether `origin/main` is ahead of it, and
+- it says what this copy is running (version and commit), whether its upstream branch (normally `origin/main`) is ahead of it, and
   the one-line subject of every commit that would be installed;
 - **Check for updates** runs one `git fetch` (`scripts/update.sh --check --porcelain`) and nothing else;
 - **Update now** runs the real update. The page then follows it with the same spinner and
@@ -611,8 +623,8 @@ support bundle, along with the tail of `data/update.log`.
 
 ### The daily check
 
-Once a day, during an hourly poll, the app runs one `git fetch` and tells you if `origin/main` is
-ahead - because otherwise you have to remember to go and look, which is the actual problem.
+Once a day, during an hourly poll, the app runs one `git fetch` and tells you if the upstream branch
+(normally `origin/main`) is ahead - because otherwise you have to remember to go and look, which is the actual problem.
 
 - One `git fetch` per day, and no more. The gap is measured from the last **attempt**, so a checkout
   that refuses the check (dirty, detached, not a repository) is not fetched every hour for an answer
@@ -637,7 +649,9 @@ append-only list of migrations.
   every open, so an existing database gains it for free.
 - A new **column**, a changed constraint or a data fix-up needs **both**: the column in `schema.sql`
   (so a fresh database is born correct) *and* a migration (so an existing one catches up). Write one
-  without the other and the next open fails, naming the column.
+  without the other and it goes wrong: a column in `schema.sql` with no migration makes the next open
+  of an existing database fail, naming the column; a migration with no `schema.sql` change is not
+  caught at open, and a fresh database is simply born without the column.
 - A fresh database is stamped at the latest version and runs nothing, because `schema.sql` already
   describes the newest shape and replaying history over it would fail on the first duplicate column.
 - A database created before migrations existed has no stamp, and is treated as the baseline.
@@ -672,7 +686,7 @@ Which `node` goes into the plists is discovered, not hard-coded — `scripts/lib
 
 | Agent | What it does |
 |---|---|
-| `local.parcels.poller` | Runs `dist/poll.js` hourly on the hour from 07:00 to 21:00 (15 slots). |
+| `local.parcels.poller` | Runs `dist/poll.js` hourly on the hour from 07:00 to 21:00, plus 15:30 for the afternoon reminder (16 slots). |
 | `local.parcels.web` | Runs `dist/server.js` and is `KeepAlive`, so it restarts if it dies. |
 
 Things worth knowing:
@@ -764,7 +778,8 @@ Two things keep that reload loop finite:
   click is answered with the run already in flight, so it lands on the spinner rather than on an error.
 - **A killed process does not leave it "running" for ever.** The row records when the run started, and
   any run still unfinished after `RUN_STALE_MS` (10 minutes, `src/db/poll-runs.ts`) is closed as failed
-  by the next page view - `/`, `/parcel/:id` and `/health` all reap before they read. That is also the
+  by the next look at it - `/health` always reaps before it reads, and `/` and `/parcel/:id` do
+  while they are waiting on a run (`?run=N`). That is also the
   cap on the reloading: a page only asks again while a run is genuinely in progress. A long run that
   *does* finish after being reaped corrects its own row, so the guess never outlives the answer.
 
