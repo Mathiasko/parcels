@@ -38,6 +38,8 @@ export function calendarListWhy(err: unknown): string {
   switch (f?.kind) {
     case 'denied':
       return 'macOS has not allowed this app to control Calendar. Allow it in System Settings → Privacy & Security → Automation → node → Calendar, then reload this page.'
+    case 'not_running':
+      return 'Calendar is not open, and this page does not open it for you. Open Calendar, then reload this page.'
     case 'timeout':
       return 'Calendar did not answer in time. The first time, macOS asks whether node may control Calendar: answer that, then reload this page.'
     default: {

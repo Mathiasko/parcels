@@ -100,6 +100,7 @@ function failure(o: Extract<CalendarOutcome, { ok: false }>, name: string): Html
     case 'read_only':
       return html`<p><strong>The calendar “${which}” is read-only.</strong></p>
 <p>${name} was not added. Choose a calendar you can write to in ${SETTINGS}.</p>`
+    case 'not_running':   // listing only; adding launches Calendar itself. Said plainly all the same.
     case 'other':
       return html`<p><strong>${name} could not be added to Calendar.</strong></p>${
         o.detail ? html`<p class="meta">Calendar said: ${o.detail}</p>` : ''}`

@@ -45,6 +45,7 @@ export type CalendarFailureKind =
   | 'not_found'     // no calendar has the chosen name
   | 'ambiguous'     // more than one writable calendar has the chosen name
   | 'read_only'     // the chosen calendar exists but cannot be written to
+  | 'not_running'   // listing only: Calendar.app is closed, and listing would have launched it
   | 'other'
 
 export class CalendarFailure extends Error {
@@ -146,6 +147,9 @@ export const ADD_SCRIPT = [
 /** The names of the writable calendars, one per line. Takes no argv. */
 export const LIST_SCRIPT = [
   'on run argv',
+  // Asking a closed Calendar for its calendars LAUNCHES it, and this runs on every /settings load: the
+  // page would open Calendar.app each time it was visited. `is running` asks without launching.
+  '  if application "Calendar" is not running then return tab & "not_running"',
   '  tell application "Calendar"',
   '    set names to name of every calendar whose writable is true',
   '  end tell',
@@ -256,6 +260,7 @@ export function osascriptCalendar(runner: OsascriptRunner = defaultRunner): Cale
     async listWritable() {
       const r = await run(runner, listArgs(), LIST_TIMEOUT_MS)
       if (r.timedOut || r.code !== 0) throw classifyFailure(r)
+      if (r.stdout.startsWith('\tnot_running')) throw new CalendarFailure('not_running')
       return r.stdout.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
     },
     async add(event, calendar, replace) {

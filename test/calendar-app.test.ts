@@ -152,6 +152,11 @@ describe('the client, on a fake runner', () => {
   test('the calendar names, one per line', async () => {
     await expect(osascriptCalendar(runner({ stdout: 'Home\nWork\nHome\n' })).listWritable()).resolves.toEqual(['Home', 'Work', 'Home'])
     await expect(osascriptCalendar(runner({ stdout: '' })).listWritable()).resolves.toEqual([])
+    // A closed Calendar is reported, not launched: the script checks `is running` before any tell.
+    await expect(osascriptCalendar(runner({ stdout: '\tnot_running\n' })).listWritable()).rejects.toMatchObject({ kind: 'not_running' })
+    const script = LIST_SCRIPT.join('\n')
+    expect(script.indexOf('is not running')).toBeGreaterThan(-1)
+    expect(script.indexOf('is not running')).toBeLessThan(script.indexOf('tell application "Calendar"'))
   })
 
   test('a failed run rejects with what kind of failure it was', async () => {
