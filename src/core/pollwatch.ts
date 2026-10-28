@@ -59,7 +59,8 @@ export function pollerStatus(db: Database, now: Date): PollerStatus {
  * i.e. BEFORE `recordPoll` stamps this run, so `last_poll` is still the previous run's time. The notice
  * remembers which previous poll it announced: the next run records a fresh time, so a later outage
  * starts from a different value and is announced afresh, while a re-run before that stays quiet.
- * (Its own table: a column on `last_poll` would break an existing database, which has no migrations.)
+ * (Its own table, which an existing database gains from the schema alone; a column on `last_poll`
+ * would also have needed a migration in db/migrate.ts.)
  */
 export function stalePollAlarm(db: Database, now: Date): { title: string; message: string } | undefined {
   const last = lastPollMs(db)

@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS last_poll (
 
 -- Which previous poll time has already been announced as "the poller was away" (always one row, id = 1),
 -- so the banner fires once per outage. A table of its own: an existing database gains it from the
--- idempotent schema exec, whereas a new column on last_poll would fail the schema check (no migrations).
+-- idempotent schema exec, whereas a new column on last_poll would also need a migration (migrate.ts).
 CREATE TABLE IF NOT EXISTS stale_poll_notice (
   id          INTEGER PRIMARY KEY CHECK (id = 1),
   for_poll_ms INTEGER NOT NULL,
@@ -263,7 +263,8 @@ CREATE TABLE IF NOT EXISTS activity_log (
 CREATE TABLE IF NOT EXISTS update_check (
   id                INTEGER PRIMARY KEY CHECK (id = 1),
   checked_at        TEXT NOT NULL,
-  state             TEXT NOT NULL,                 -- 'current' | 'behind' | 'ahead' | 'blocked'
+  state             TEXT NOT NULL,                 -- 'current' | 'behind' | 'ahead' | 'blocked' | 'unknown'
+                                                   -- ('unknown': an update was logged before any check ran)
   behind            INTEGER NOT NULL DEFAULT 0,
   version           TEXT,
   branch            TEXT,
