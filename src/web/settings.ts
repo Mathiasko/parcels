@@ -93,6 +93,13 @@ export function submittedSettings(f: SettingsForm, doc: ConfigDocument): Setting
 
 const no = (message: string): ApplyResult => ({ ok: false, message })
 
+/** Whether the submitted host, port and account are the ones the stored password was saved with. */
+const sameMailServer = (stored: ConfigDocument | undefined, host: string, port: number, user: string): boolean =>
+  stored !== undefined
+  && text(stored.host).trim().toLowerCase() === host.toLowerCase()
+  && Number(text(stored.port)) === port
+  && text(stored.user).trim().toLowerCase() === user.toLowerCase()
+
 /**
  * The submitted form applied to the config file's current document, or a readable reason why not.
  *
@@ -141,6 +148,13 @@ export function applySettings(doc: ConfigDocument, f: SettingsForm): ApplyResult
     if (host === '') return no('The mail server needs a host name (imap.gmail.com for Gmail).')
     if (user === '') return no('The mail server needs the account to log in as.')
     if (mailbox === '') return no('Name the mailbox to read: the Gmail label, for example "parcels".')
+    // The stored password belongs to the server and account it was saved for. Keeping it across a
+    // change of either would let anything that can reach this loopback server (another local account,
+    // a sandboxed app) point it at a server of its own and press "test": the real App Password would
+    // be sent there. So a blank box keeps the password only when it would go back where it came from.
+    if (typedPass === '' && kept !== undefined && !sameMailServer(imapBlock(doc), host, Number(portText), user)) {
+      return no('Re-enter the App Password when changing the server or account. The saved one is only ever sent to the server it was saved for.')
+    }
     const pass = typedPass !== '' ? typedPass : kept
     if (pass === undefined) return no('An App Password is needed to read the mailbox. Leave it blank only if one is already stored.')
     imap = { ...imapBlock(doc), host, port: Number(portText), user, pass, mailbox }

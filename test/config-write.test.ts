@@ -100,8 +100,9 @@ describe('the config writer', () => {
 describe('applySettings', () => {
   test('an empty password box keeps the stored password; the rest of the form still saves', () => {
     const path = configFile()
-    save(path, { imapUser: 'someone.else@gmail.com', imapPass: '' })
-    expect(imapOf(path).user).toBe('someone.else@gmail.com')
+    // Same server and account: only the label changes, so the stored password may stay.
+    save(path, { imapMailbox: 'zasielky', imapPass: '' })
+    expect(imapOf(path).mailbox).toBe('zasielky')
     expect(imapOf(path).pass).toBe(PASS)
   })
 

@@ -131,6 +131,40 @@ describe('POST /settings', () => {
     expect(imapOf(h.path)).toMatchObject({ mailbox: 'parcely', pass: PASS })
   })
 
+  test('changing the server, port or account with a blank password is refused: the stored password stays with its own server', async () => {
+    // Anything that can reach 127.0.0.1 could otherwise point the stored App Password at its own TLS
+    // server and press "test". The stored password only ever goes back to where it was saved for.
+    for (const over of [
+      { imapHost: 'imap.attacker.example' },
+      { imapPort: '1993' },
+      { imapUser: 'someone-else@gmail.com' },
+    ]) {
+      const h = harness()
+      const before = readFileSync(h.path, 'utf8')
+      const res = await h.post('/settings', fields({ ...over, imapPass: '' }))
+      expect(res.statusCode, JSON.stringify(over)).toBe(400)
+      expect(res.body).toMatch(/re-enter the App Password when changing the server or account/i)
+      expect(readFileSync(h.path, 'utf8')).toBe(before)
+      // ...and nothing was dialled with it either.
+      await h.post('/settings/test')
+      expect(h.seen.every(c => c.host === 'imap.gmail.com' && c.port === 993 && c.user === 'you@gmail.com')).toBe(true)
+    }
+  })
+
+  test('changing the server or account WITH a new password is allowed', async () => {
+    const h = harness()
+    const res = await h.post('/settings', fields({ imapHost: 'imap.fastmail.com', imapPass: 'zyxwvutsrqponmlk' }))
+    expect(res.statusCode).toBe(303)
+    expect(imapOf(h.path)).toMatchObject({ host: 'imap.fastmail.com', pass: 'zyxwvutsrqponmlk' })
+  })
+
+  test('a host that differs only by case or surrounding space is the same server', async () => {
+    const h = harness()
+    const res = await h.post('/settings', fields({ imapHost: ' IMAP.gmail.com ', imapPass: '' }))
+    expect(res.statusCode).toBe(303)
+    expect(imapOf(h.path).pass).toBe(PASS)
+  })
+
   test('a password in the box replaces the stored one', async () => {
     const h = harness()
     await h.post('/settings', fields({ imapPass: 'zyxw vuts rqpo nmlk' }))
@@ -266,9 +300,9 @@ describe('POST /settings/test', () => {
 
   test('it connects with the settings that are saved, including ones saved a moment ago', async () => {
     const h = harness({}, fakeImap([]))
-    await h.post('/settings', fields({ imapMailbox: 'zasielky', imapUser: 'other@gmail.com' }))
+    await h.post('/settings', fields({ imapMailbox: 'zasielky', imapUser: 'other@gmail.com', imapPass: 'zyxwvutsrqponmlk' }))
     await h.post('/settings/test')
-    expect(h.seen).toEqual([{ ...IMAP, user: 'other@gmail.com', mailbox: 'zasielky' }])
+    expect(h.seen).toEqual([{ ...IMAP, user: 'other@gmail.com', mailbox: 'zasielky', pass: 'zyxwvutsrqponmlk' }])
   })
 
   test('the password is in no outcome of the test, not even the one the server echoes back', async () => {
