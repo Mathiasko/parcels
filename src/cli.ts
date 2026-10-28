@@ -8,13 +8,14 @@ import { claimRun } from './db/poll-runs.js'
 import type { Carrier, CarrierAdapter, CarrierId, HttpClient } from './core/types.js'
 import { isPollable } from './core/types.js'
 import { buildPollDeps, initRuntime } from './core/runtime.js'
-import { allAdapters, getAdapter, normalizeNumber, resolveCarrier } from './carriers/registry.js'
+import { allAdapters, getAdapter, normalizeNumber } from './carriers/registry.js'
 import { openDb, type Database } from './db/index.js'
 import { createNotifier, type SpawnFn } from './notify/send.js'
 import type { Notifier } from './notify/types.js'
 import { listEvents } from './db/events.js'
 import { reprocessMessages } from './ingest/ingest.js'
-import { findParcel, getParcel, insertParcel, listActive, listDelivered, type Parcel } from './db/parcels.js'
+import { getParcel, listActive, listDelivered, type Parcel } from './db/parcels.js'
+import { addParcel } from './web/actions.js'
 
 export interface CliContext {
   db: Database
@@ -30,7 +31,8 @@ export interface CliContext {
   spawn?: SpawnFn
 }
 
-const CARRIER_IDS: readonly CarrierId[] = ['posta', 'packeta', 'gls', 'sps', 'dpd', 'dhl']
+/** Every carrier the registry knows, so a carrier added there is accepted here without a second list. */
+const carrierIds = (): CarrierId[] => allAdapters().map(a => a.id)
 
 const USAGE = `usage: cli <command>
   add <number> [--carrier <id>] [--label <text>] [--zip <postcode>]
@@ -45,11 +47,11 @@ const USAGE = `usage: cli <command>
 class CliError extends Error {}
 
 function isCarrierId(s: string): s is CarrierId {
-  return (CARRIER_IDS as readonly string[]).includes(s)
+  return (carrierIds() as string[]).includes(s)
 }
 
 function requireCarrier(s: string): CarrierId {
-  if (!isCarrierId(s)) throw new CliError(`unknown carrier "${s}"; expected one of ${CARRIER_IDS.join(', ')}`)
+  if (!isCarrierId(s)) throw new CliError(`unknown carrier "${s}"; expected one of ${carrierIds().join(', ')}`)
   return s
 }
 
@@ -60,29 +62,34 @@ function add(argv: string[], ctx: CliContext): void {
     allowPositionals: true,
   })
   if (positionals.length !== 1) throw new CliError('usage: add <number> [--carrier <id>] [--label <text>] [--zip <postcode>]')
-  const number = normalizeNumber(positionals[0]!)
-  if (number === '') throw new CliError(`"${positionals[0]}" is not a tracking number`)
-
-  const resolved = resolveCarrier(number, values.carrier === undefined ? undefined : requireCarrier(values.carrier))
-  if (!resolved.ok) {
-    if (resolved.candidates.length === 0) {
-      throw new CliError(`could not tell which carrier ${number} belongs to; pass --carrier <${CARRIER_IDS.join('|')}>`)
-    }
-    throw new CliError(`${number} could be ${resolved.candidates.join(' or ')}; pass --carrier to choose`)
-  }
-  const carrier = resolved.carrier
-
-  const existing = findParcel(ctx.db, carrier, number)
-  if (existing) throw new CliError(`already tracking ${number} (${carrier}) as #${existing.id}`)
-
-  const id = insertParcel(ctx.db, {
-    carrier,
-    trackingNumber: number,
+  const typed = positionals[0]!
+  // The same `addParcel` the web form calls, so normalising, carrier detection and the field limits are
+  // one decision; only the wording of a refusal is the terminal's own.
+  const r = addParcel(ctx.db, ctx.config, {
+    number: typed,
+    carrier: values.carrier === undefined ? undefined : requireCarrier(values.carrier),
     label: values.label,
-    postalCode: values.zip ?? ctx.config.defaultPostalCode,
+    postcode: values.zip,
     source: 'manual',
   })
-  ctx.out(`added #${id} ${carrier} ${number}`)
+  if (!r.ok) {
+    if (r.status === 409) {
+      const existing = getParcel(ctx.db, r.existingId)!
+      throw new CliError(`already tracking ${existing.trackingNumber} (${existing.carrier}) as #${existing.id}`)
+    }
+    const p = r.problem
+    if (p.kind === 'no_number') throw new CliError(`"${typed}" is not a tracking number`)
+    if (p.kind === 'too_long') throw new CliError(`"${typed}" is too long to be a tracking number`)
+    if (p.kind === 'carrier_unclear') {
+      if (p.candidates.length === 0) {
+        throw new CliError(`could not tell which carrier ${p.number} belongs to; pass --carrier <${carrierIds().join('|')}>`)
+      }
+      throw new CliError(`${p.number} could be ${p.candidates.join(' or ')}; pass --carrier to choose`)
+    }
+    throw new CliError(r.message)
+  }
+  const added = getParcel(ctx.db, r.id)!
+  ctx.out(`added #${added.id} ${added.carrier} ${added.trackingNumber}`)
 }
 
 function list(ctx: CliContext): void {

@@ -1,6 +1,7 @@
 import { test, expect } from 'vitest'
 import { runCli } from '../src/cli.js'
-import { register } from '../src/carriers/registry.js'
+import { allAdapters, register } from '../src/carriers/registry.js'
+import { MAX_LABEL } from '../src/web/actions.js'
 import { appendEvents } from '../src/db/events.js'
 import { findParcel, insertParcel, updateParcelState } from '../src/db/parcels.js'
 import type { CarrierAdapter, CarrierId } from '../src/core/types.js'
@@ -70,6 +71,29 @@ test('add defaults the postal code from config', async () => {
 
   await cli(db, 'add', 'RA987654326SK', '--zip', '04001')
   expect(findParcel(db, 'posta', 'RA987654326SK')?.postalCode).toBe('04001')
+})
+
+test('add stores what the web form would: postcode without spaces, label within its cap', async () => {
+  const db = memDb()
+  const r = await cli(db, 'add', 'RA123456785SK', '--zip', '811 01', '--label', 'x'.repeat(500))
+  expect(r.code).toBe(0)
+  const p = findParcel(db, 'posta', 'RA123456785SK')!
+  expect(p.postalCode).toBe('81101')
+  expect(p.label).toHaveLength(MAX_LABEL)
+})
+
+test('add refuses a number too long to be one, as the web form does', async () => {
+  const db = memDb()
+  const r = await cli(db, 'add', 'RA'.repeat(30), '--carrier', 'posta')
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/too long/)
+  expect(db.prepare('SELECT COUNT(*) n FROM parcels').get()).toEqual({ n: 0 })
+})
+
+test('add knows every registered carrier, so a new one cannot be left out of the list', async () => {
+  const r = await cli(memDb(), 'add', '1', '--carrier', 'nope')
+  for (const c of allAdapters()) expect(r.err).toContain(c.id)
+  expect(r.code).toBe(1)
 })
 
 test('list prints one line per active parcel with label, carrier and status', async () => {
