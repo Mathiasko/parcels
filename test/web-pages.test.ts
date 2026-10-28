@@ -565,7 +565,8 @@ describe('web pages: fix round 1', () => {
     try {
       const res = await app.inject({ method: 'GET', url: '/' })
       expect(res.statusCode).toBe(500)
-      expect(res.body).toBe('internal error')
+      expect(res.body).toContain('Something went wrong')
+      expect(res.body).not.toMatch(/database connection|sqlite/i)
       expect(spy).toHaveBeenCalledTimes(1)
       expect(String(spy.mock.calls[0]![0])).toContain('GET /')
       expect(spy.mock.calls[0]![1]).toBeInstanceOf(Error)

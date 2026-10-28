@@ -33,7 +33,8 @@ import { CARRIER_NAME } from './views/format.js'
 import {
   deliveryStats, getUnparsedMessage, listUnparsedMessages, rawResponsesFor,
 } from './queries.js'
-import type { Html } from './views/html.js'
+import { html, type Html } from './views/html.js'
+import { errorPage, notFoundPage, serverErrorPage } from './views/error.js'
 import { addPage } from './views/add.js'
 import { attentionPage, type AttentionError } from './views/attention.js'
 import { healthPage, updateBusy, type UpdateView } from './views/health.js'
@@ -231,12 +232,32 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     }
   })
 
+  /**
+   * The page context for an error page, which must render even when what failed is the database that
+   * `ctx()` reads: then the page goes without the nav's health dot rather than not at all.
+   */
+  const errorCtx = (): PageCtx => {
+    try { return ctx() } catch { return { now: new Date(), health: [] } }
+  }
+
+  /** An error as a page of the app (see views/error.ts); plain text only if even that cannot render. */
+  const sendError = (reply: FastifyReply, status: number, page: () => Html, fallback: string) => {
+    let body: Html
+    try { body = page() } catch { return reply.code(status).type('text/plain').send(fallback) }
+    return send(reply, body, status)
+  }
+
   app.setErrorHandler((err, req, reply) => {
     const status = (err as { statusCode?: number }).statusCode ?? 500
     // The logger is off, so without this a 500 under launchd leaves nothing in web.err.log to diagnose.
     if (status >= 500) console.error(`${new Date().toISOString()} ${req.method} ${req.url}:`, err)
-    reply.code(status).type('text/plain').send(status >= 500 ? 'internal error' : (err as Error).message)
+    if (status >= 500) return sendError(reply, status, () => serverErrorPage(errorCtx()), 'internal error')
+    // A 4xx from Fastify itself (a body it could not parse, say): the request was malformed, not lost.
+    return sendError(reply, status, () => errorPage('That did not work', 'The request could not be understood. Go back and try again.', errorCtx()), (err as Error).message)
   })
+
+  // Unknown routes: Fastify would answer with JSON, which in a browser is a page of braces.
+  app.setNotFoundHandler((_req, reply) => sendError(reply, 404, () => notFoundPage(errorCtx()), 'not found'))
 
   /**
    * What a page should say about the run named in `?run=N`, and whether it should re-request itself.
@@ -294,7 +315,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
 
   app.get<{ Params: { id: string } }>('/parcel/:id', async (req, reply) => {
     const parcel = /^\d+$/.test(req.params.id) ? getParcel(db, Number(req.params.id)) : undefined
-    if (!parcel) return reply.code(404).type('text/plain').send('no such parcel')
+    if (!parcel) return notFound(reply, 'parcel')
     const c = ctx()
     // No `active` count here: "nothing is in flight yet" is a statement about the dashboard, and this
     // page's refresh only ever asked about one parcel.
@@ -316,10 +337,10 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    * outside the cache. A tile that is not cached is a 404; this route never fetches anything.
    */
   app.get<{ Params: { z: string; x: string; y: string } }>('/tile/:z/:x/:y.png', async (req, reply) => {
-    if (!config.mapPreview) return notFound(reply)
+    if (!config.mapPreview) return noTile(reply)
     const tile = parseTile(req.params.z, req.params.x, req.params.y)
     const bytes = tile && readTile(tileDir, tile)
-    if (!bytes) return notFound(reply)
+    if (!bytes) return noTile(reply)
     // A given z/x/y is the same picture for months, and it is already on local disk; a day of browser
     // caching saves the re-request without ever making the page depend on a remote service.
     return reply.code(200).type('image/png').header('cache-control', 'private, max-age=86400').send(bytes)
@@ -331,7 +352,11 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    */
   const acted = (): Cause => ({ actor: 'web', at: now() })
 
-  const notFound = (reply: FastifyReply) => reply.code(404).type('text/plain').send('not found')
+  /** A 404 as a page with a way home: a stale form or an old link must not strand anybody. */
+  const notFound = (reply: FastifyReply, what: 'page' | 'parcel' | 'email' = 'page') =>
+    sendError(reply, 404, () => notFoundPage(errorCtx(), what), 'not found')
+  /** A tile that is not cached. Plain: only an `<img>` ever asks, and nobody reads the answer. */
+  const noTile = (reply: FastifyReply) => reply.code(404).type('text/plain').send('not found')
   const form = (req: { body: unknown }): Record<string, string> => (req.body ?? {}) as Record<string, string>
   const text = (v: string | undefined) => (v ?? '').trim()
   const parcelFor = (id: string) => (/^\d+$/.test(id) ? getParcel(db, Number(id)) : undefined)
@@ -509,7 +534,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   app.post<{ Params: { messageId: string } }>('/attention/:messageId/assign', async (req, reply) => {
     const messageId = Number(req.params.messageId)
     const message = Number.isInteger(messageId) ? getUnparsedMessage(db, messageId) : undefined
-    if (!message) return notFound(reply)
+    if (!message) return notFound(reply, 'email')
     const f = form(req)
     const values = { number: text(f.number), carrier: text(f.carrier), label: text(f.label), postcode: text(f.postcode) }
     const link = (parcelId: number) => db.prepare('UPDATE messages SET parsed_ok = 1, parcel_id = ? WHERE id = ?').run(parcelId, messageId)
@@ -558,21 +583,21 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   app.post<{ Params: { messageId: string } }>('/attention/:messageId/dismiss', async (req, reply) => {
     const messageId = Number(req.params.messageId)
     const message = Number.isInteger(messageId) ? getUnparsedMessage(db, messageId) : undefined
-    if (!message) return notFound(reply)
+    if (!message) return notFound(reply, 'email')
     dismissMessage(db, messageId, acted())
     return reply.redirect('/attention', 303)
   })
 
   app.post<{ Params: { id: string } }>('/parcel/:id/label', async (req, reply) => {
     const parcel = parcelFor(req.params.id)
-    if (!parcel) return notFound(reply)
+    if (!parcel) return notFound(reply, 'parcel')
     setLabel(db, parcel.id, text(form(req).label).slice(0, MAX_LABEL))
     return reply.redirect(`/parcel/${parcel.id}`, 303)
   })
 
   app.post<{ Params: { id: string } }>('/parcel/:id/postcode', async (req, reply) => {
     const parcel = parcelFor(req.params.id)
-    if (!parcel) return notFound(reply)
+    if (!parcel) return notFound(reply, 'parcel')
     setPostalCode(db, parcel.id, cleanPostcode(form(req).postcode))
     return reply.redirect(`/parcel/${parcel.id}`, 303)
   })
@@ -582,7 +607,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   // shows). The page it redirects to cannot be this parcel's: it no longer exists.
   app.post<{ Params: { id: string } }>('/parcel/:id/delete', async (req, reply) => {
     const parcel = parcelFor(req.params.id)
-    if (!parcel) return notFound(reply)
+    if (!parcel) return notFound(reply, 'parcel')
     deleteParcel(db, parcel.id, acted())
     return reply.redirect('/', 303)
   })
@@ -610,7 +635,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     let parcelIds: number[]
     if (target !== '') {
       const parcel = parcelFor(target)
-      if (!parcel) return notFound(reply)
+      if (!parcel) return notFound(reply, 'parcel')
       parcelIds = [parcel.id]
       back = `/parcel/${parcel.id}`
     } else {
@@ -719,8 +744,9 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   app.post('/update', async (_req, reply) => {
     const check = getUpdateCheck(db)
     if (!check || check.state !== 'behind') {
-      return reply.code(409).type('text/plain')
-        .send('there is nothing to install: check for an update first, and read what it found')
+      // Most often a second press on a page from before the update finished: say so, and point back.
+      return sendError(reply, 409, () => errorPage('Nothing to install', html`There is no update waiting to be installed. Open <a href="/health">Health</a> to see which version this is and to check for a newer one.`, errorCtx()),
+        'there is nothing to install: check for an update first, and read what it found')
     }
     const running = readUpdateRun(updateStatusPath(updateDataDir()))
     if (running && updateOutcome(running, now()) === 'running') return reply.redirect('/health', 303)

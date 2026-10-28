@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { buildServer, BIND_HOST, startServer } from '../src/web/server.js'
 import { appendEvents } from '../src/db/events.js'
 import { insertParcel, updateParcelState } from '../src/db/parcels.js'
@@ -204,6 +204,54 @@ describe('web core: faithful rendering', () => {
     const batch = blocks.find(b => b.includes('&quot;batch&quot;'))!
     expect(own).not.toMatch(/carrier-level/i)
     expect(batch).toMatch(/carrier-level/i)
+  })
+
+  test('a 404 is a page of the app, with the nav and a way home, not a bare word or Fastify JSON', async () => {
+    const db = memDb()
+    const app = buildServer({ db, config })
+    for (const [method, url] of [
+      ['GET', '/parcel/999'], ['GET', '/parcel/abc'], ['GET', '/no/such/page'], ['POST', '/parcel/999/delete'],
+    ] as const) {
+      const res = await app.inject({ method, url, headers: { 'content-type': 'application/x-www-form-urlencoded' }, payload: '' })
+      expect(res.statusCode, url).toBe(404)
+      expect(res.headers['content-type'], url).toContain('text/html')
+      expect(res.body, url).toContain('<nav aria-label="Main">')
+      expect(res.body, url).toMatch(/<h1>[^<]*not found[^<]*<\/h1>/i)
+      expect(res.body, url).toContain('<a href="/">Back to the parcels in flight</a>')
+      expect(res.body, url).not.toContain('"statusCode"')
+    }
+    // A parcel that is gone says so in words a person can act on.
+    expect((await app.inject({ method: 'GET', url: '/parcel/999' })).body).toMatch(/deleted/)
+  })
+
+  test('a missing map tile stays a small plain 404: an <img> asks for it, nobody reads it', async () => {
+    const res = await buildServer({ db: memDb(), config }).inject({ method: 'GET', url: '/tile/16/1/1.png' })
+    expect(res.statusCode).toBe(404)
+    expect(res.body).not.toContain('<nav')
+  })
+
+  test('a 500 is a page of the app too, naming no internals, even when the database itself is what broke', async () => {
+    const db = memDb()
+    const app = buildServer({ db, config })
+    db.close()
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const res = await app.inject({ method: 'GET', url: '/' })
+      expect(res.statusCode).toBe(500)
+      expect(res.headers['content-type']).toContain('text/html')
+      expect(res.body).toMatch(/<h1>Something went wrong<\/h1>/)
+      expect(res.body).toContain('<a href="/">Back to the parcels in flight</a>')
+      expect(res.body).not.toMatch(/database|sqlite|connection is not open/i)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  test('the cross-site refusal stays a bare plain-text 403: it is answered to hostile requests', async () => {
+    const res = await buildServer({ db: memDb(), config }).inject({ method: 'GET', url: '/', headers: { host: 'evil.example' } })
+    expect(res.statusCode).toBe(403)
+    expect(res.headers['content-type']).toContain('text/plain')
+    expect(res.body).toBe('forbidden')
   })
 
   test('requests with a foreign Host header are refused (DNS rebinding)', async () => {
