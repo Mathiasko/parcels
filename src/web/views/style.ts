@@ -237,6 +237,10 @@ summary{font-size:.8125rem;color:var(--ink-3);cursor:pointer;padding:.25rem 0}
    --signal anywhere: blue means "this needs you", not "delete these". */
 .bulk{margin:0 0 1.25rem;border:1px solid var(--rule-s);border-radius:12px;padding:.125rem .875rem;background:var(--surface)}
 .bulk p{max-width:34rem;color:var(--ink-2);margin:.5rem 0 .75rem}
+/* The commits an update would install: one-line subjects, which is all \`git log --oneline\` gives.
+   Monospaced because a sha leads every line, but wrapping, because a subject is a sentence. */
+.chg{list-style:none;margin:.25rem 0 1rem;padding:0;display:grid;gap:.25rem}
+.chg li.mono{white-space:normal;overflow-wrap:anywhere}
 .bulk ul{list-style:none;margin:.25rem 0 .75rem;padding:0;display:grid;gap:.375rem}
 .bulk li{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .bulk form{margin:0}

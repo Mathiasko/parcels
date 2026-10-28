@@ -7,10 +7,12 @@ import { POLL_RUNS_KEPT, type PollRun, type RunTrigger } from '../../db/poll-run
 import {
   ACTIVITY_LOG_KEPT, activityKindWord, describeActivity, type ActivityEntry, type Actor,
 } from '../../db/activity-log.js'
+import type { StoredUpdateCheck } from '../../db/update-state.js'
+import type { UpdateOutcome, UpdateRun } from '../../core/update.js'
 import { CARRIER_NAME, formatAgo, formatDateTime } from './format.js'
 import { glyph, type GlyphName } from './glyphs.js'
 import { html, type Html } from './html.js'
-import { layout, scroller, type PageCtx } from './layout.js'
+import { layout, notice, scroller, type PageCtx } from './layout.js'
 
 /** `gated` means the adapter itself is broken (key rotated, endpoint closed): always an alarm while it persists. */
 export const needsAttention = (h: HealthRow | undefined): boolean =>
@@ -144,6 +146,102 @@ function supportPanel(bundle: string | undefined): Html {
 <pre class="sel bundle" id="support-bundle">${bundle}</pre>`}`
 }
 
+/**
+ * What the Update section has to work with: the last check, and the last update attempt.
+ *
+ * Both are read per request from outside the database's parcel tables - the check from its own row,
+ * the attempt from the file the detached updater writes - and both are optional, because a fresh
+ * install has neither. See core/update.ts.
+ */
+export interface UpdateView {
+  check?: StoredUpdateCheck
+  run?: UpdateRun
+  /** What `updateOutcome` makes of `run`: the page must not work that out a second way. */
+  outcome?: UpdateOutcome
+}
+
+/** Whether an update is in flight, which is what hides the button and drives the reload loop. */
+export const updateBusy = (u: UpdateView | undefined): boolean => u?.outcome === 'running'
+
+/**
+ * How an update that has already happened went. The one that matters is `rolled_back`: the build
+ * broke, the checkout was put back, and the dashboard the reader is looking at is the proof that
+ * worked - so it says so plainly rather than only reporting a failure.
+ */
+function updateResult(u: UpdateView, ctx: PageCtx): Html {
+  const run = u.run
+  if (!run) return html``
+  const where = (sha: string | undefined) => (sha ? html`<b class="mono sel">${sha}</b>` : html`an unrecorded commit`)
+  if (u.outcome === 'running') {
+    return notice('busy', html`<p><strong>Updating.</strong> Fetching the new code, reinstalling and rebuilding, then restarting the two background jobs.</p>
+<p class="meta">Started ${formatAgo(run.startedAt, ctx.now)}. This page updates itself until it finishes, and the dashboard may be unreachable for a few seconds near the end.</p>`, true)
+  }
+  if (u.outcome === 'abandoned') {
+    return notice('warn', html`<p><strong>The update stopped answering.</strong> It began ${formatAgo(run.startedAt, ctx.now)} and never reported how it went.</p>
+<p class="meta">What it was doing is at the end of <span class="mono">data/update.log</span>. The version below is what this page is actually running.</p>`, true)
+  }
+  if (u.outcome === 'ok') {
+    return notice('neutral', html`<p><strong>Updated.</strong> Now running ${where(run.to)}, from ${where(run.from)}.</p>`, true)
+  }
+  if (u.outcome !== 'failed') return html``
+  if (run.rollback === 'ok') {
+    return notice('warn', html`<p><strong>The update did not finish, and was rolled back.</strong> The checkout was put back to ${where(run.from)} and rebuilt, so the dashboard is running exactly what it ran before.</p>
+<p class="meta">Nothing was lost. The reason is at the end of <span class="mono">data/update.log</span>; gathering a support bundle below carries it.</p>`, true)
+  }
+  if (run.rollback === 'failed') {
+    return notice('warn', html`<p><strong>The update failed and could not be rolled back.</strong> The checkout is at ${where(run.to)} and this needs a person at a terminal.</p>
+<p class="meta">Gather a support bundle below and send it. Do not press Update again until somebody has looked.</p>`, true)
+  }
+  return notice('warn', html`<p><strong>The update was refused and nothing was installed.</strong> Still running ${where(run.from)}.</p>
+<p class="meta">Why is at the end of <span class="mono">data/update.log</span>, and in the Update state below.</p>`, true)
+}
+
+/** The state sentence: what a check found, or that none has been made. */
+function updateState(check: StoredUpdateCheck | undefined, ctx: PageCtx): Html {
+  if (!check || check.state === 'unknown') {
+    return html`<p>This copy has not been checked for updates yet. Press the button below, or leave it: the hourly background job checks once a day and tells you if there is anything.</p>`
+  }
+  const when = html`<span class="meta">Checked ${formatDateTime(check.checkedAt, ctx.now)} (${formatAgo(check.checkedAt, ctx.now)}).</span>`
+  if (check.state === 'blocked') {
+    return html`<p><strong>This copy cannot be updated from here.</strong> ${check.reason ?? 'No reason was given.'}</p><p>${when}</p>`
+  }
+  if (check.state === 'ahead') {
+    return html`<p>This copy is <strong>ahead</strong> of ${check.upstream ?? 'its upstream'}: it has commits that are not published there, so there is nothing to install.</p><p>${when}</p>`
+  }
+  if (check.state === 'current') {
+    return html`<p>This copy is <strong>up to date</strong> with ${check.upstream ?? 'its upstream'}.</p><p>${when}</p>`
+  }
+  return html`<p>There is a newer version: this copy is <strong>${check.behind} commit${check.behind === 1 ? '' : 's'} behind</strong> ${check.upstream ?? 'its upstream'}.</p><p>${when}</p>${
+    check.changes.length === 0 ? '' : html`<p class="meta">What would change:</p>
+<ul class="meta chg">${check.changes.map(line => html`<li class="mono">${line}</li>`)}</ul>`}`
+}
+
+/**
+ * Updating the app from the dashboard, which is the whole point of this section: the alternative is a
+ * terminal, and somebody who needs a terminal to update will simply never update.
+ *
+ * The button appears only when a check has actually found something to install - not when the copy is
+ * up to date, not when it is somebody's own branch, and not when the directory is not a git checkout
+ * at all, because in none of those cases is there anything for it to do. It is also hidden while an
+ * update is going, so a second press cannot start a second one.
+ *
+ * There is deliberately no automatic update. What this button runs is code fetched from the internet
+ * on a page with no authentication, so the one safeguard that matters is that a person pressed it:
+ * the route is a POST behind the same Host and cross-site refusals as every other write here (see
+ * `onRequest` in web/server.ts), and nothing on this page ever triggers it by being loaded.
+ */
+function updatePanel(version: string, u: UpdateView | undefined, ctx: PageCtx): Html {
+  const view = u ?? {}
+  const behind = view.check?.state === 'behind'
+  return html`<h2>Update</h2>
+<p class="meta">Where this copy of the app stands against the one it was installed from. Updating fetches the newer code, reinstalls its dependencies, rebuilds, and restarts the two background jobs; it takes a minute or two. If the new code does not build, the previous version is put back and rebuilt, so the dashboard always comes back.</p>
+${updateResult(view, ctx)}
+<p>Running <b class="mono sel">${version}</b>.</p>
+${updateState(view.check, ctx)}
+<div class="toolbar">${updateBusy(view) ? '' : html`<form method="post" action="/update/check"><button>Check for updates</button></form>${
+    behind ? html`<form method="post" action="/update"><button>Update now</button></form>` : ''}`}</div>`
+}
+
 export function healthPage(
   rows: HealthRow[], ingest: { configured: boolean; status?: IngestStatus }, poller: PollerStatus, ctx: PageCtx,
   /** `0.1.0 (0db9a83)`, or `unknown`. Resolved once at startup; see core/version.ts. */
@@ -154,6 +252,8 @@ export function healthPage(
   support?: string,
   /** The activity log, newest first: status transitions and user actions. Empty is a stated fact. */
   activity: ActivityEntry[] = [],
+  /** The Update section's two facts. Absent for a caller that has not gathered them. */
+  update?: UpdateView,
 ): Html {
   const byCarrier = new Map(rows.map(r => [r.carrier, r]))
   const ids = Object.keys(CARRIER_NAME) as CarrierId[]
@@ -191,6 +291,7 @@ ${scroller('Carrier and system health', html`<table class="board"><thead><tr><th
   poller.overdue ? html`<p class="meta">No poll has completed for over 2 hours of the 07:00-21:00 day. Parcels are not being updated: check that the launchd poller agent is loaded and that the Node path in its plist still exists.</p>` : ''}
 ${runsPanel(runs, ctx)}
 ${activityPanel(activity, ctx)}
+${updatePanel(version, update, ctx)}
 ${supportPanel(support)}
 <p class="meta" id="version">Version ${version}</p>`, ctx)
 }

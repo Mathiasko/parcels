@@ -19,10 +19,11 @@ import type { CanonicalStatus, CarrierId } from '../core/types.js'
  *    interleaving them by hand. Rows are only ever inserted and only ever trimmed by age.
  * 2. **An allow-list of columns, never a free-text note.** Statuses, carriers, counts and ids only.
  *    Every value written here is either a number, an id, or a token from this app's own closed
- *    vocabulary - the one exception is the carrier's raw status string, which is the whole point of
- *    the log and is gated at the support-bundle boundary rather than at the column (see
- *    `bundleStatusRaw`). No tracking number, label, merchant, address, locker code, mail subject or
- *    sender is written, ever.
+ *    vocabulary. There are two exceptions, both deliberate: the carrier's raw status string, which is
+ *    the whole point of the log and is gated at the support-bundle boundary rather than at the column
+ *    (see `bundleStatusRaw`); and the commit shas on an `update` row, which are hex and nothing else
+ *    (`shaOrDash`) and are already printed in full at the bottom of /health. No tracking number,
+ *    label, merchant, address, locker code, mail subject or sender is written, ever.
  * 3. **It can never fail the work it describes.** Every writer here is wrapped: a diagnostics row that
  *    cannot be stored must not turn a good poll into a failed one, nor a dismissal into a 500. The
  *    wrapping is INSIDE this module rather than at each call site (which is how `recordIngest` is
@@ -93,6 +94,7 @@ export type ActivityKind =
   | 'messages_dismissed'
   | 'settings_saved'
   | 'refresh'
+  | 'update'
 
 /**
  * The settings the page can change, as names. The list is closed and is the ONLY thing ever recorded
@@ -105,6 +107,17 @@ export const SETTING_FIELDS = [
   'imap', 'imap.host', 'imap.port', 'imap.user', 'imap.mailbox', 'imap.pass',
 ] as const
 export type SettingField = typeof SETTING_FIELDS[number]
+
+/**
+ * How an attempt to install a new version of the app ended.
+ *
+ * `rolled_back` is the good failure: the build or the install broke, and the checkout was put back to
+ * the commit it was on and rebuilt, so the machine is running what it was running before.
+ * `rollback_failed` is the one that needs a person. `abandoned` is an update that stopped answering -
+ * its process was killed, so nothing ever wrote an outcome - and it is recorded rather than left
+ * silent, because "I pressed Update and then nothing" is precisely the report this log exists to answer.
+ */
+export type UpdateLogOutcome = 'ok' | 'failed' | 'rolled_back' | 'rollback_failed' | 'abandoned'
 
 /** A derived status change: the thing the GLS incident needed and did not have. */
 export interface StatusChange {
@@ -134,6 +147,14 @@ export type Action =
   | { kind: 'messages_dismissed'; count: number; scope: 'all' | 'sender' | 'one' }
   | { kind: 'settings_saved'; fields: readonly SettingField[] }
   | { kind: 'refresh'; count: number; scope: 'all' | 'one' }
+  /**
+   * The outcome of an update, with the commits it moved between. A commit sha is the one value in this
+   * table that is neither a count nor a word from a closed vocabulary, and it is included because
+   * "which version is this machine actually on?" is the question an update that went wrong raises. It
+   * is hex and nothing else (`shaOrDash` below), it names no person, place or parcel, and it is
+   * already printed in full at the bottom of /health.
+   */
+  | { kind: 'update'; outcome: UpdateLogOutcome; from?: string; to?: string }
 
 /** One row, as a reader wants it. Absent fields are the columns that do not apply to the kind. */
 export interface ActivityEntry {
@@ -262,8 +283,20 @@ function insertFor(a: Action): Insert {
       return { kind: a.kind, count: a.fields.length, detail: a.fields.join(' ') }
     case 'refresh':
       return { kind: a.kind, count: a.count, detail: a.scope }
+    case 'update':
+      // Three tokens in one column: the outcome, then where it came from and where it ended up. A
+      // column each would mean three migrations for one fact that is never read apart.
+      return { kind: a.kind, detail: [a.outcome, shaOrDash(a.from), shaOrDash(a.to)].join(' ') }
   }
 }
+
+/**
+ * A commit sha, shortened, or `-` for "not recorded". Anything that is not hex becomes `-`: the shas
+ * reaching this come from a file a detached shell script wrote, and a column this table prints
+ * verbatim must not be able to carry whatever happened to be in it.
+ */
+const shaOrDash = (v: string | undefined): string =>
+  (v !== undefined && /^[0-9a-f]{4,40}$/.test(v) ? v.slice(0, 10) : '-')
 
 /**
  * The log, newest first. Ordered by the recorded instant and then by id, as `listRuns` is: sorting by
@@ -311,6 +344,26 @@ export function activityForBundle(db: Database, limit: number): ActivityEntry[] 
   return listActivity(db, limit).map(e => (e.raw === undefined ? e : { ...e, raw: bundleStatusRaw(e.raw) }))
 }
 
+/** The `update` line: `ok ffa1f20 9f8e7d6` as English. The three tokens come from `insertFor`. */
+function describeUpdate(detail: string | undefined): string {
+  const [outcome, from = '-', to = '-'] = (detail ?? '').split(' ')
+  const at = (sha: string) => (sha === '-' ? 'an unrecorded commit' : sha)
+  switch (outcome) {
+    case 'ok':
+      return `updated from ${at(from)} to ${at(to)}`
+    case 'rolled_back':
+      return `update failed and was rolled back to ${at(from)}, which is what it is running`
+    case 'rollback_failed':
+      return `update failed AND could not be rolled back; the checkout is at ${at(to)} and needs attention`
+    case 'failed':
+      return `update failed before anything was installed; still at ${at(from)}`
+    case 'abandoned':
+      return `update stopped answering and never reported an outcome; it was at ${at(from)} when it started`
+    default:
+      return `update: ${detail ?? 'nothing recorded'}`
+  }
+}
+
 const FIELD_WORDS: Record<ActivityKind, string> = {
   status: 'status',
   parcel_deleted: 'parcel deleted',
@@ -319,6 +372,7 @@ const FIELD_WORDS: Record<ActivityKind, string> = {
   messages_dismissed: 'mail dismissed',
   settings_saved: 'settings saved',
   refresh: 'refresh pressed',
+  update: 'update',
 }
 
 /** The word for a kind, for a page that groups rows by what happened. */
@@ -347,6 +401,8 @@ export function describeActivity(e: ActivityEntry): string {
       return `settings saved: ${e.detail === undefined || e.detail === '' ? 'nothing changed' : `${e.detail.split(' ').join(', ')} changed`}`
     case 'refresh':
       return `refresh pressed for ${e.detail === 'one' ? 'one parcel' : `all ${e.count ?? 0} due parcel(s)`}`
+    case 'update':
+      return describeUpdate(e.detail)
     default:
       return e.kind
   }

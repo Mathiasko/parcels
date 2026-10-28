@@ -4,6 +4,7 @@ import type { CanonicalStatus, CarrierId, NewEvent } from '../core/types.js'
 import { getParcel, markAnnounced, type Parcel } from '../db/parcels.js'
 import { carrierHealth, markCarrierNotified, type HealthRow } from '../db/health.js'
 import { getIngestStatus, markIngestNotified } from '../db/ingest-status.js'
+import { getUpdateCheck, markUpdateNotified } from '../db/update-state.js'
 import { stalePollAlarm } from '../core/pollwatch.js'
 import { passedSlots } from './nudge.js'
 import type { Notification } from './types.js'
@@ -134,6 +135,8 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
     if (ingest) alarms.push({ groupKey: 'ingest', ...ingest, url: `${base}/health` })
     const away = stalePollAlarm(db, now)
     if (away) alarms.push({ groupKey: 'poller', ...away, url: `${base}/health` })
+    const update = updateAlarm(db)
+    if (update) alarms.push({ groupKey: 'update', ...update, url: `${base}/health` })
     return { parcelUpdates, alarms }
   })()
 
@@ -167,6 +170,36 @@ function ingestAlarm(db: Database, rows: HealthRow[], now: Date): { title: strin
   return {
     title: 'Mail ingest is failing',
     message: `Mail ingest has failed for ${s.consecutiveFailures} runs in a row; new parcels may not appear. See Health.`,
+  }
+}
+
+/**
+ * A new version of the app, announced once per version.
+ *
+ * Keyed on the upstream commit rather than on a flag, which is what makes "once" mean once per
+ * version and not once ever: the same `origin/main` commit is never announced twice, and the next
+ * commit on it is a different sha and so is announced afresh. The same shape as
+ * `stale_poll_notice.for_poll_ms`, for the same reason - the poller is a fresh process every hour, so
+ * "already said" cannot live in memory.
+ *
+ * Only `behind` is announced. `current` is nothing to say; `ahead` is somebody's own commits, which
+ * is not an update; and `blocked` is a checkout that cannot be updated at all, where a banner would
+ * be a demand the reader can do nothing about (it is on /health, where it belongs).
+ *
+ * Never throws: it runs inside the transaction that records what every other notification announced.
+ */
+function updateAlarm(db: Database): { title: string; message: string } | undefined {
+  try {
+    const c = getUpdateCheck(db)
+    if (!c || c.state !== 'behind' || c.remoteSha === undefined) return undefined
+    if (c.notifiedSha === c.remoteSha) return undefined
+    markUpdateNotified(db, c.remoteSha)
+    return {
+      title: 'A parcels update is available',
+      message: `${c.behind} new commit(s) on ${c.upstream ?? 'the upstream branch'}. Open Health and press Update to install it.`,
+    }
+  } catch {
+    return undefined
   }
 }
 

@@ -39,6 +39,11 @@ export function buildPollDeps(db: Database, config: Config, overrides: Partial<P
     mapPreview: config.mapPreview
       ? { tileDir: tileDirFor(config.dbPath), fetchBytes: createBinaryFetch() }
       : undefined,
+    // Present, with every default: one `git fetch` a day through `scripts/update.sh --check`, and the
+    // adoption of an update that finished while nothing was watching. Present here rather than inside
+    // `runPoll` so that a test which builds its own PollDeps spawns no git at all, and so that the
+    // "Refresh now" button - which does not use this function - stays a pure parcel refresh.
+    updateCheck: {},
     ...overrides,
   }
 }

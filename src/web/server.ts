@@ -36,12 +36,17 @@ import {
 import type { Html } from './views/html.js'
 import { addPage } from './views/add.js'
 import { attentionPage, type AttentionError } from './views/attention.js'
-import { healthPage } from './views/health.js'
+import { healthPage, updateBusy, type UpdateView } from './views/health.js'
 import { pollerStatus } from '../core/pollwatch.js'
 import {
   buildSupportBundle, supportBundleFilename, type LaunchdReport, type SupportEnv,
 } from '../core/support.js'
-import { appVersion } from '../core/version.js'
+import { appVersion, repoRoot } from '../core/version.js'
+import {
+  adoptUpdateOutcome, checkForUpdate, readUpdateRun, startUpdate, updateOutcome, updateStatusPath,
+  type ScriptRunner, type SpawnFn,
+} from '../core/update.js'
+import { getUpdateCheck, recordUpdateCheck } from '../db/update-state.js'
 import { historyPage } from './views/history.js'
 import { indexPage, type RefreshNote } from './views/index.js'
 import { parcelPage } from './views/parcel.js'
@@ -82,6 +87,22 @@ export interface WebDeps {
    * `launchctl`, never depends on the host it runs on, and never reads the author's own `data/`.
    */
   support?: { env?: SupportEnv; launchd?: LaunchdReport; dataDir?: string }
+  /**
+   * Updating the app from /health. Every field is injected by tests, because the real ones spawn a
+   * shell script that pulls from the internet and reboots this process: no test may run one.
+   *
+   * `root` is the checkout to update (this one), `dataDir` is where the update's log and status file
+   * live (`data/`, beside the database), `run` is how `scripts/update.sh --check` is run for the
+   * Check button, and `spawn`/`openLog` are the detachment seam (see core/update.ts).
+   */
+  update?: {
+    root?: string
+    dataDir?: string
+    run?: ScriptRunner
+    spawn?: SpawnFn
+    openLog?: (path: string) => number
+    closeLog?: (fd: number) => void
+  }
 }
 
 /**
@@ -332,15 +353,42 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     return send(reply, historyPage(parcels, deliveryStats(db), filters, ctx()))
   })
 
+  /** The checkout the Update section is about, and where that update's log and status file live. */
+  const updateRoot = () => deps.update?.root ?? repoRoot()
+  const updateDataDir = () => deps.update?.dataDir ?? dirname(config.dbPath)
+
+  /**
+   * The Update section's two facts, gathered per request.
+   *
+   * Reading the status file here is also what records a finished update in the activity log: the
+   * process that started it was deliberately replaced by it, so it could not write the outcome
+   * itself. `adoptUpdateOutcome` is idempotent, so this page can be opened as often as anyone likes.
+   */
+  const updateView = (now: Date): UpdateView => {
+    const dataDir = updateDataDir()
+    const outcome = adoptUpdateOutcome(db, dataDir, now, { actor: 'web', at: now })
+    const run = readUpdateRun(updateStatusPath(dataDir))
+    return {
+      ...(getUpdateCheck(db) && { check: getUpdateCheck(db) }),
+      ...(run && { run }),
+      ...(outcome && { outcome }),
+    }
+  }
+
   const health = (reply: FastifyReply, support?: string) => {
     const c = ctx()
     // Reaped here too, not only on the pages that wait for a run: this is the page somebody opens to ask
     // whether the app is working, and a run abandoned by a killed process must read as failed on it.
     reapStaleRuns(db, c.now)
+    const update = updateView(c.now)
+    // The same mechanism the refresh uses, and deliberately not a second one: while an update is in
+    // flight the page carries a `<meta http-equiv="refresh">` and the spinner, and when it is not,
+    // `reloadIn` is absent and the browser stops asking (see `runState` and views/layout.ts).
+    const page = { ...c, ...(updateBusy(update) && { reloadIn: RELOAD_SECONDS }) }
     return send(reply, healthPage(
       c.health, { configured: config.imap !== undefined, status: getIngestStatus(db) },
-      pollerStatus(db, c.now), c, version, listRuns(db, RUNS_SHOWN), support,
-      listActivity(db, ACTIVITY_SHOWN),
+      pollerStatus(db, c.now), page, version, listRuns(db, RUNS_SHOWN), support,
+      listActivity(db, ACTIVITY_SHOWN), update,
     ))
   }
 
@@ -606,6 +654,53 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       console.error(`${new Date().toISOString()} POST /refresh: run ${runId} failed:`, err)
     }).finally(() => { refreshing = false }))
     return reply.redirect(`${back}?run=${runId}`, 303)
+  })
+
+  /**
+   * One check: a `git fetch` and nothing else (`scripts/update.sh --check` moves remote-tracking refs
+   * and touches neither the working tree nor the branch). POST, not GET, for exactly the reason the
+   * support bundle and the mail test are POSTs: it reaches the network, and a page must not do that
+   * because a browser prefetched or reloaded it.
+   *
+   * Never fails: `checkForUpdate` turns a missing script, a timeout or a refusal into a `blocked`
+   * result, which the page prints. The answer is stored, so the result survives the redirect.
+   */
+  app.post('/update/check', async (_req, reply) => {
+    recordUpdateCheck(db, checkForUpdate(deps.update?.run ?? undefined), now())
+    return reply.redirect('/health', 303)
+  })
+
+  /**
+   * Installing it. The one route on this server that runs code fetched from the internet, so:
+   *
+   * - POST only, behind the `onRequest` hook's foreign-Host and cross-site refusals, like every other
+   *   write here. There is no GET spelling of it, so no prefetch, reload or crawl can reach it.
+   * - It refuses unless a check has actually found commits to install. "Behind" is a stored fact
+   *   somebody caused by pressing Check or by leaving the poller running; without it this route does
+   *   nothing at all, which also means a POST to a copy that is not a git checkout spawns nothing.
+   * - One at a time: a second press while one is going lands on the page that is already following it.
+   * - And it is never automatic. Nothing in this app calls this route.
+   *
+   * The child is detached because the update replaces this process; `startUpdate` is where that is
+   * explained. Nothing is awaited: the page follows the status file the child writes.
+   */
+  app.post('/update', async (_req, reply) => {
+    const check = getUpdateCheck(db)
+    if (!check || check.state !== 'behind') {
+      return reply.code(409).type('text/plain')
+        .send('there is nothing to install: check for an update first, and read what it found')
+    }
+    const running = readUpdateRun(updateStatusPath(updateDataDir()))
+    if (running && updateOutcome(running, now()) === 'running') return reply.redirect('/health', 303)
+    startUpdate({
+      root: updateRoot(),
+      dataDir: updateDataDir(),
+      startedAt: now(),
+      ...(deps.update?.spawn && { spawn: deps.update.spawn }),
+      ...(deps.update?.openLog && { openLog: deps.update.openLog }),
+      ...(deps.update?.closeLog && { closeLog: deps.update.closeLog }),
+    })
+    return reply.redirect('/health', 303)
   })
 
   // Shutting down must not abandon a run halfway through: the row would be left unfinished, and only

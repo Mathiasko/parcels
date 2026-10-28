@@ -525,9 +525,13 @@ that a banner actually appeared). Once step 1 is done it will switch to
 
 ## Updating, and schema changes
 
+There are two ways to update, and they do the same thing: **the Update section on `/health`**, which
+needs no terminal, and `scripts/update.sh`, which is what that section runs.
+
 ```sh
-scripts/update.sh --check     # reports whether an update is available; changes nothing else
-scripts/update.sh             # git pull --ff-only, npm ci, rebuild, re-bootstrap both agents
+scripts/update.sh --check                 # reports whether an update is available; changes nothing else
+scripts/update.sh --check --porcelain     # the same answer as `key value` lines, for the dashboard
+scripts/update.sh                         # git pull --ff-only, npm ci, rebuild, re-bootstrap both agents
 ```
 
 It prints the version and commit before and after, and says plainly when there was nothing to
@@ -550,6 +554,70 @@ refs move, the working tree and the branch do not.
 The version and commit that are actually running are shown at the bottom of `/health`, so a bug
 report can say which code it is about. It reads `package.json` and `git rev-parse` once at startup,
 and says `unknown` rather than failing if the checkout is not a repo.
+
+### Updating from the dashboard
+
+Needing a terminal to update means never updating. So `/health` has an **Update** section, and it is
+the whole feature:
+
+- it says what this copy is running (version and commit), whether `origin/main` is ahead of it, and
+  the one-line subject of every commit that would be installed;
+- **Check for updates** runs one `git fetch` (`scripts/update.sh --check --porcelain`) and nothing else;
+- **Update now** runs the real update. The page then follows it with the same spinner and
+  `<meta http-equiv="refresh">` machinery the "Refresh now" button uses, and stops when it ends.
+
+The **Update now** button appears only when a check has actually found commits to install. It is
+absent when the copy is up to date, when it is ahead of its upstream, when the directory is not a git
+checkout at all, and while an update is already running.
+
+Three things about it are worth knowing, because each one is a hazard that had to be handled:
+
+**The update kills the process running it.** Its last step is `scripts/install-agents.sh`, which boots
+the launchd web agent out and bootstraps it again - and the web agent is the process that started the
+update. `launchctl bootout` signals the whole process group, so a child spawned the ordinary way
+would be killed somewhere inside `npm ci`, leaving `node_modules` half-replaced. The update is
+therefore spawned **detached**: its own session and process group, with both its streams going to
+`data/update.log` rather than to a pipe nobody will be alive to read.
+
+Because its parent does not survive to see the end of it, the outcome travels through
+`data/update-status.json`, written by `scripts/update-run.sh` and read by the next page view - the
+same recover-on-the-next-look shape as the stale-run reaper. An update that stops answering for
+twenty minutes is reported as abandoned rather than leaving the page spinning for ever.
+
+**A failed build must not leave a dead dashboard.** `install-agents.sh` refuses to touch launchd if
+the build fails, but `git pull` plus `npm ci` can still land a tree that does not build at all. So
+`scripts/update-run.sh` records the commit *before* it starts, and on failure puts the checkout back
+to it (`git reset --hard`), reinstalls its dependencies and rebuilds. The dashboard then comes back on
+exactly the code it was running before, and `/health` says so. If HEAD never moved - which is every
+refusal, including the dirty-tree one - nothing is rolled back at all, because a `git reset --hard`
+there would eat the very local edit the update refused to touch. If even the rollback fails, that is
+said plainly: it is the one case that needs somebody at a terminal.
+
+**It runs code fetched from the internet, from a page with no authentication.** So it is never
+automatic: nothing in this app presses that button. `POST /update` has no GET spelling, sits behind
+the same foreign-`Host` and cross-site refusals as every other write here, and refuses outright
+unless a check has already found something to install. Every outcome - including a rollback - is
+written to the [activity log](#the-activity-log-what-changed-and-what-you-did) and carried by the
+support bundle, along with the tail of `data/update.log`.
+
+### The daily check
+
+Once a day, during an hourly poll, the app runs one `git fetch` and tells you if `origin/main` is
+ahead - because otherwise you have to remember to go and look, which is the actual problem.
+
+- One `git fetch` per day, and no more. The gap is measured from the last **attempt**, so a checkout
+  that refuses the check (dirty, detached, not a repository) is not fetched every hour for an answer
+  it cannot act on.
+- The notification is raised **once per version**, keyed on the upstream commit: the same
+  `origin/main` is never announced twice, and the next commit on it is announced afresh. The same
+  trick as the "the poller was away" banner.
+- Only an available update is announced. Up to date is nothing to say; ahead of the upstream is
+  somebody's own commits; and a checkout that cannot be updated at all gets a line on `/health`
+  rather than a banner demanding something the reader cannot do.
+- The answer is stored, so `/health` shows what the poller found and costs no `git fetch` of its own.
+  It is also written into the run's line in the recent-runs log, so "when did it first know?" has an
+  answer after the banner has been dismissed.
+- The "Refresh now" button deliberately does **not** check: a click is already somebody looking.
 
 ### Schema changes
 
@@ -615,6 +683,15 @@ Things worth knowing:
 <http://127.0.0.1:8787> (or your `port`), and <http://parcels.local:8787> once the hostname is installed
 (below). It binds loopback only and has **no authentication, by design**: anything on this Mac can
 reach it, and nothing else can.
+
+`/health` is the page that answers "is it working?": carrier and system health, the recent-runs log,
+the activity log, the [Update section](#updating-from-the-dashboard), the support bundle, and the
+version at the bottom.
+
+Because there is no authentication, the bind address is not the only boundary: every write is a POST
+that is refused unless the `Host` header is one of this machine's own names and the request is not
+cross-site. That is what stops a page on the open web from resolving its own domain to `127.0.0.1`
+and driving this server, and it covers the Update route like every other one.
 
 ### The parcels.local hostname
 
@@ -716,8 +793,9 @@ that would have made that incident self-diagnosing reads:
   that caused it can be read side by side. Migration 3 merged two parcels on the author's machine and
   said nothing; it is a line now.
 - **What you did.** Dismissing mail (how many, and whether it was one sender or the whole queue),
-  deleting a parcel (and the status it was in), assigning an email to a parcel, saving settings, and
-  pressing refresh. "Where did my parcel go" is answerable with *you deleted it on Tuesday*: the log
+  deleting a parcel (and the status it was in), assigning an email to a parcel, saving settings,
+  pressing refresh, and the outcome of an **update** (including a rollback, and the commits it moved
+  between). "Where did my parcel go" is answerable with *you deleted it on Tuesday*: the log
   holds **no foreign key** to `parcels`, precisely so that it outlives the row it talks about.
 - **Nothing in it is private.** Ids, counts, carriers, canonical statuses and words from this app's own
   vocabulary - never a tracking number, parcel name, shop, address, locker code, mail subject or mail
@@ -726,7 +804,9 @@ that would have made that incident self-diagnosing reads:
   records **which fields changed and never their values**, which is why `imap.pass` is a safe thing to
   see on that page. The carrier's raw status string is the one free-form field, because `DELIVEREDPS`
   is the whole point of the log; where it leaves the machine it goes through an allow-list that admits
-  a code and refuses a sentence, since a carrier's sentence can name the place a parcel is waiting.
+  a code and refuses a sentence, since a carrier's sentence can name the place a parcel is waiting. The
+  commit shas on an `update` row are the other exception: hex and nothing else, naming no person,
+  place or parcel, and already printed in full at the bottom of the same page.
 - **It can never break anything.** Writing it is wrapped, the way the mail-ingest status is: a
   diagnostics row that cannot be stored is logged to stderr and dropped. No poll and no button press
   has ever failed because of it.
@@ -833,7 +913,9 @@ Everything lives under `data/` (gitignored):
   run log behind `/health` → *Recent runs*, newest 50), `activity_log` (every status change and every
   action you took, newest 2000; see [The activity log](#the-activity-log-what-changed-and-what-you-did)),
   `imap_state` (how far each mailbox has been read; see
-  [Only the new mail is read](#only-the-new-mail-is-read)), and a few bookkeeping tables.
+  [Only the new mail is read](#only-the-new-mail-is-read)), `update_check` (what the last
+  update check found and what has already been said about it; see
+  [The daily check](#the-daily-check)), and a few bookkeeping tables.
   Every parcel ever tracked stays there; archiving only hides it from the in-flight list.
 - `data/mail/` holds the raw `.eml` files, `0600` inside a `0700` directory. A dismissed message's
   file is deleted, so this directory holds mail that became a parcel, mail still waiting on
@@ -842,6 +924,11 @@ Everything lives under `data/` (gitignored):
 - `data/tiles/` holds cached OpenStreetMap map tiles, same `0600`/`0700` posture. Fetched during a
   poll, never when a page is viewed; see [Pickup point maps](#pickup-point-maps) for what leaves this
   machine and how to turn it off.
+- `data/update.log` and `data/update-status.json` are an update's account of itself: the log is
+  everything `git pull`, `npm ci` and the build printed, and the status file is the one line the
+  dashboard reads to say how it went. They exist because an update replaces the process that started
+  it, so nothing in the app can report on it from the inside; see
+  [Updating from the dashboard](#updating-from-the-dashboard).
 - Back up by copying `data/parcels.db` (and its `-wal`/`-shm` siblings, or use `sqlite3 .backup`).
 
 ## Troubleshooting
@@ -873,3 +960,13 @@ Everything lives under `data/` (gitignored):
   not be read; if it shows no commit, the directory is not a git checkout.
 - **`update.sh` refuses to run:** read the first line. A dirty tree lists the files; a divergent
   branch is yours to resolve (`git log --oneline --left-right main...@{u}`). Neither is a bug.
+- **The Update section has no button:** there is nothing to install. It says which of the four
+  reasons applies - up to date, ahead of its upstream, a refusal (with the sentence `update.sh` gave),
+  or never checked. Press **Check for updates** if it has never been checked.
+- **"I pressed Update and the dashboard came back on the old version":** that is the rollback working.
+  The new code did not build, so the checkout was put back and rebuilt. `/health` says so, the
+  activity log has the line, and the reason is at the end of `data/update.log` - which the support
+  bundle carries, so sending one is the right next step.
+- **"I pressed Update and nothing happened":** reload `/health`. If it reports the update as having
+  stopped answering, its process was killed; `data/update.log` has as far as it got, and pressing
+  Update again is safe (a half-finished `npm ci` is repaired by the next one).

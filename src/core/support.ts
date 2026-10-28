@@ -14,6 +14,8 @@ import { getIngestStatus } from '../db/ingest-status.js'
 import { userVersion } from '../db/migrate.js'
 import { listActive } from '../db/parcels.js'
 import { listRuns } from '../db/poll-runs.js'
+import { getUpdateCheck } from '../db/update-state.js'
+import { readUpdateRun, updateStatusPath } from './update.js'
 
 /**
  * The support bundle: everything the author of this app needs to diagnose a fault on somebody else's
@@ -453,6 +455,35 @@ export function buildSupportBundle(deps: SupportDeps): string {
     ]
   })
 
+  /**
+   * How this install stands against the repository it came from, and how its last update went.
+   *
+   * It is here because "he is still running October's code" and "he pressed Update and the dashboard
+   * came back on the old version" are both reports this bundle has to be able to answer, and neither
+   * is visible anywhere else: the detached updater's own account of itself is a file in `data/`, and
+   * the process that started it did not live to see how it ended. Nothing in this section is
+   * sensitive - commit shas, a count, a branch name and the subjects of published commits.
+   */
+  section('update', () => {
+    const check = getUpdateCheck(db)
+    const run = readUpdateRun(updateStatusPath(dataDir))
+    return [
+      field('Last checked', check === undefined ? 'never' : iso(check.checkedAt)),
+      field('Against', check?.upstream ?? '-'),
+      field('State', check === undefined ? 'never checked'
+        : check.state === 'behind' ? `behind by ${check.behind} commit(s)` : check.state),
+      field('Commit', `${check?.localSha ?? '-'} (upstream ${check?.remoteSha ?? '-'})`),
+      ...(check?.reason === undefined ? [] : [field('Cannot update', check.reason)]),
+      field('Last update run', run === undefined ? 'none recorded' : `${run.state}, started ${iso(run.startedAt)}`),
+      ...(run === undefined ? [] : [
+        field('Finished', iso(run.finishedAt)),
+        field('Moved', `${run.from ?? '-'} -> ${run.to ?? '-'}`),
+        field('Rollback', run.rollback ?? '-'),
+        field('update.sh exit', run.exit ?? '-'),
+      ]),
+    ]
+  })
+
   section(`recent poll runs (newest first, up to ${RUNS_INCLUDED})`, () => {
     const runs = listRuns(db, RUNS_INCLUDED)
     if (runs.length === 0) return ['no run has ever been recorded']
@@ -486,7 +517,9 @@ export function buildSupportBundle(deps: SupportDeps): string {
   })
 
   // The logs last: the only part of this file that can be large, and the only part the cap can reach.
-  for (const name of ['poll.log', 'poll.err.log']) {
+  // `update.log` is the only account there is of what an update did: its process is detached and
+  // replaces the web server, so nothing in the app can report on it from the inside.
+  for (const name of ['poll.log', 'poll.err.log', 'update.log']) {
     const tail = readLogTail(join(dataDir, name), tailBytes)
     if (tail === undefined) {
       out.push('', `-- data/${name} (not present) --`)

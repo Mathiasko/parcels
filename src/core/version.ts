@@ -37,6 +37,13 @@ export function resolveVersion(root: string): string {
 /** `<repo root>`; this file sits two levels below it in both `src/` and `dist/`. */
 const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url))
 
+/**
+ * The checkout this process is running from. Exported so the update machinery (core/update.ts) and
+ * the version string cannot disagree about which directory they are talking about - one answer, one
+ * place, whether the code is running out of `src/` under vitest or out of `dist/` under launchd.
+ */
+export const repoRoot = (): string => REPO_ROOT
+
 let cached: string | undefined
 
 /**

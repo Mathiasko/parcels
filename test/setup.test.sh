@@ -21,6 +21,9 @@ SETUP="$ROOT/scripts/setup.sh"
 UPDATE="$ROOT/scripts/update.sh"
 LIB="$ROOT/scripts/lib/node.sh"
 INSTALL="$ROOT/scripts/install-agents.sh"
+# The wrapper the dashboard's Update button spawns. Its own behaviour is checked by
+# test/update-run.test.sh; here it only has to obey the same house rules as the other scripts.
+RUNSH="$ROOT/scripts/update-run.sh"
 
 # --- the scripts are scripts -------------------------------------------------------------------------
 check "setup.sh parses"                              bash -n "$SETUP"
@@ -29,7 +32,7 @@ check "lib/node.sh parses"                           bash -n "$LIB"
 check "setup.sh is executable"                       test -x "$SETUP"
 check "update.sh is executable"                      test -x "$UPDATE"
 check "both are strict (set -euo pipefail)"          bash -c "for f in '$SETUP' '$UPDATE'; do grep -q 'set -euo pipefail' \"\$f\" || exit 1; done"
-check "no script runs sudo itself"                   bash -c "! grep -nE '^[^#]*\bsudo\b' '$SETUP' '$UPDATE' | grep -qv install-hostname"
+check "no script runs sudo itself"                   bash -c "! grep -nE '^[^#]*\bsudo\b' '$SETUP' '$UPDATE' '$RUNSH' | grep -qv install-hostname"
 
 # --- the node logic is shared, not copied ------------------------------------------------------------
 # The whole point of scripts/lib/node.sh: install-agents.sh bakes the chosen node into the launchd
@@ -37,13 +40,15 @@ check "no script runs sudo itself"                   bash -c "! grep -nE '^[^#]*
 # a different Node from the one that installed the dependencies.
 check "lib/node.sh defines find_node"                grep -q '^find_node()' "$LIB"
 check "lib/node.sh defines require_node"             grep -q '^require_node()' "$LIB"
-check "lib/node.sh owns MIN_NODE_MAJOR"              bash -c "test \"\$(grep -l 'MIN_NODE_MAJOR=' '$LIB' '$SETUP' '$UPDATE' '$INSTALL' 2>/dev/null | wc -l | tr -d ' ')\" = 1"
+check "lib/node.sh owns MIN_NODE_MAJOR"              bash -c "test \"\$(grep -l 'MIN_NODE_MAJOR=' '$LIB' '$SETUP' '$UPDATE' '$INSTALL' '$RUNSH' 2>/dev/null | wc -l | tr -d ' ')\" = 1"
 check "setup.sh sources lib/node.sh"                 grep -qE '^\. .*lib/node\.sh' "$SETUP"
 check "update.sh sources lib/node.sh"                grep -qE '^\. .*lib/node\.sh' "$UPDATE"
 check "install-agents.sh sources lib/node.sh"        grep -qE '^\. .*lib/node\.sh' "$INSTALL"
-check "no script redefines find_node"                bash -c "! grep -l '^find_node()' '$SETUP' '$UPDATE' '$INSTALL'"
-check "no script re-implements the nvm search"       bash -c "! grep -l 'nvm/versions/node' '$SETUP' '$UPDATE' '$INSTALL'"
-check "each sourcing script calls require_node"      bash -c "for f in '$SETUP' '$UPDATE' '$INSTALL'; do grep -qE '^ *require_node ' \"\$f\" || exit 1; done"
+# update-run.sh sources it inside its rollback, which is the only place it needs npm.
+check "update-run.sh sources lib/node.sh"            grep -qE '^ *\. .*lib/node\.sh' "$RUNSH"
+check "no script redefines find_node"                bash -c "! grep -l '^find_node()' '$SETUP' '$UPDATE' '$INSTALL' '$RUNSH'"
+check "no script re-implements the nvm search"       bash -c "! grep -l 'nvm/versions/node' '$SETUP' '$UPDATE' '$INSTALL' '$RUNSH'"
+check "each sourcing script calls require_node"      bash -c "for f in '$SETUP' '$UPDATE' '$INSTALL' '$RUNSH'; do grep -qE '^ *require_node ' \"\$f\" || exit 1; done"
 
 # --- setup.sh and config.json ------------------------------------------------------------------------
 # --config-only stops before `npm install` and before launchd, so nothing here installs or loads

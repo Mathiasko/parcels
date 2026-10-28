@@ -24,7 +24,7 @@ test('openDb creates all tables and re-applying the schema on the same handle is
   const names = (db.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
   ).all() as { name: string }[]).map(r => r.name)
-  expect(names).toEqual(['activity_log', 'carrier_health', 'deadline_reminders', 'events', 'geocode_cache', 'imap_state', 'ingest_status', 'last_poll', 'messages', 'parcels', 'pickup_codes', 'pickup_nudges', 'poll_runs', 'raw_responses', 'stale_poll_notice'])
+  expect(names).toEqual(['activity_log', 'carrier_health', 'deadline_reminders', 'events', 'geocode_cache', 'imap_state', 'ingest_status', 'last_poll', 'messages', 'parcels', 'pickup_codes', 'pickup_nudges', 'poll_runs', 'raw_responses', 'stale_poll_notice', 'update_check'])
 })
 
 test('openDb enables WAL and foreign keys, and reopens a file-backed database', () => {

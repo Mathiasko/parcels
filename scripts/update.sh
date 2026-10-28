@@ -2,8 +2,10 @@
 # Updates an installed copy: fast-forward the checkout, reinstall dependencies, rebuild, reload the
 # launchd agents. Prints the version and commit before and after.
 #
-#   scripts/update.sh           update, if there is anything to update
-#   scripts/update.sh --check   say whether an update is available, and change nothing else
+#   scripts/update.sh                       update, if there is anything to update
+#   scripts/update.sh --check               say whether an update is available, and change nothing else
+#   scripts/update.sh --check --porcelain   the same answer as `key value` lines, for the Update
+#                                           section on /health (parsed by src/core/update.ts)
 #
 # Safe by default, which here means four refusals rather than four guesses:
 #
@@ -25,14 +27,55 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT/scripts/lib/node.sh"
 
 check_only=0
-case "${1:-}" in
-  "") ;;
-  --check) check_only=1 ;;
-  *) echo "usage: $0 [--check]" >&2; exit 2 ;;
-esac
+porcelain=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check) check_only=1 ;;
+    # Machine-readable, and it IMPLIES --check: what the dashboard parses must never be one typo away
+    # from installing something. The prose below is suppressed in this mode, because a page that
+    # parsed English would quietly start reporting "up to date" the day a sentence was reworded.
+    --porcelain) porcelain=1; check_only=1 ;;
+    *) echo "usage: $0 [--check] [--porcelain]" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# The two voices this script has. Every line it prints goes through one of them, so neither mode can
+# accidentally carry the other's output.
+say() { [ "$porcelain" = 1 ] || echo "$@"; }
+pline() { [ "$porcelain" = 0 ] || echo "$@"; }
+# require_node announces which node it picked on stdout, which is prose; in porcelain mode it is dropped.
+NODE_MSG_TO=/dev/stdout
+[ "$porcelain" = 0 ] || NODE_MSG_TO=/dev/null
 
 git_() { git -C "$ROOT" "$@"; }
-die() { echo "update: $1" >&2; shift; for l in "$@"; do echo "  $l" >&2; done; exit 1; }
+# A refusal. In porcelain mode the first line is also emitted as `state blocked` / `reason ...`, so a
+# caller that only reads stdout still learns both that it was refused and why; the exit status is 1
+# either way, and that - not the output - is what src/core/update.ts treats as authoritative.
+die() {
+  pline "state blocked"
+  pline "reason $1"
+  echo "update: $1" >&2
+  shift
+  for l in "$@"; do echo "  $l" >&2; done
+  exit 1
+}
+
+# The machine-readable answer: one `key value` line per fact, `log <sha> <subject>` once per commit
+# that would be installed. Unknown keys are ignored by the reader, so lines may be added here; the
+# keys that exist must not change meaning. Prints nothing at all unless --porcelain was given.
+porcelain_report() { # porcelain_report <state>
+  [ "$porcelain" = 1 ] || return 0
+  echo "state $1"
+  echo "version $(pkg_version)"
+  echo "branch ${BRANCH:-}"
+  echo "local $(git_ rev-parse HEAD)"
+  [ -z "${UPSTREAM:-}" ] || echo "upstream $UPSTREAM"
+  [ -z "${REMOTE:-}" ] || echo "remote $REMOTE"
+  [ "$1" = behind ] || return 0
+  echo "behind $(git_ rev-list --count "HEAD..$UPSTREAM")"
+  git_ log --oneline --no-decorate "HEAD..$UPSTREAM" | while IFS= read -r l; do echo "log $l"; done
+}
 
 # `rev-parse --git-dir` would answer from a parent repository, so ask whether the root ITSELF is the
 # top of a work tree: a tarball unpacked inside someone's checkout must not be "updated" by pulling
@@ -45,16 +88,16 @@ TOP="$(git_ rev-parse --show-toplevel 2>/dev/null || true)"
   "Updating an unpacked copy means replacing the directory by hand, keeping config.json and data/."
 
 # Where we are now. The version comes from package.json; the commit is what dist/ was built from.
-describe() {
-  local v
-  v="$("$NODE" -e '
+# Two functions, because the porcelain report needs the version on a line of its own.
+pkg_version() {
+  "$NODE" -e '
     try { process.stdout.write(String(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).version)) }
     catch { process.stdout.write("?") }
-  ' "$ROOT/package.json")"
-  printf '%s (%s)\n' "$v" "$(git_ rev-parse --short HEAD)"
+  ' "$ROOT/package.json"
 }
+describe() { printf '%s (%s)\n' "$(pkg_version)" "$(git_ rev-parse --short HEAD)"; }
 
-require_node scripts/update.sh
+require_node scripts/update.sh > "$NODE_MSG_TO"
 BRANCH="$(git_ rev-parse --abbrev-ref HEAD)"
 # A detached HEAD has no upstream and nothing to fast-forward; say that, rather than complain a
 # branch called "HEAD" is not tracking anything.
@@ -62,13 +105,15 @@ BRANCH="$(git_ rev-parse --abbrev-ref HEAD)"
   "this checkout is on a detached HEAD, not a branch, so there is nothing to fast-forward." \
   "Check out the branch you want to follow first: git checkout main"
 BEFORE="$(describe)"
-echo "at version $BEFORE on branch $BRANCH"
+say "at version $BEFORE on branch $BRANCH"
 
 # --- the refusals -----------------------------------------------------------------------------------
 # config.json, data/ and dist/ are gitignored, so none of them can make the tree dirty; anything that
 # shows up here is a real edit to tracked code, and the user is the only one who knows what it was for.
 DIRTY="$(git_ status --porcelain --untracked-files=no)"
 [ -z "$DIRTY" ] || {
+  pline "state blocked"
+  pline "reason the working tree has uncommitted changes, so nothing was updated."
   echo "update: the working tree has uncommitted changes, so nothing was updated." >&2
   echo "$DIRTY" | sed 's/^/  /' >&2
   echo "  Commit, stash or discard them, then run this again." >&2
@@ -82,7 +127,7 @@ UPSTREAM="$(git_ rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/de
 
 # The only network access in this script, and the only thing --check does: it moves remote-tracking
 # refs and touches neither the working tree nor the branch.
-echo "fetching $UPSTREAM ..."
+say "fetching $UPSTREAM ..."
 git_ fetch --quiet --prune
 
 LOCAL="$(git_ rev-parse HEAD)"
@@ -105,19 +150,21 @@ case "$state" in
       "  git log --oneline --left-right $BRANCH...$UPSTREAM"
     ;;
   ahead)
-    echo "nothing to update: $BRANCH is ahead of $UPSTREAM by $(git_ rev-list --count "$UPSTREAM..HEAD") local commit(s)."
-    echo "  Already running the newest code there is here. Push them if they are meant to be shared."
+    porcelain_report ahead
+    say "nothing to update: $BRANCH is ahead of $UPSTREAM by $(git_ rev-list --count "$UPSTREAM..HEAD") local commit(s)."
+    say "  Already running the newest code there is here. Push them if they are meant to be shared."
     exit 0
     ;;
 esac
 
 if [ "$check_only" = 1 ]; then
+  porcelain_report "$state"
   if [ "$state" = current ]; then
-    echo "up to date: $BEFORE is the newest commit on $UPSTREAM. Nothing to do."
+    say "up to date: $BEFORE is the newest commit on $UPSTREAM. Nothing to do."
   else
-    echo "an update is available: $(git_ rev-list --count "HEAD..$UPSTREAM") commit(s) behind $UPSTREAM."
-    git_ log --oneline --no-decorate "HEAD..$UPSTREAM" | sed 's/^/  /'
-    echo "  Run scripts/update.sh to install it."
+    say "an update is available: $(git_ rev-list --count "HEAD..$UPSTREAM") commit(s) behind $UPSTREAM."
+    [ "$porcelain" = 1 ] || git_ log --oneline --no-decorate "HEAD..$UPSTREAM" | sed 's/^/  /'
+    say "  Run scripts/update.sh to install it."
   fi
   exit 0
 fi

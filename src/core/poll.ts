@@ -1,3 +1,4 @@
+import { dirname } from 'node:path'
 import type { Database } from '../db/index.js'
 import type { Config } from './config.js'
 import type {
@@ -10,6 +11,7 @@ import { ingestMessages, type IngestDeps, type IngestReport } from '../ingest/in
 import { HttpTransportError, captureBodies } from './http.js'
 import { runMapPreview, summarizeMapPreview, type MapPreviewDeps, type MapPreviewReport } from './map-preview.js'
 import { runPickupCodes, type PickupCodeReport } from './pickup-code.js'
+import { adoptUpdateOutcome, maybeCheckForUpdate, type UpdateCheck, type UpdateCheckOptions } from './update.js'
 import { isDormant, isDue, slotFor } from './backoff.js'
 import { dedupHash } from './dedup.js'
 import { appendEvents, markNotified, recomputeParcelStatus } from '../db/events.js'
@@ -55,6 +57,17 @@ export interface PollDeps {
    * so the user's opt-out holds whatever a caller passes.
    */
   mapPreview?: Pick<MapPreviewDeps, 'tileDir' | 'fetchBytes' | 'sleep'>
+  /**
+   * When present, the run may ask once a day whether a newer version of the app exists (one
+   * `git fetch` through `scripts/update.sh --check`), and may adopt the outcome of an update that has
+   * finished since the last run. Absent: no git is spawned and no status file is read, which is what
+   * every test that is not about updating relies on.
+   *
+   * It belongs to a poll because the poller is the only thing on this machine that wakes up by
+   * itself: without it the user has to think to go and look, which is the whole problem. The "Refresh
+   * now" button deliberately does NOT pass it - a click is already the user looking.
+   */
+  updateCheck?: UpdateCheckOptions
 }
 
 export interface PollReport {
@@ -67,6 +80,8 @@ export interface PollReport {
   map?: MapPreviewReport
   /** What stored mail yielded this run (codes, pickup points); absent when nothing needed scanning. */
   codes?: PickupCodeReport
+  /** What the once-a-day update check found; absent when it was not due, or not configured at all. */
+  update?: UpdateCheck
 }
 
 const RAW_RESPONSES_KEPT = 5
@@ -154,12 +169,39 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
       report.failures.push({ carrier, reason: `parse: ${detail}` })
     }
   }
+  // Before the notifications, so an update found in this run is announced in this run rather than an
+  // hour later. After the carriers, because a `git fetch` is not allowed to delay parcel tracking.
+  report.update = updateStep(deps, cause)
   if (deps.notifier) await notify(deps.notifier, db, report, now, deps.config.port)
   // Last, and after the notifications: this is the only step that deliberately sleeps (both services
   // it uses are free and rate-limited), and nothing else in the run depends on it.
   report.codes = await pickupCodes(deps, cause)
   report.map = await mapPreview(deps)
   return report
+}
+
+/**
+ * The once-a-day "is there a newer version?" question, and the adoption of an update that has already
+ * happened. Both are wrapped: a `git` that is missing, slow or confused must not be able to turn a
+ * successful poll into a failed one, and neither must a status file somebody edited by hand.
+ *
+ * The adoption is here as well as on /health because an update that went wrong has to be visible
+ * afterwards even if nobody opens the page: whichever of the two gets there first writes the row, and
+ * `logged_started_at` stops the second one writing it again.
+ */
+function updateStep(deps: PollDeps, cause: Cause): UpdateCheck | undefined {
+  if (!deps.updateCheck) return undefined
+  try {
+    adoptUpdateOutcome(deps.db, dirname(deps.config.dbPath), deps.now, cause)
+  } catch (err) {
+    console.error(`update: could not adopt the last outcome: ${describe(err)}`)
+  }
+  try {
+    return maybeCheckForUpdate(deps.db, deps.now, deps.updateCheck)
+  } catch (err) {
+    console.error(`update: the check failed: ${describe(err)}`)
+    return undefined
+  }
 }
 
 /**
@@ -474,5 +516,10 @@ export function summarize(report: PollReport): string {
   const scan = report.codes
     ? `, ${report.codes.found} pickup code(s) found${report.codes.points ? `, ${report.codes.points} pickup point(s) read from mail` : ''}`
     : ''
-  return `polled ${c.polled} parcel(s), ${c.newEvents} new event(s)${mail}${scan}${map}${failed}`
+  // Said in the run log too, not only in a banner: a notification is gone the moment it is dismissed,
+  // and "when did it first know there was an update?" is then unanswerable.
+  const update = report.update?.state === 'behind'
+    ? `, an update is available (${report.update.behind} commit(s) behind)`
+    : ''
+  return `polled ${c.polled} parcel(s), ${c.newEvents} new event(s)${mail}${scan}${map}${update}${failed}`
 }

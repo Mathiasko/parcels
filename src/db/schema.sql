@@ -236,3 +236,38 @@ CREATE TABLE IF NOT EXISTS activity_log (
   count       INTEGER,                       -- how many things the entry covers
   detail      TEXT                           -- a closed-vocabulary token: a scope, or field names
 );
+
+-- What the last "is there a new version of this app?" check found, and what has already been said
+-- about it (always one row, id = 1). The check runs at most once a day inside a poll and is one
+-- `git fetch` through `scripts/update.sh --check --porcelain`; see src/core/update.ts.
+--
+-- Three unrelated-looking things share this row because they are all one subject - "where this
+-- install stands against its upstream" - and all three have to outlive the process that learned
+-- them: the poller is a fresh process every hour, and an update deliberately replaces the web one.
+--
+--   the check itself      checked_at .. reason. `changes` is the one-line commit subjects that would
+--                         be installed, newline-separated; `reason` is why the checkout cannot be
+--                         updated at all (not a checkout, dirty, detached, diverged). Only one of
+--                         the two is ever set.
+--   notified_sha          the upstream commit already announced, so the banner fires once per new
+--                         version rather than every hour (the same trick as stale_poll_notice).
+--   logged_started_at     the `startedAt` of the last update whose outcome reached the activity log,
+--                         so opening /health twice does not record it twice.
+--
+-- A table of its own, so an existing database gains it from the idempotent schema exec with no
+-- migration. Nothing here is sensitive: shas, counts, a branch name and commit subjects.
+CREATE TABLE IF NOT EXISTS update_check (
+  id                INTEGER PRIMARY KEY CHECK (id = 1),
+  checked_at        TEXT NOT NULL,
+  state             TEXT NOT NULL,                 -- 'current' | 'behind' | 'ahead' | 'blocked'
+  behind            INTEGER NOT NULL DEFAULT 0,
+  version           TEXT,
+  branch            TEXT,
+  upstream          TEXT,
+  local_sha         TEXT,
+  remote_sha        TEXT,
+  changes           TEXT,
+  reason            TEXT,
+  notified_sha      TEXT,
+  logged_started_at TEXT
+);
