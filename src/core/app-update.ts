@@ -8,7 +8,7 @@ import { basename, dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
-import { CHANGE_MAX, CHANGES_SHOWN, REASON_MAX, type UpdateCheck } from './update.js'
+import { CHANGE_MAX, CHANGES_SHOWN, REASON_MAX, UPDATE_STALE_MS, type UpdateCheck } from './update.js'
 import { readZipEntries, unsafeUnpackedTree, unsafeZipEntry, ZipFormatError, type ZipEntry } from './zip-check.js'
 
 /**
@@ -275,6 +275,20 @@ export function readAppUpdateStatus(path: string): AppUpdateStatus | undefined {
   } catch {
     return undefined
   }
+}
+
+/**
+ * True while a download is genuinely going: the status says `downloading` and it began less than
+ * `staleMs` ago. A `downloading` file older than that belongs to a process that died mid-download (the
+ * staging runs inside the server process, so a crash takes it along); treating it as busy for ever
+ * would hide the Update button and keep the page reloading with nothing left to wait for. The bound
+ * is the git updater's, for the same trade: a few extra minutes of "still going" against calling a
+ * working download dead.
+ */
+export function appUpdateDownloading(
+  status: AppUpdateStatus | undefined, now: Date, staleMs: number = UPDATE_STALE_MS,
+): boolean {
+  return status?.state === 'downloading' && now.getTime() - status.startedAt.getTime() <= staleMs
 }
 
 /**

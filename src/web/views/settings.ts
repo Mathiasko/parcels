@@ -176,6 +176,17 @@ function testTarget(v: SettingsValues): Html {
 }
 
 /**
+ * Where the app keeps its files, in place of the paths a git install shows. The button sits inside
+ * the settings form on the page but belongs to its own empty form (`revealForm`, outside it) through
+ * the `form` attribute: forms cannot nest, and a submit button of the settings form placed before
+ * "Save settings" would become the one Enter presses in any field, revealing a folder instead of saving.
+ */
+const appFiles = html`<p class="meta">Parcels keeps its settings and data in Application Support/Parcels.</p>
+<p><button form="reveal-data" type="submit">Show in Finder</button></p>`
+
+const revealForm = html`<form method="post" action="/app/reveal-data" id="reveal-data"></form>`
+
+/**
  * The settings page, written for the person who has just been handed this Mac rather than for its
  * author. What a first-time reader needs - the Gmail address, the App Password, the label, the
  * postcode - is in plain sight with one primary button after it. The things they will never need to
@@ -187,6 +198,11 @@ function testTarget(v: SettingsValues): Html {
  */
 export function settingsPage(
   v: SettingsValues, runtime: RuntimeFacts, ctx: PageCtx, state: SettingsState = {},
+  /**
+   * Run by the Mac app. Advanced then names no file paths and no notifier: the app posts its own
+   * notifications, and its files live in one folder it can show in Finder.
+   */
+  app = false,
 ): Html {
   return layout('Settings', '/settings', html`
 <div class="col"><h1>Settings</h1>
@@ -219,20 +235,20 @@ ${gmailGuide(v)}
 ${calendarField(v, state.calendars)}
 </div>
 
-<details class="adv"><summary>Advanced</summary>
+<details class="adv"${app ? raw(' id="adv"') : ''}><summary>Advanced</summary>
 <p class="meta">Nothing here normally needs changing.</p>
 <div class="fields">
 <label>Mail server<input name="imapHost" value="${v.imapHost}" autocapitalize="off" spellcheck="false"></label>
 <label>Port<input name="imapPort" value="${v.imapPort}" size="6" inputmode="numeric"></label>
-<label class="wide">Notifications<select name="notifier">${NOTIFIERS.map(n => option(n, NOTIFIER_LABEL[n] ?? n, v.notifier))}</select><span class="meta hint">How desktop notifications are shown.</span></label>
+${app ? '' : html`<label class="wide">Notifications<select name="notifier">${NOTIFIERS.map(n => option(n, NOTIFIER_LABEL[n] ?? n, v.notifier))}</select><span class="meta hint">How desktop notifications are shown.</span></label>`}
 </div>
-<p class="meta">Fixed while the app is running:</p>
+${app ? appFiles : html`<p class="meta">Fixed while the app is running:</p>
 <table class="stats"><tbody>
 <tr><td>Port</td><td class="mono">${runtime.port}</td></tr>
 <tr><td>Database</td><td class="mono">${runtime.dbPath}</td></tr>
 <tr><td>Settings file</td><td class="mono">${runtime.configPath}</td></tr>
 </tbody></table>
-<p class="meta">The app opens these once, when it starts, so no form can move them. Changing one means editing the settings file and restarting the app: ask whoever set this Mac up.</p>
+<p class="meta">The app opens these once, when it starts, so no form can move them. Changing one means editing the settings file and restarting the app: ask whoever set this Mac up.</p>`}
 </details>
 
 <p><button class="pri">Save settings</button></p>
@@ -242,5 +258,5 @@ ${calendarField(v, state.calendars)}
 ${state.test && !state.saved ? testResult(state.test) : ''}
 ${testTarget(v)}
 <form method="post" action="/settings/test#test"><button>${state.test ? 'Test again' : 'Test connection'}</button></form>
-</div>`, ctx)
+${app ? revealForm : ''}</div>`, ctx)
 }

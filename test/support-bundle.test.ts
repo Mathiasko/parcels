@@ -555,3 +555,44 @@ describe('redaction keeps pace with the carriers', () => {
     expect(redactSensitive(line)).toContain(REDACTED_NUMBER)
   })
 })
+
+describe('the support bundle when the Mac app runs the server', () => {
+  const appDeps = (logPath: string, over: Partial<NonNullable<SupportDeps['app']>> = {}) => ({
+    version: '0.3.0', electron: '45.1.0', uptimeS: 2 * 86_400 + 3_600, restarts: 2, logPath, ...over,
+  })
+
+  test('an App block replaces the launchd agents, and the app\'s log replaces data/*.log', () => {
+    const dir = dataDir({ 'poll.log': 'a git-install poll log line\n', 'update.log': 'a git-install update log line\n' })
+    const logPath = join(dir, 'server.log')
+    writeFileSync(logPath, 'an older line\n2026-10-26T10:00:00Z listening on http://127.0.0.1:8797\n')
+    // A launchd report is passed on purpose: with the app set it must be ignored, not printed.
+    const text = bundle({ dataDir: dir, launchd: AGENTS, app: appDeps(logPath) })
+    expect(text).toContain('Parcels 0.3.0')
+    expect(text).toContain('Electron')
+    expect(text).toContain('45.1.0')
+    expect(text).toContain('restarts 2')
+    expect(text).toContain('listening on http://127.0.0.1:8797')
+    expect(text).not.toContain('launchctl')
+    expect(text).not.toContain('local.parcels.')
+    expect(text).not.toContain('a git-install poll log line')
+    expect(text).not.toContain('update.sh')
+  })
+
+  test('a log that is not there is stated as absent', () => {
+    const dir = dataDir()
+    expect(bundle({ dataDir: dir, app: appDeps(join(dir, 'server.log')) })).toMatch(/server\.log \(not present\)/)
+  })
+
+  test('the app\'s update status is reported in place of the git updater\'s run', () => {
+    const dir = dataDir()
+    const text = bundle({
+      dataDir: dir,
+      app: appDeps(join(dir, 'server.log'), {
+        update: { state: 'failed', version: '0.4.0', reason: 'The download did not match its published checksum, so it was thrown away.', startedAt: NOW, finishedAt: NOW },
+      }),
+    })
+    expect(text).toContain('failed')
+    expect(text).toContain('0.4.0')
+    expect(text).toContain('The download did not match its published checksum')
+  })
+})

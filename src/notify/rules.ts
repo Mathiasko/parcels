@@ -5,6 +5,7 @@ import { getParcel, markAnnounced, parcelName, pickupSummary, type Parcel } from
 import { carrierHealth, markCarrierNotified, type HealthRow } from '../db/health.js'
 import { getIngestStatus, markIngestNotified } from '../db/ingest-status.js'
 import { getUpdateCheck, markUpdateNotified } from '../db/update-state.js'
+import { host } from '../core/host.js'
 import { stalePollAlarm } from '../core/pollwatch.js'
 import { passedSlots } from './nudge.js'
 import type { Notification } from './types.js'
@@ -215,9 +216,20 @@ const AUTH_FAILURE = /AUTHENTICATIONFAILED|AuthenticationFailure|invalid credent
 function updateAlarm(db: Database): { title: string; message: string } | undefined {
   try {
     const c = getUpdateCheck(db)
-    if (!c || c.state !== 'behind' || c.remoteSha === undefined) return undefined
-    if (c.notifiedSha === c.remoteSha) return undefined
-    markUpdateNotified(db, c.remoteSha)
+    if (!c || c.state !== 'behind') return undefined
+    // The Mac app's check compares releases and has no commit, so there the release's version is the
+    // key: one announcement per new version, exactly as one per upstream commit is in the git install.
+    // Only in the app: under git a check without a commit stays unannounced, as it always was.
+    const app = host() === 'app'
+    const key = c.remoteSha ?? (app ? c.version : undefined)
+    if (key === undefined || c.notifiedSha === key) return undefined
+    markUpdateNotified(db, key)
+    if (app) {
+      return {
+        title: 'A Parcels update is available',
+        message: `Parcels ${c.version} is out — open Health and press Update now.`,
+      }
+    }
     return {
       title: 'A parcels update is available',
       message: 'A new version is ready — open Health and press Update now.',

@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { closeSync, fstatSync, openSync, readdirSync, readSync, statSync } from 'node:fs'
 import { arch, platform, release } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { DateTime } from 'luxon'
 import type { Config } from './config.js'
 import { isDormant } from './backoff.js'
@@ -16,6 +16,7 @@ import { listActive } from '../db/parcels.js'
 import { listRuns } from '../db/poll-runs.js'
 import { getUpdateCheck } from '../db/update-state.js'
 import { readUpdateRun, updateStatusPath } from './update.js'
+import type { AppUpdateStatus } from './app-update.js'
 
 /**
  * The support bundle: everything the author of this app needs to diagnose a fault on somebody else's
@@ -101,6 +102,27 @@ export interface SupportDeps {
   dataDir?: string
   /** The two caps, overridable so the truncation paths can be tested without a 40 kB fixture. */
   limits?: { maxBytes?: number; logTailBytes?: number }
+  /**
+   * The Mac app that runs this server, when it does. Then there are no launchd agents to ask (and
+   * `launchd` is neither used nor defaulted, so no `launchctl` is spawned), the logs are the app's
+   * `server.log` rather than the checkout's `data/*.log`, and the update section reports the app
+   * updater's status file instead of the git updater's run.
+   */
+  app?: SupportApp
+}
+
+export interface SupportApp {
+  version: string
+  /** `process.versions.electron` in the server process. */
+  electron: string
+  /** How long the server process has been up, in seconds. */
+  uptimeS: number
+  /** How often the app has restarted the server since it opened. */
+  restarts: number
+  /** `~/Library/Logs/Parcels/server.log`. */
+  logPath: string
+  /** What the app updater's status file says, when there is one. */
+  update?: AppUpdateStatus
 }
 
 /**
@@ -291,6 +313,31 @@ function detectEnv(): SupportEnv {
 
 const iso = (d: Date | undefined): string => d?.toISOString() ?? '-'
 
+/**
+ * `2 d 1 h 5 min`: an uptime a reader takes in at a glance. Never a bare count of seconds, which after
+ * four months reaches ten digits and would then be redacted as a tracking number.
+ */
+function formatUptime(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds))
+  const d = Math.floor(s / 86_400)
+  const h = Math.floor((s % 86_400) / 3_600)
+  const m = Math.floor((s % 3_600) / 60)
+  if (d > 0) return `${d} d ${h} h ${m} min`
+  if (h > 0) return `${h} h ${m} min`
+  return `${m} min`
+}
+
+/** The app updater's status file, in one line. */
+function appUpdateLine(u: AppUpdateStatus | undefined): string {
+  if (u === undefined) return 'none recorded'
+  switch (u.state) {
+    case 'downloading': return `downloading ${u.version}, started ${iso(u.startedAt)}`
+    case 'staged': return `${u.version} staged, ready to install (started ${iso(u.startedAt)})`
+    case 'failed': return `${u.version} failed at ${iso(u.finishedAt)}: ${u.reason}`
+    case 'installed': return `${u.version} installed at ${iso(u.finishedAt)}`
+  }
+}
+
 /** `Port:               8787`. One column width for the whole file, so every value lines up. */
 const field = (key: string, value: string | number): string => `${`${key}:`.padEnd(20)}${value}`
 
@@ -334,7 +381,9 @@ function capToSize(text: string, maxBytes: number): string {
 export function buildSupportBundle(deps: SupportDeps): string {
   const { db, config, version, now } = deps
   const env = deps.env ?? detectEnv()
-  const launchd = deps.launchd ?? launchdAgents()
+  const app = deps.app
+  // Asked only in the git install: the app has no agents, and must not spawn launchctl to learn that.
+  const launchd = app ? undefined : deps.launchd ?? launchdAgents()
   const dataDir = deps.dataDir ?? dirname(config.dbPath)
   const maxBytes = deps.limits?.maxBytes ?? SUPPORT_BUNDLE_MAX_BYTES
   const tailBytes = deps.limits?.logTailBytes ?? LOG_TAIL_BYTES
@@ -368,10 +417,20 @@ export function buildSupportBundle(deps: SupportDeps): string {
     field('Schema', `user_version ${userVersion(db)}`),
   ])
 
-  section('launchd agents', () => [
-    ...(launchd.error === undefined ? [] : [`launchctl could not be asked: ${launchd.error}`]),
-    ...launchd.agents.map(agentLine),
-  ])
+  if (app) {
+    // The app's process facts, where the git install's launchd agents would be: what is running, on
+    // which Electron, and whether the server keeps being restarted (a crash loop shows up here first).
+    section('mac app', () => [
+      field('App', `Parcels ${app.version}`),
+      field('Electron', app.electron),
+      field('Server', `up ${formatUptime(app.uptimeS)}, restarts ${app.restarts} since the app opened`),
+    ])
+  } else if (launchd) {
+    section('launchd agents', () => [
+      ...(launchd.error === undefined ? [] : [`launchctl could not be asked: ${launchd.error}`]),
+      ...launchd.agents.map(agentLine),
+    ])
+  }
 
   section('config (shape only, never values)', () => {
     const imap = config.imap
@@ -466,6 +525,17 @@ export function buildSupportBundle(deps: SupportDeps): string {
    */
   section('update', () => {
     const check = getUpdateCheck(db)
+    if (app) {
+      // The app's check compares releases, so there are no commits; its version is the release found.
+      return [
+        field('Last checked', check === undefined ? 'never' : iso(check.checkedAt)),
+        field('Against', check?.upstream ?? '-'),
+        field('State', check === undefined ? 'never checked'
+          : check.state === 'behind' ? `behind (${check.version ?? '?'} available)` : check.state),
+        ...(check?.reason === undefined ? [] : [field('Cannot check', check.reason)]),
+        field('Last update', appUpdateLine(app.update)),
+      ]
+    }
     const run = readUpdateRun(updateStatusPath(dataDir))
     return [
       field('Last checked', check === undefined ? 'never' : iso(check.checkedAt)),
@@ -519,20 +589,26 @@ export function buildSupportBundle(deps: SupportDeps): string {
   // The logs last: the only part of this file that can be large, and the only part the cap can reach.
   // `update.log` is the only account there is of what an update did: its process is detached and
   // replaces the web server, so nothing in the app can report on it from the inside.
-  for (const name of ['poll.log', 'poll.err.log', 'update.log']) {
-    const tail = readLogTail(join(dataDir, name), tailBytes)
+  // In the app the server's own log takes their place: it carries the polls, the updater and any crash,
+  // since every one of those runs in that one process. Named by its file name alone, because the full
+  // path carries the user's account name.
+  const logs = app
+    ? [{ path: app.logPath, label: basename(app.logPath) }]
+    : ['poll.log', 'poll.err.log', 'update.log'].map(name => ({ path: join(dataDir, name), label: `data/${name}` }))
+  for (const { path, label } of logs) {
+    const tail = readLogTail(path, tailBytes)
     if (tail === undefined) {
-      out.push('', `-- data/${name} (not present) --`)
+      out.push('', `-- ${label} (not present) --`)
       continue
     }
     if (tail.bytes === 0) {
-      out.push('', `-- data/${name} (empty) --`)
+      out.push('', `-- ${label} (empty) --`)
       continue
     }
     const how = tail.truncated
       ? `last ${formatBytes(Buffer.byteLength(tail.text))} of ${formatBytes(tail.bytes)}; earlier lines truncated`
       : `all of it, ${formatBytes(tail.bytes)}`
-    out.push('', `-- data/${name} (${how}) --`, tail.text.replace(/\n+$/, ''))
+    out.push('', `-- ${label} (${how}) --`, tail.text.replace(/\n+$/, ''))
   }
 
   out.push('', '===== end of parcels support bundle =====', '')

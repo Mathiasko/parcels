@@ -21,6 +21,11 @@ export interface PageCtx {
    * that has finished, or is too old to still be going, leaves it out and the browser stops asking.
    */
   reloadIn?: number
+  /**
+   * Where the reload goes, when it is not this page: the "Restarting Parcels" page sends the browser
+   * to the update section once the new app is likely to be answering. Only ever a path on this server.
+   */
+  reloadTo?: string
 }
 
 /** A carrier that has failed its last run(s). The nav shows a dot for this and for nothing else (see design-language §5.1). */
@@ -36,7 +41,7 @@ export function layout(title: string, current: string, body: Html, ctx: PageCtx)
   return html`<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-${ctx.reloadIn ? html`<meta http-equiv="refresh" content="${ctx.reloadIn}">` : ''}<title>${title} - Parcels</title>
+${ctx.reloadIn ? html`<meta http-equiv="refresh" content="${ctx.reloadTo ? `${ctx.reloadIn};url=${ctx.reloadTo}` : ctx.reloadIn}">` : ''}<title>${title} - Parcels</title>
 <style>${raw(STYLE)}</style></head>
 <body>${SPRITE}<div class="frame">
 <header><nav aria-label="Main"><a class="brand" href="/">Parcels</a>${NAV.map(([href, label]) =>

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import {
@@ -44,7 +44,7 @@ import { html, type Html } from './views/html.js'
 import { errorPage, notFoundPage, serverErrorPage } from './views/error.js'
 import { addPage } from './views/add.js'
 import { attentionPage, type AttentionError } from './views/attention.js'
-import { healthPage, updateBusy, type UpdateView } from './views/health.js'
+import { appUpdateBusy, healthPage, updateBusy, type AppHealth, type UpdateView } from './views/health.js'
 import { pollerStatus } from '../core/pollwatch.js'
 import {
   buildSupportBundle, supportBundleFilename, type LaunchdReport, type SupportEnv,
@@ -56,6 +56,13 @@ import {
   type AsyncScriptRunner, type SpawnFn,
 } from '../core/update.js'
 import { getUpdateCheck, recordUpdateCheck } from '../db/update-state.js'
+import {
+  appUpdateDownloading, appUpdateStatusPath, checkAppRelease, githubFetchJson, readAppUpdateStatus, stagingDir,
+  type AppUpdateStatus, type StageDeps,
+} from '../core/app-update.js'
+import { postToMain } from '../core/app-ipc.js'
+import { nextSlot } from '../core/schedule.js'
+import type { UpdateCheck } from '../core/update.js'
 import { historyPage } from './views/history.js'
 import { calendarUrl, indexPage, type RefreshNote } from './views/index.js'
 import { calendarFilename, parcelCalendar, pickupEventSpec } from './calendar.js'
@@ -119,6 +126,38 @@ export interface WebDeps {
     openLog?: (path: string) => number
     closeLog?: (fd: number) => void
   }
+  /**
+   * The Mac app that runs this server. Present exactly when the host is the app (core/app-host.ts fills
+   * it in from the environment the main process sets); absent in the git install, where every page and
+   * route behaves as it always has. Where it is set, Health, Settings and the support bundle speak
+   * about the app, the update routes drive the app updater (core/app-update.ts), and two app-only
+   * routes exist: POST /update/restart and POST /app/reveal-data.
+   */
+  app?: AppWebDeps
+}
+
+/** What the web app needs to know about, and do through, the Mac app; see `WebDeps.app`. */
+export interface AppWebDeps {
+  /** `~/Library/Application Support/Parcels`: the config, the data and the updater's status file. */
+  supportDir: string
+  /** `~/Library/Logs/Parcels`, whose `server.log` the support bundle tails. */
+  logDir: string
+  /** The running `Parcels.app`; an update is staged beside it. */
+  appBundle: string
+  /** The app's own version, which is what Health says is running. */
+  version: string
+  /** When this server process started, for "running for". */
+  startedAt: Date
+  /** How often the app has restarted this server since it opened. Read per request: it is the app's count. */
+  restarts: () => number
+  /**
+   * Downloads and verifies a release (`stageUpdate`). The host adds what only it knows (this Mac's
+   * architecture and the certificate shipped in the bundle) and the real download and commands, so the
+   * web layer hands over only the release and where things are. Tests always pass a fake.
+   */
+  stage?: (d: Omit<StageDeps, 'download' | 'run' | 'arch' | 'expectedCertSha'>) => Promise<AppUpdateStatus>
+  /** The release check for the Check button; defaults to asking GitHub. Tests pass a fake. */
+  check?: () => Promise<UpdateCheck>
 }
 
 /**
@@ -167,6 +206,12 @@ const MIN_REFRESH_GAP_MS = 60_000
  */
 const LOCAL_HOST = /^(127\.0\.0\.1|localhost|\[::1\]|parcels\.local)(:\d+)?$/i
 
+/** A config document without its `notifier` key; see POST /settings in app mode. */
+const withoutNotifier = (doc: ConfigDocument): ConfigDocument => {
+  const { notifier: _, ...rest } = doc
+  return rest
+}
+
 const send = (reply: FastifyReply, page: Html, status = 200) =>
   reply.code(status).type('text/html; charset=utf-8').send(page.toString())
 
@@ -194,6 +239,9 @@ export function refreshNote(query: Record<string, unknown>): RefreshNote | undef
  * refresh at all. One mechanism, so there is no second number that could outlive the first.
  */
 const RELOAD_SECONDS = 3
+
+/** How long the "Restarting Parcels" page waits before it goes back to Health: about how long the swap takes. */
+const RESTART_RELOAD_SECONDS = 5
 
 /** How many runs the Health page's activity log shows. */
 const RUNS_SHOWN = 20
@@ -240,8 +288,12 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   const configPath = deps.configPath ?? runtimeConfigPath()
   const tileDir = deps.tileDir ?? tileDirFor(config.dbPath)
   const app = Fastify({ logger: false })
-  // Resolved once here, never per request: it reads package.json and spawns git.
-  const version = deps.version ?? appVersion()
+  // Resolved once here, never per request: it reads package.json and spawns git. In the app the running
+  // version is the app's own; a stored check carries the release it found, which is never "running".
+  const version = deps.app?.version ?? deps.version ?? appVersion()
+  const appDeps = deps.app
+  /** The app update this process is staging right now, if any; see `stageAppUpdate`. */
+  let staging: Promise<void> | undefined
   const now = () => (deps.now ?? (() => new Date()))()
   /** What every page needs besides its own data: the clock, and carrier health (for the lede and the nav dot). */
   const ctx = (): PageCtx => {
@@ -642,20 +694,39 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     }
   }
 
+  /** The app updater's status file, read per request (the staging writes it as it goes). Never throws. */
+  const appStatus = (): AppUpdateStatus | undefined =>
+    appDeps ? readAppUpdateStatus(appUpdateStatusPath(appDeps.supportDir)) : undefined
+
+  /** What Health says about the app that runs it; undefined in the git install. */
+  const appHealth = (at: Date): AppHealth | undefined => {
+    if (!appDeps) return undefined
+    const update = appStatus()
+    return {
+      version: appDeps.version, startedAt: appDeps.startedAt, restarts: appDeps.restarts(), nextSlot: nextSlot(at),
+      ...(update && { update }),
+    }
+  }
+
   const health = (reply: FastifyReply, support?: string) => {
     const c = ctx()
     // Reaped here too, not only on the pages that wait for a run: this is the page somebody opens to ask
     // whether the app is working, and a run abandoned by a killed process must read as failed on it.
     reapStaleRuns(db, c.now)
-    const update = updateView(c.now)
+    // In the app only the stored check is shared with the git updater: its status file and its
+    // activity-log adoption belong to a `git pull` that this install never runs.
+    const appInfo = appHealth(c.now)
+    const check = getUpdateCheck(db)
+    const update: UpdateView = appInfo ? { ...(check && { check }) } : updateView(c.now)
+    const busy = appInfo ? appUpdateBusy(appInfo, c.now) || staging !== undefined : updateBusy(update)
     // The same mechanism the refresh uses, and deliberately not a second one: while an update is in
     // flight the page carries a `<meta http-equiv="refresh">` and the spinner, and when it is not,
     // `reloadIn` is absent and the browser stops asking (see `runState` and views/layout.ts).
-    const page = { ...c, ...(updateBusy(update) && { reloadIn: RELOAD_SECONDS }) }
+    const page = { ...c, ...(busy && { reloadIn: RELOAD_SECONDS }) }
     return send(reply, healthPage(
       c.health, { configured: config.imap !== undefined, status: getIngestStatus(db) },
       c.poller ?? { overdue: false }, page, version, listRuns(db, RUNS_SHOWN), support,
-      listActivity(db, ACTIVITY_SHOWN), update,
+      listActivity(db, ACTIVITY_SHOWN), update, appInfo,
     ))
   }
 
@@ -668,10 +739,26 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    * One generator for both routes (see core/support.ts): the block the sender reads and the file he
    * attaches are the same bytes, give or take the "Generated" line if he waits between the two.
    */
-  const supportBundle = (): string => buildSupportBundle({
-    db, config, version, now: now(),
-    env: deps.support?.env, launchd: deps.support?.launchd, dataDir: deps.support?.dataDir,
-  })
+  const supportBundle = (): string => {
+    const at = now()
+    const update = appStatus()
+    return buildSupportBundle({
+      db, config, version, now: at,
+      env: deps.support?.env, launchd: deps.support?.launchd, dataDir: deps.support?.dataDir,
+      // In the app there are no launchd agents to ask and no data/*.log files: the app block and the
+      // server's own log take their place (see core/support.ts).
+      ...(appDeps && {
+        app: {
+          version: appDeps.version,
+          electron: process.versions.electron ?? 'not reported',
+          uptimeS: Math.max(0, Math.round((at.getTime() - appDeps.startedAt.getTime()) / 1000)),
+          restarts: appDeps.restarts(),
+          logPath: join(appDeps.logDir, 'server.log'),
+          ...(update && { update }),
+        },
+      }),
+    })
+  }
 
   /**
    * POST, not GET: it spawns `launchctl` and walks the mail directory, which a prefetch or a reload of
@@ -742,7 +829,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   ) => send(reply, settingsPage(
     values ?? settingsValues(file.doc),
     { port: config.port, dbPath: config.dbPath, configPath },
-    ctx(), { ...state, configError: file.error, calendars: await calendarList() },
+    ctx(), { ...state, configError: file.error, calendars: await calendarList() }, appDeps !== undefined,
   ), status)
 
   /**
@@ -762,9 +849,14 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   })
 
   app.post('/settings', async (req, reply) => {
-    const f = form(req)
     const file = current()
-    const result = applySettings(file.doc, f)
+    // The app's page has no notifier field (the app posts its own notifications), so the form does not
+    // send one: the file's value is put back in before the form is applied, and a file that had none is
+    // left without one, so a save neither changes it nor records it as changed.
+    const f = appDeps ? { ...form(req), notifier: settingsValues(file.doc).notifier } : form(req)
+    const applied = applySettings(file.doc, f)
+    const result = applied.ok && appDeps && file.doc.notifier === undefined
+      ? { ...applied, doc: withoutNotifier(applied.doc) } : applied
     if (!result.ok) return settings(reply, file, { error: result.message }, submittedSettings(f, file.doc), 400)
     // Validated against loadConfig's own rules and written atomically at 0600 (writeConfigDocument):
     // a file this app could not load would stop the poller AND this server at their next start.
@@ -1032,6 +1124,12 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    * must keep answering while this one request waits for it.
    */
   app.post('/update/check', async (_req, reply) => {
+    if (appDeps) {
+      // The app asks GitHub Releases, as its daily check does (core/runtime.ts); never the checkout's script.
+      const check = appDeps.check ?? (() => checkAppRelease(appDeps.version, githubFetchJson(appDeps.version)))
+      recordUpdateCheck(db, await check(), now())
+      return reply.redirect('/health#update', 303)
+    }
     recordUpdateCheck(db, await checkForUpdateAsync(deps.update?.run ?? undefined), now())
     return reply.redirect('/health', 303)
   })
@@ -1057,6 +1155,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       return sendError(reply, 409, () => errorPage('Nothing to install', html`There is no update waiting to be installed. Open <a href="/health">Health</a> to see which version this is and to check for a newer one.`, errorCtx()),
         'there is nothing to install: check for an update first, and read what it found')
     }
+    if (appDeps) return stageAppUpdate(reply, appDeps, check)
     const running = readUpdateRun(updateStatusPath(updateDataDir()))
     if (running && updateOutcome(running, now()) === 'running') return reply.redirect('/health', 303)
     startUpdate({
@@ -1069,6 +1168,61 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     })
     return reply.redirect('/health', 303)
   })
+
+  /**
+   * The app's Update now: download and verify the release the check found (`stageUpdate`), in this
+   * process, without waiting for it; the page follows the status file the staging writes, as it follows
+   * the git updater's. Two guards keep it to one at a time. `staging` is the staging this process has
+   * in flight, which is the authoritative answer while it lives; the status file covers a press that
+   * arrives from a page after a restart, and stops counting once it is stale, so a download that died
+   * with its process cannot hide the button for ever. A second staging would delete the first's folder
+   * under it (`stageUpdate` clears leftovers before it starts).
+   */
+  const stageAppUpdate = (reply: FastifyReply, a: AppWebDeps, check: UpdateCheck) => {
+    if (staging || appUpdateDownloading(appStatus(), now())) return reply.redirect('/health#update', 303)
+    if (!a.stage || !check.version || a.appBundle === '') {
+      return sendError(reply, 409, () => errorPage('Cannot update from here', 'This copy of Parcels does not know where it is installed, so it cannot update itself. Download the new version from GitHub and drag it into Applications.', errorCtx()),
+        'this copy of Parcels cannot update itself')
+    }
+    const run = a.stage({ version: check.version, appBundle: a.appBundle, supportDir: a.supportDir, now })
+    staging = run
+      .then(() => {}, err => {
+        // `stageUpdate` never rejects; a stage that did anyway must not become an unhandled rejection,
+        // which would take this server down.
+        console.error(`${new Date().toISOString()} update: staging failed: ${err instanceof Error ? err.message : String(err)}`)
+      })
+      .finally(() => { staging = undefined })
+    return reply.redirect('/health#update', 303)
+  }
+
+  if (appDeps) {
+    /**
+     * Restart to update. The swap itself is the main process's (spec §5.2): this only checks that what
+     * the status file names is the staged app this process made, and asks for it. The path is compared
+     * with the one `stagingDir` gives for this bundle and that version, so a hand-edited status file
+     * cannot point the swap at any other folder on the disk; and it must still be there.
+     */
+    app.post('/update/restart', async (_req, reply) => {
+      const s = appStatus()
+      const expected = s?.state === 'staged' ? join(stagingDir(appDeps.appBundle, s.version), 'Parcels.app') : undefined
+      if (s?.state !== 'staged' || appDeps.appBundle === '' || s.staged !== expected || !existsSync(s.staged)) {
+        return sendError(reply, 409, () => errorPage('Nothing to restart into', html`No new version is ready to install. Open <a href="/health#update">Health</a> and press Check for updates.`, errorCtx()),
+          'no new version is ready to install')
+      }
+      if (!postToMain({ type: 'install', staged: s.staged, version: s.version })) {
+        return sendError(reply, 503, () => errorPage('Could not restart', 'Parcels could not be asked to restart. Quit Parcels from its menu-bar icon and open it again; the new version is still ready.', errorCtx()),
+          'parcels could not be asked to restart')
+      }
+      // The new app takes a few seconds to answer; until then the reload may land on an error page.
+      return send(reply, errorPage('Restarting Parcels…', 'Parcels closes and opens again on the new version. This page goes back to Health in a few seconds.', { ...errorCtx(), reloadIn: RESTART_RELOAD_SECONDS, reloadTo: '/health#update' }))
+    })
+
+    /** Show in Finder: the main process opens the support folder. Nothing else is revealed, whatever is posted. */
+    app.post('/app/reveal-data', async (_req, reply) => {
+      postToMain({ type: 'reveal', path: appDeps.supportDir })
+      return reply.redirect('/settings#adv', 303)
+    })
+  }
 
   // Shutting down must not abandon a run halfway through: the row would be left unfinished, and only
   // `reapStaleRuns` would ever close it, ten minutes later and as a failure it was not.

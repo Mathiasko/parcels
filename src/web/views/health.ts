@@ -9,7 +9,8 @@ import {
 } from '../../db/activity-log.js'
 import type { StoredUpdateCheck } from '../../db/update-state.js'
 import type { UpdateOutcome, UpdateRun } from '../../core/update.js'
-import { CARRIER_NAME, formatAgo, formatDateTime } from './format.js'
+import { appUpdateDownloading, type AppUpdateStatus } from '../../core/app-update.js'
+import { CARRIER_NAME, dayKey, formatAgo, formatClock, formatDateTime, formatDay, formatElapsed } from './format.js'
 import { glyph, type GlyphName } from './glyphs.js'
 import { html, type Html } from './html.js'
 import { layout, notice, scroller, type PageCtx } from './layout.js'
@@ -140,9 +141,11 @@ function activityPanel(entries: ActivityEntry[], ctx: PageCtx): Html {
  * been shown, because the person pressing this is about to send a file about their own mailbox to
  * somebody else: they get to read it first, in full, before there is anything to send.
  */
-function supportPanel(bundle: string | undefined): Html {
+function supportPanel(bundle: string | undefined, app: boolean): Html {
+  // The one clause that differs: the app has no background jobs to be loaded, only itself to be running.
+  const what = app ? 'how long Parcels has been running, the counts, and the end of its log' : 'whether the background jobs are loaded, the counts, and the end of the logs'
   return html`<h2 id="support">Support</h2>
-<p class="meta">If something here looks wrong, this gathers what the author needs to work out why: the versions, whether the background jobs are loaded, the counts, and the end of the logs. Your parcels themselves are left out — no tracking numbers, parcel names, shops, addresses, locker codes, mail subjects or senders, and never your mail address or your App Password. You can read the whole file below before you send it.</p>
+<p class="meta">If something here looks wrong, this gathers what the author needs to work out why: the versions, ${what}. Your parcels themselves are left out — no tracking numbers, parcel names, shops, addresses, locker codes, mail subjects or senders, and never your mail address or your App Password. You can read the whole file below before you send it.</p>
 <form method="post" action="/support#support"><button>Gather support bundle</button></form>${bundle === undefined ? '' : html`
 <p>Select the text below and copy it, or <a href="/support.txt">download it as a file</a>, and send it to whoever is helping you.</p>
 <pre class="sel bundle" id="support-bundle">${bundle}</pre>`}`
@@ -164,6 +167,22 @@ export interface UpdateView {
 
 /** Whether an update is in flight, which is what hides the button and drives the reload loop. */
 export const updateBusy = (u: UpdateView | undefined): boolean => u?.outcome === 'running'
+
+/**
+ * What the Health page knows about the Mac app that runs it (app mode only): its version, how long the
+ * server process has been up and how often the app has had to restart it, the next scheduled poll,
+ * and the app updater's status file. Absent in the git install, where none of it exists.
+ */
+export interface AppHealth {
+  version: string
+  startedAt: Date
+  restarts: number
+  nextSlot: Date
+  update?: AppUpdateStatus
+}
+
+/** The app updater's version of `updateBusy`: a download that is going, which hides the buttons and reloads the page. */
+export const appUpdateBusy = (app: AppHealth | undefined, now: Date): boolean => appUpdateDownloading(app?.update, now)
 
 /**
  * How an update that has already happened went. The one that matters is `rolled_back`: the build
@@ -198,12 +217,51 @@ function updateResult(u: UpdateView, ctx: PageCtx): Html {
 <p class="meta">Why is at the end of <span class="mono">data/update.log</span>, and in the Update state below.</p>`, true)
 }
 
+/**
+ * The app updater's equivalent of `updateResult`: where the last download, check and staging got to,
+ * from the status file `stageUpdate` writes. An `installed` status is only claimed for the version that
+ * is actually running, so a stale file can never announce an update that did not happen.
+ */
+function appUpdateResult(app: AppHealth, ctx: PageCtx): Html {
+  const s = app.update
+  if (!s) return html``
+  if (s.state === 'downloading') {
+    if (appUpdateDownloading(s, ctx.now)) {
+      return notice('busy', html`<p><strong>Downloading Parcels ${s.version}.</strong> It is checked before anything changes, and nothing is installed until you restart.</p>
+<p class="meta">Started ${formatAgo(s.startedAt, ctx.now)}. This page updates itself until it finishes.</p>`, true)
+    }
+    return notice('warn', html`<p><strong>The download of Parcels ${s.version} stopped answering.</strong> It began ${formatAgo(s.startedAt, ctx.now)} and never finished, so nothing was changed.</p>
+<p class="meta">Press Update now to try again.</p>`, true)
+  }
+  if (s.state === 'staged') {
+    return notice('neutral', html`<p><strong>Parcels ${s.version} is ready.</strong> Press Restart to update: Parcels closes and opens again on the new version, which takes a few seconds.</p>`, true)
+  }
+  if (s.state === 'failed') {
+    return notice('warn', html`<p><strong>Parcels ${s.version} was not installed.</strong> ${s.reason}</p>`, true)
+  }
+  if (s.version !== app.version) return html``
+  return notice('neutral', html`<p><strong>Updated to ${s.version}.</strong></p>`, true)
+}
+
 /** The state sentence: what a check found, or that none has been made. */
-function updateState(check: StoredUpdateCheck | undefined, ctx: PageCtx): Html {
+function updateState(check: StoredUpdateCheck | undefined, ctx: PageCtx, app = false): Html {
   if (!check || check.state === 'unknown') {
-    return html`<p>This copy has not been checked for updates yet. Press the button below, or leave it: the hourly background job checks once a day and tells you if there is anything.</p>`
+    return app
+      ? html`<p>Parcels has not checked for a newer version yet. Press the button below, or leave it: Parcels checks once a day and tells you when there is one.</p>`
+      : html`<p>This copy has not been checked for updates yet. Press the button below, or leave it: the hourly background job checks once a day and tells you if there is anything.</p>`
   }
   const when = html`<span class="meta">Checked ${formatDateTime(check.checkedAt, ctx.now)} (${formatAgo(check.checkedAt, ctx.now)}).</span>`
+  if (app) {
+    // The app's check compares releases, not commits: there is no "ahead", no count, and the version
+    // it carries is the release's (what an update would install), never what is running.
+    if (check.state === 'blocked') {
+      return html`<p><strong>Parcels could not check for a newer version.</strong> ${check.reason ?? 'No reason was given.'}</p><p>${when}</p>`
+    }
+    if (check.state !== 'behind') return html`<p>Parcels is <strong>up to date</strong>.</p><p>${when}</p>`
+    return html`<p>There is a newer version: <strong>Parcels ${check.version ?? ''}</strong>.</p><p>${when}</p>${
+      check.changes.length === 0 ? '' : html`<p class="meta">What is new:</p>
+<ul class="meta chg">${check.changes.map(line => html`<li>${line}</li>`)}</ul>`}`
+  }
   if (check.state === 'blocked') {
     return html`<p><strong>This copy cannot be updated from here.</strong> ${check.reason ?? 'No reason was given.'}</p><p>${when}</p>`
   }
@@ -232,16 +290,41 @@ function updateState(check: StoredUpdateCheck | undefined, ctx: PageCtx): Html {
  * the route is a POST behind the same Host and cross-site refusals as every other write here (see
  * `onRequest` in web/server.ts), and nothing on this page ever triggers it by being loaded.
  */
-function updatePanel(version: string, u: UpdateView | undefined, ctx: PageCtx): Html {
+function updatePanel(version: string, u: UpdateView | undefined, ctx: PageCtx, app?: AppHealth): Html {
   const view = u ?? {}
   const behind = view.check?.state === 'behind'
+  // In the app the engine is GitHub Releases and a restart, not a checkout and two launchd jobs; the
+  // section's shape (explanation, result, what is running, what a check found, buttons) stays the same.
+  const busy = app ? appUpdateBusy(app, ctx.now) : updateBusy(view)
+  const staged = app?.update?.state === 'staged'
+  const buttons = busy ? ''
+    : staged ? html`<form method="post" action="/update/restart#update"><button>Restart to update</button></form>`
+    : html`<form method="post" action="/update/check#update"><button>Check for updates</button></form>${
+      behind ? html`<form method="post" action="/update#update"><button>Update now</button></form>` : ''}`
   return html`<h2 id="update">Update</h2>
-<p class="meta">Where this copy of the app stands against the one it was installed from. Updating fetches the newer code, reinstalls its dependencies, rebuilds, and restarts the two background jobs; it takes a minute or two. If the new code does not build, the previous version is put back and rebuilt, so the dashboard always comes back.</p>
-${updateResult(view, ctx)}
+<p class="meta">${app
+    ? 'Checks GitHub for a newer Parcels. Updating downloads it, checks it is signed by the same certificate as this one, and restarts the app.'
+    : 'Where this copy of the app stands against the one it was installed from. Updating fetches the newer code, reinstalls its dependencies, rebuilds, and restarts the two background jobs; it takes a minute or two. If the new code does not build, the previous version is put back and rebuilt, so the dashboard always comes back.'}</p>
+${app ? appUpdateResult(app, ctx) : updateResult(view, ctx)}
 <p>Running <b class="mono sel">${version}</b>.</p>
-${updateState(view.check, ctx)}
-<div class="toolbar">${updateBusy(view) ? '' : html`<form method="post" action="/update/check#update"><button>Check for updates</button></form>${
-    behind ? html`<form method="post" action="/update#update"><button>Update now</button></form>` : ''}`}</div>`
+${updateState(view.check, ctx, app !== undefined)}
+<div class="toolbar">${buttons}</div>`
+}
+
+/**
+ * The app's one-line status, in place of the launchd agents the git install would be asked about:
+ * `Parcels 0.3.0, running for 2 days; restarted 0 times; next check at 15:30.` "Running for" is the
+ * server process, and "restarted" counts how often the app has had to start it again since it opened,
+ * which is the number that says something is crashing. The next check is a clock time today, and a day
+ * as well when it is tomorrow's first slot, because this page has no script to keep "tomorrow" true.
+ */
+function appLine(app: AppHealth, ctx: PageCtx): Html {
+  const up = Math.max(0, ctx.now.getTime() - app.startedAt.getTime())
+  const running = up < 60_000 ? 'under a minute' : formatElapsed(up)
+  const restarted = app.restarts === 1 ? 'once' : `${app.restarts} times`
+  const next = dayKey(app.nextSlot) === dayKey(ctx.now)
+    ? `at ${formatClock(app.nextSlot)}` : `on ${formatDay(app.nextSlot, ctx.now)} at ${formatClock(app.nextSlot)}`
+  return html`<p class="meta" id="app-status">Parcels ${app.version}, running for ${running}; restarted ${restarted}; next check ${next}.</p>`
 }
 
 export function healthPage(
@@ -256,6 +339,8 @@ export function healthPage(
   activity: ActivityEntry[] = [],
   /** The Update section's two facts. Absent for a caller that has not gathered them. */
   update?: UpdateView,
+  /** The Mac app that runs this server; absent in the git install. Where it is set, the page speaks about the app. */
+  app?: AppHealth,
 ): Html {
   const byCarrier = new Map(rows.map(r => [r.carrier, r]))
   const ids = Object.keys(CARRIER_NAME) as CarrierId[]
@@ -304,10 +389,12 @@ ${scroller('Carrier and system health', html`<table class="board"><thead><tr><th
 <tr id="poller-health"${poller.overdue ? html` class="bad"` : ''}><td>${pollState}</td><td>Poller</td><td>${poller.lastPollAt ? formatDateTime(poller.lastPollAt, ctx.now) : 'never'}</td>${anyError ? html`<td class="meta">—</td>` : ''}</tr>
 <tr id="ingest-health"${ingestBad ? html` class="bad"` : ''}><td>${ingestState}</td><td>Mail ingest</td>
 <td>${ingestLastOk}</td>${errCell(ing?.lastErrorAt, ing?.lastOkAt, ing?.lastError)}</tr></tbody></table>`)}${
-  poller.overdue ? html`<p class="meta">No poll has completed for over 2 hours of the 07:00-21:00 day. Parcels are not being updated: check that the launchd poller agent is loaded and that the Node path in its plist still exists.</p>` : ''}
+  poller.overdue ? html`<p class="meta">No poll has completed for over 2 hours of the 07:00-21:00 day. Parcels are not being updated${
+    app ? '. Check that Parcels is running (its icon is in the menu bar).' : ': check that the launchd poller agent is loaded and that the Node path in its plist still exists.'}</p>` : ''}
+${app ? appLine(app, ctx) : ''}
 ${runsPanel(runs, ctx)}
 ${activityPanel(activity, ctx)}
-${updatePanel(version, update, ctx)}
-${supportPanel(support)}
+${updatePanel(version, update, ctx, app)}
+${supportPanel(support, app !== undefined)}
 <p class="meta" id="version">Version ${version}</p>`, ctx)
 }
