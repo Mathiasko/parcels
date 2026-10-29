@@ -1,5 +1,5 @@
-import { lstatSync, readFileSync, rmSync } from 'node:fs'
-import { dirname, isAbsolute, join } from 'node:path'
+import { lstatSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { checkAppBundle, isVersion, stagingDir, type BundleRefusal, type RunResult } from '../src/core/app-update.js'
 
 /**
@@ -48,11 +48,14 @@ const usablePath = (p: string): boolean => p !== '' && isAbsolute(p) && !p.inclu
  *
  * Waiting: `kill -0` alone is true for any process that has the PID, and after Parcels quits the
  * number can be given to another program, which could keep the script waiting for nothing. So the
- * process must also still be running an executable inside the app (`ps -o comm=` reports the path
- * it was started from, which for an app LaunchServices opens is the bundle's real path). When `ps`
- * says nothing, the process ended between the two questions and the next round sees that. The wait is
- * also bounded: past `waitSeconds` the script gives up, swaps nothing and opens the old app, which
- * still has the update ready on its Health page.
+ * process must also still look like Parcels to `ps -o comm=`, which on macOS reports argv[0]: the
+ * executable's path when LaunchServices opened the app, but whatever the launcher passed otherwise.
+ * So any of these counts: a path inside the app, any path ending in /Contents/MacOS/Parcels (the same
+ * app seen through another path), or a bare `Parcels` or `./Parcels`. Erring towards "still Parcels"
+ * only makes the wait longer, never the swap earlier. When `ps` says nothing, the process ended
+ * between the two questions and the next round sees that. The wait is bounded either way: past
+ * `waitSeconds` the script gives up, swaps nothing and opens the old app, which still has the update
+ * ready on its Health page.
  *
  * `open` runs with ELECTRON_RUN_AS_NODE removed (spec §10): `open` passes its environment on, and
  * with that variable set the app's binary runs as plain Node and exits at once. It is looked up on
@@ -82,14 +85,17 @@ marker=${shQuote(p.marker)}
 old="$app.old-$version"
 tries=${wait * 5}
 
-# True while the app that wrote this script is still running: the PID is alive and still runs an
-# executable inside the app, so a PID handed to another program after Parcels quit does not count.
+# True while the app that wrote this script is still running: the PID is alive and its argv[0] (what
+# ps calls comm) still looks like Parcels, so a PID handed to another program after Parcels quit does
+# not count. Anything Parcels-like counts, because a wrong "yes" only waits longer, within the bound.
 still_running() {
   kill -0 "$pid" 2>/dev/null || return 1
   comm=$(ps -p "$pid" -o comm= 2>/dev/null)
   case "$comm" in
     '') return 0 ;;
     "$app"/*) return 0 ;;
+    */Contents/MacOS/Parcels) return 0 ;;
+    Parcels|./Parcels) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -131,6 +137,8 @@ if mv "$old" "$app"; then
   relaunch "$app"
 else
   failed
+  # Best effort only: the .old name has no .app extension, so Finder and LaunchServices most likely
+  # take it for a plain folder and this opens a Finder window rather than Parcels.
   relaunch "$old"
 fi
 exit 1
@@ -162,17 +170,75 @@ export interface VerifyStagedDeps {
  * identity checks as at staging (`checkAppBundle`).
  */
 export async function verifyStaged(d: VerifyStagedDeps): Promise<BundleRefusal | undefined> {
+  return stagedPathRefusal(d.appBundle, d.version, d.staged)
+    ?? checkAppBundle(d.staged, d.version, d.expectedCertSha, d.run, d.workDir)
+}
+
+/**
+ * The cheap half of `verifyStaged`, shared with the reveal after a failed swap: `staged` must be
+ * exactly the folder Parcels stages `version` in beside `appBundle`, and still a real folder there,
+ * not a link. Both callers act on a path that came from somewhere the user, or anything running as
+ * the user, can write (a message, a marker file), so neither may act on any other path.
+ */
+export function stagedPathRefusal(appBundle: string, version: string, staged: string): BundleRefusal | undefined {
   const NOT_OURS = 'The update was not where Parcels put it, so it was not installed.'
-  if (!isVersion(d.version) || d.appBundle === '' || !isAbsolute(d.appBundle)) return { reason: NOT_OURS }
-  const expected = join(stagingDir(d.appBundle, d.version), 'Parcels.app')
-  if (d.staged !== expected) return { reason: NOT_OURS, detail: `${d.staged} != ${expected}` }
+  if (!isVersion(version) || appBundle === '' || !isAbsolute(appBundle)) return { reason: NOT_OURS }
+  const expected = join(stagingDir(appBundle, version), 'Parcels.app')
+  if (staged !== expected) return { reason: NOT_OURS, detail: `${staged} != ${expected}` }
   let isDir = false
   try {
-    const st = lstatSync(d.staged)
+    const st = lstatSync(staged)
     isDir = st.isDirectory() && !st.isSymbolicLink()
   } catch { /* gone */ }
   if (!isDir) return { reason: 'The downloaded update is no longer there, so it was not installed.' }
-  return checkAppBundle(d.staged, d.version, d.expectedCertSha, d.run, d.workDir)
+  return undefined
+}
+
+/**
+ * What to show in Finder after a failed swap, or undefined for nothing. The marker is read and removed
+ * (`readSwapFailedMarker`), and its path is revealed only when it is the staged copy Parcels made for
+ * that version beside the running app (`stagedPathRefusal`). Otherwise a planted marker could make
+ * Parcels's own "drag this into Applications" dialog point at any app on the disk. A refusal is logged
+ * and nothing is shown.
+ */
+export function failedSwapToReveal(
+  markerPath: string, appBundle: string, log: (line: string) => void,
+): { version: string; staged: string } | undefined {
+  const failed = readSwapFailedMarker(markerPath)
+  if (!failed) return undefined
+  const refused = stagedPathRefusal(appBundle, failed.version, failed.staged)
+  if (refused) {
+    log(`not revealing ${failed.staged} after the failed swap to ${failed.version}: ${refused.reason}${refused.detail ? ` (${refused.detail})` : ''}`)
+    return undefined
+  }
+  return failed
+}
+
+/**
+ * Removes `<app>.old-<version>` copies beside the app. The swap script deletes its .old copy right
+ * after the new app is in place; an `rm -rf` that was cut off or refused (chflags, immutable files)
+ * would otherwise leave half an app in /Applications for good, since the staging clean-up only knows
+ * the `.Parcels-update-*` names. Only names that match exactly with a real version are touched. The
+ * running bundle cannot be one of them, even when a double failure left it running from an .old copy,
+ * because the pattern is its own name plus `.old-`. A link is removed as a link (rmSync does not follow it). A copy that
+ * cannot be removed is logged and left; this never throws.
+ */
+export function sweepOldCopies(appBundle: string, log: (line: string) => void): void {
+  if (appBundle === '' || !isAbsolute(appBundle)) return
+  const parent = dirname(appBundle)
+  const prefix = `${basename(appBundle)}.old-`
+  let names: string[]
+  try { names = readdirSync(parent) } catch { return }
+  for (const name of names) {
+    if (!name.startsWith(prefix) || !isVersion(name.slice(prefix.length))) continue
+    const path = join(parent, name)
+    try {
+      rmSync(path, { recursive: true, force: true })
+      log(`removed ${path}, left by an earlier update`)
+    } catch (err) {
+      log(`could not remove ${path}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
 }
 
 /**

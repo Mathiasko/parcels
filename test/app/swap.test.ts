@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import {
-  readSwapFailedMarker, shQuote, swapScript, SWAP_WAIT_SECONDS, verifyStaged, type VerifyStagedDeps,
+  failedSwapToReveal, readSwapFailedMarker, shQuote, sweepOldCopies, swapScript, SWAP_WAIT_SECONDS, verifyStaged,
+  type VerifyStagedDeps,
 } from '../../app/swap.js'
 import { APP_BUNDLE_ID, CODESIGN, PLUTIL, stagingDir } from '../../src/core/app-update.js'
 
@@ -94,16 +95,26 @@ function fixture(parent = 'Applications', o: { staged?: boolean } = {}) {
     return { code: r.status, stderr: r.stderr, ms: Date.now() - started }
   }
 
-  /** A process whose executable is inside the installed app, as the running Parcels's is. */
-  const startAppProcess = (seconds: number): number => {
-    const exe = join(app, 'Contents', 'MacOS', 'Parcels')
+  /**
+   * A process standing in for the running Parcels. `ps -o comm=` reports its argv[0], so `how` picks
+   * what that is: the executable inside the installed app (`in-app`), an app's executable somewhere
+   * else (`elsewhere`, a path that only ends in /Contents/MacOS/Parcels), or `./Parcels`, launched
+   * from inside its MacOS folder (`relative`).
+   */
+  const startAppProcess = (seconds: number, how: 'in-app' | 'elsewhere' | 'relative' = 'in-app'): number => {
+    const bundle = how === 'elsewhere' ? join(root, 'Seen elsewhere', 'Parcels.app') : app
+    const macos = join(bundle, 'Contents', 'MacOS')
+    mkdirSync(macos, { recursive: true })
     // A link to /bin/sleep: a copy of a system binary is killed by code signing, a link is not, and
-    // ps reports the path the process was started from, which is inside the app.
-    symlinkSync('/bin/sleep', exe)
+    // ps reports argv[0], the path it was started by.
+    symlinkSync('/bin/sleep', join(macos, 'Parcels'))
     // Started in the background by a shell that exits at once, so it is launchd's child, as the real
     // app is, and is reaped when it ends. As this test's own child it would linger as a zombie while
     // spawnSync blocks, and kill -0 would go on finding it.
-    const r = spawnSync('/bin/sh', ['-c', '"$0" "$1" >/dev/null 2>&1 & echo $!', exe, String(seconds)], { encoding: 'utf8' })
+    const script = how === 'relative'
+      ? 'cd "$0" || exit 1; ./Parcels "$1" >/dev/null 2>&1 & echo $!'
+      : '"$0/Parcels" "$1" >/dev/null 2>&1 & echo $!'
+    const r = spawnSync('/bin/sh', ['-c', script, macos, String(seconds)], { encoding: 'utf8' })
     const pid = Number(r.stdout.trim())
     sleepers.push(pid)
     return pid
@@ -199,6 +210,16 @@ describe('swapScript, run for real by /bin/sh on temporary folders', () => {
     expect(r.code).toBe(0)
     expect(r.ms).toBeGreaterThanOrEqual(700)
     expect(readdirSync(f.app).sort()).toEqual(['v2'])
+  })
+
+  test('a process whose argv[0] is an app executable seen by another path, or ./Parcels, is still waited for', () => {
+    for (const how of ['elsewhere', 'relative'] as const) {
+      const f = fixture(`Applications ${how}`)
+      const r = f.run(f.startAppProcess(1, how))
+      expect(r.code).toBe(0)
+      expect(r.ms).toBeGreaterThanOrEqual(700)
+      expect(readdirSync(f.app).sort()).toEqual(['v2'])
+    }
   })
 
   test('an app that never exits is given up on after the bound: nothing is swapped and the old app is opened', () => {
@@ -343,6 +364,141 @@ describe('verifyStaged', () => {
   test('another bundle identifier, or another version, is refused', async () => {
     await refused(setup({ bundleId: 'local.parcelsspike.app' }).deps, /not the version it claims/)
     await refused(setup({ bundleVersion: '0.1.9' }).deps, /not the version it claims/)
+  })
+})
+
+describe('failedSwapToReveal', () => {
+  const setup = () => {
+    const appBundle = join(root, 'Applications', 'Parcels.app')
+    const staged = join(stagingDir(appBundle, VERSION), 'Parcels.app')
+    mkdirSync(staged, { recursive: true })
+    mkdirSync(appBundle, { recursive: true })
+    const marker = join(root, 'swap-failed')
+    const logged: string[] = []
+    const reveal = (text: string) => {
+      writeFileSync(marker, text)
+      const out = failedSwapToReveal(marker, appBundle, line => logged.push(line))
+      expect(existsSync(marker)).toBe(false)
+      return out
+    }
+    return { appBundle, staged, logged, reveal }
+  }
+
+  test('the staged copy Parcels made for that version is revealed', () => {
+    const s = setup()
+    expect(s.reveal(`${VERSION}\n${s.staged}`)).toEqual({ version: VERSION, staged: s.staged })
+  })
+
+  test('a path anywhere else is never revealed, however plausible, and the refusal is logged', () => {
+    const s = setup()
+    const evil = join(root, 'Downloads', 'Evil.app')
+    mkdirSync(evil, { recursive: true })
+    for (const staged of [evil, join(stagingDir(s.appBundle, '0.9.9'), 'Parcels.app'), `${s.staged}/`]) {
+      expect(s.reveal(`${VERSION}\n${staged}`)).toBeUndefined()
+    }
+    // The version and the path must belong together: another version's folder is not this one's.
+    mkdirSync(join(stagingDir(s.appBundle, '0.9.9'), 'Parcels.app'), { recursive: true })
+    expect(s.reveal(`${VERSION}\n${join(stagingDir(s.appBundle, '0.9.9'), 'Parcels.app')}`)).toBeUndefined()
+    expect(s.logged.length).toBeGreaterThanOrEqual(4)
+  })
+
+  test('a link at the right path is not revealed', () => {
+    const s = setup()
+    rmSync(s.staged, { recursive: true })
+    symlinkSync(join(root, 'Applications'), s.staged)
+    expect(s.reveal(`${VERSION}\n${s.staged}`)).toBeUndefined()
+  })
+
+  test('a staged copy that is gone is not revealed', () => {
+    const s = setup()
+    rmSync(s.staged, { recursive: true })
+    expect(s.reveal(`${VERSION}\n${s.staged}`)).toBeUndefined()
+  })
+
+  test('a garbage version, or a running app outside a bundle, reveals nothing', () => {
+    const s = setup()
+    expect(s.reveal(`../../x\n${s.staged}`)).toBeUndefined()
+    expect(s.reveal(`failed\n`)).toBeUndefined()
+    writeFileSync(join(root, 'swap-failed'), `${VERSION}\n${s.staged}`)
+    expect(failedSwapToReveal(join(root, 'swap-failed'), '', () => {})).toBeUndefined()
+  })
+
+  test('no marker is nothing to do, and nothing is logged', () => {
+    const s = setup()
+    expect(failedSwapToReveal(join(root, 'none'), s.appBundle, line => s.logged.push(line))).toBeUndefined()
+    expect(s.logged).toEqual([])
+  })
+})
+
+describe('sweepOldCopies', () => {
+  const setup = () => {
+    const apps = join(root, 'Applications')
+    const appBundle = join(apps, 'Parcels.app')
+    mkdirSync(appBundle, { recursive: true })
+    const logged: string[] = []
+    return { apps, appBundle, logged, sweep: () => sweepOldCopies(appBundle, line => logged.push(line)) }
+  }
+  const halfDeleted = (path: string) => {
+    mkdirSync(join(path, 'Contents', 'Frameworks'), { recursive: true })
+    writeFileSync(join(path, 'Contents', 'Frameworks', 'left'), 'x')
+  }
+
+  test('removes half-deleted Parcels.app.old-<version> copies beside the app', () => {
+    const s = setup()
+    halfDeleted(join(s.apps, 'Parcels.app.old-0.1.0'))
+    halfDeleted(join(s.apps, 'Parcels.app.old-0.2.0-a'))
+    s.sweep()
+    expect(readdirSync(s.apps).sort()).toEqual(['Parcels.app'])
+    expect(s.logged.join('\n')).toMatch(/Parcels\.app\.old-0\.1\.0/)
+  })
+
+  test('touches only names that match exactly with a real version', () => {
+    const s = setup()
+    const keep = ['Parcels.app.old-notaversion', 'Parcels.app.old-0.2.0x', 'Parcels.app.old-', 'Other.app.old-0.2.0',
+      'xParcels.app.old-0.2.0', 'Parcels.app.old-../x', '.Parcels-update-0.2.0']
+    for (const n of keep.filter(n => !n.includes('/'))) halfDeleted(join(s.apps, n))
+    s.sweep()
+    expect(readdirSync(s.apps).sort()).toEqual(['Parcels.app', ...keep.filter(n => !n.includes('/'))].sort())
+  })
+
+  test('a link with the name is removed as a link; what it points at is left alone', () => {
+    const s = setup()
+    const target = join(root, 'precious')
+    halfDeleted(target)
+    symlinkSync(target, join(s.apps, 'Parcels.app.old-0.1.0'))
+    s.sweep()
+    expect(existsSync(join(s.apps, 'Parcels.app.old-0.1.0'))).toBe(false)
+    expect(readdirSync(join(target, 'Contents', 'Frameworks'))).toEqual(['left'])
+  })
+
+  test('a copy that cannot be removed is logged, and the rest are still swept', () => {
+    const s = setup()
+    const stuck = join(s.apps, 'Parcels.app.old-0.1.0')
+    halfDeleted(stuck)
+    halfDeleted(join(s.apps, 'Parcels.app.old-0.1.1'))
+    // A folder whose contents cannot be removed, standing in for chflags or immutable files.
+    chmodSync(join(stuck, 'Contents', 'Frameworks'), 0o555)
+    try {
+      expect(() => s.sweep()).not.toThrow()
+      expect(existsSync(join(s.apps, 'Parcels.app.old-0.1.1'))).toBe(false)
+      expect(existsSync(stuck)).toBe(true)
+      expect(s.logged.join('\n')).toMatch(/could not remove .*Parcels\.app\.old-0\.1\.0/)
+    } finally {
+      chmodSync(join(stuck, 'Contents', 'Frameworks'), 0o755)
+    }
+  })
+
+  test('the running bundle itself is never swept, even when it runs from an .old copy', () => {
+    const s = setup()
+    const running = join(s.apps, 'Parcels.app.old-0.1.0')
+    halfDeleted(running)
+    sweepOldCopies(running, () => {})
+    expect(existsSync(running)).toBe(true)
+  })
+
+  test('an app outside a bundle, or a folder that cannot be read, sweeps nothing and does not throw', () => {
+    expect(() => sweepOldCopies('', () => {})).not.toThrow()
+    expect(() => sweepOldCopies(join(root, 'nowhere', 'Parcels.app'), () => {})).not.toThrow()
   })
 })
 

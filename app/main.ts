@@ -13,7 +13,7 @@ import { finishInterruptedMoveIn, moveIn, type MoveInDeps, type MoveInResult } f
 import { appPaths, bundlePath } from './paths.js'
 import { readPages, registerFirstRun, SCHEME } from './protocol.js'
 import { Supervisor, type Child } from './supervise.js'
-import { readSwapFailedMarker, swapScript, verifyStaged } from './swap.js'
+import { failedSwapToReveal, swapScript, sweepOldCopies, verifyStaged } from './swap.js'
 import { createTray, type ParcelsTray } from './tray.js'
 import { allowFirstRunPages, currentWindow, openWindow } from './window.js'
 
@@ -421,6 +421,8 @@ async function run(): Promise<void> {
     openFirstRun(first)
   }
   revealFailedSwap()
+  // A dev run's bundle is node_modules' Electron.app, whose neighbours are none of Parcels's business.
+  if (app.isPackaged) sweepOldCopies(bundlePath(process.execPath), log)
   startedUp = true
 }
 
@@ -509,13 +511,13 @@ async function installAndRelaunch(staged: string, version: string): Promise<void
 /**
  * After a swap that could not move the new version into place, the script reopened this (old) app
  * and left a marker. The staged copy is shown in Finder so the user can finish by dragging it in. The
- * marker goes either way, so the message is shown once.
+ * marker goes either way, so the message is shown once; and only Parcels's own staged copy for that
+ * version is ever shown (`failedSwapToReveal`), never whatever path a marker names.
  */
 function revealFailedSwap(): void {
-  const failedSwap = readSwapFailedMarker(swapFailedPath)
+  const failedSwap = failedSwapToReveal(swapFailedPath, bundlePath(process.execPath), log)
   if (!failedSwap) return
   log(`the swap to ${failedSwap.version} failed; showing ${failedSwap.staged}`)
-  if (!existsSync(failedSwap.staged)) return
   shell.showItemInFolder(failedSwap.staged)
   void dialog.showMessageBox({
     type: 'info',
