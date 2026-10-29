@@ -29,6 +29,16 @@ protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: 
 
 const paths = appPaths(homedir())
 
+/**
+ * A smoke run (scripts/app/smoke.sh): the built app starts its server and quits on SIGTERM, with no
+ * window or Dock icon (only the menu-bar icon, for those few seconds) and nothing changed on the Mac.
+ * It skips the login item, the offer to move to Applications and the window, and refuses to show a
+ * first-run page: the smoke script writes the config, on a free port, into a temporary HOME. It is
+ * read from the environment only, never from the command line, so it holds in a packaged build too,
+ * which is the build the smoke test is for.
+ */
+const smoke = process.env.PARCELS_SMOKE === '1'
+
 // Chromium's own state (cookies, caches, the GPU cache) gets a folder of its own inside the support
 // folder, instead of being spread among config.json and data/. It is also placed from HOME: Electron's
 // default comes from macOS, which ignores HOME, so a run with a temporary home would otherwise write
@@ -229,7 +239,7 @@ async function run(): Promise<void> {
   app.on('window-all-closed', () => {})
 
   await app.whenReady()
-  log(`starting ${app.getVersion()}${app.isPackaged ? '' : ' (dev run)'}`)
+  log(`starting ${app.getVersion()}${app.isPackaged ? '' : ' (dev run)'}${smoke ? ' (smoke run)' : ''}`)
   // Logout, restart and shutdown take the same path as Quit, so the server is stopped cleanly. The
   // event's preventDefault asks macOS to wait while that happens; Electron's typings leave the event
   // out of the listener, so it is taken from the arguments.
@@ -240,11 +250,18 @@ async function run(): Promise<void> {
 
   const first = decideFirstRun(paths)
   log(`first run: ${first.kind}${first.kind === 'move-in' ? ` from ${first.clone}` : ''}`)
+  if (smoke && first.kind !== 'ready') {
+    // A first-run page would wait for a click that never comes, and a move in would act on whatever
+    // install the temporary HOME points at. Either way the smoke run is set up wrong; say so and stop.
+    log(`smoke run: no config at ${paths.config}, so there is nothing to start`)
+    app.exit(2)
+    return
+  }
 
   // Asked once the route is known but before anything acts on it: no server, no window, no move in
   // has started, so a move that quits and relaunches the app cuts nothing off, and the relaunched app
   // decides its route again from where it now lives. A "no" lasts for this launch only.
-  const moved = await offerMoveToApplications({
+  const moved = smoke ? 'not-offered' : await offerMoveToApplications({
     packaged: app.isPackaged,
     bundle: bundlePath(process.execPath),
     home: homedir(),
@@ -265,10 +282,11 @@ async function run(): Promise<void> {
   // Opened at login: Parcels starts in the menu bar only, with no Dock icon and no window. A Mac that
   // is not set up yet shows its first-run page either way.
   const atLogin = first.kind === 'ready' && app.getLoginItemSettings().wasOpenedAtLogin
-  if (atLogin) app.dock?.hide()
+  // A smoke run starts the same way, so that no window or Dock icon appears.
+  if (atLogin || smoke) app.dock?.hide()
 
   let port = configPort()
-  let shownAtStart = atLogin
+  let shownAtStart = atLogin || smoke
   /** The page the dashboard opens on when the server first answers: `/settings` after Welcome. */
   let firstPath: string | undefined
   const origin = () => dashboardOrigin(port)
@@ -532,8 +550,8 @@ function revealFailedSwap(): void {
  * node_modules' Electron.app, which must not become a login item on this Mac.
  */
 function setLoginItemOnce(): void {
-  if (!app.isPackaged) {
-    log('login item left alone: this is a dev run')
+  if (!app.isPackaged || smoke) {
+    log(`login item left alone: this is a ${smoke ? 'smoke' : 'dev'} run`)
     return
   }
   const marker = join(paths.support, '.login-item-set')

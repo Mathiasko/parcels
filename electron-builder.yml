@@ -1,0 +1,67 @@
+# The Mac app's packaging (spec §5, §10). `npm run app:dist` builds both Macs' apps into release/;
+# scripts/app/release.sh publishes them.
+appId: local.parcels.app            # Tasks 6 and 10 pin this bundle id: the updater refuses any other.
+productName: Parcels
+artifactName: "Parcels-${version}-${arch}.${ext}"   # The updater downloads exactly these names.
+directories:
+  output: release/
+
+files:
+  - dist/**
+  - dist-app/**
+  - app/pages/**
+  - app/assets/**
+  - package.json
+  - node_modules/**
+  # better-sqlite3 loads its prebuilt prebuilds/darwin-<arch>.node (spec §10), so SQLite's C source,
+  # the node-gyp build folder and the other platforms' prebuilds are dead weight: about 24 MB a Mac.
+  - "!node_modules/better-sqlite3/deps/**"
+  - "!node_modules/better-sqlite3/src/**"
+  - "!node_modules/better-sqlite3/build/**"
+  - "!node_modules/better-sqlite3/prebuilds/{linux,linuxmusl,win32}-*.node"
+
+# Into Contents/Resources, where the server reads them through PARCELS_RESOURCES (ruling R3): the
+# filter the settings page offers, and the certificate hash every update is checked against. Without
+# the hash the app refuses every update, so it is named file to file rather than copied with its folder.
+extraResources:
+  - from: gmail-filter.xml
+    to: gmail-filter.xml
+  - from: app/signing-cert.sha256
+    to: signing-cert.sha256
+
+# The app's code stays in app.asar, which the server process reads from (spec §10.5); native modules
+# cannot be loaded from inside an archive, so they are unpacked beside it.
+asar: true
+asarUnpack:
+  - "**/*.node"
+
+# better-sqlite3 ships an N-API prebuild that loads in Electron as it is, and @electron/rebuild would
+# only run in place on the repository's node_modules, which vitest and the git install use (R4).
+npmRebuild: false
+
+# With RunAsNode on, ELECTRON_RUN_AS_NODE in the environment (some terminals and Electron-based tools
+# set it) turns the app's binary into plain Node, which exits at once. The server process is a
+# utilityProcess, which this fuse does not affect. after-pack.mjs flips the fuses before it signs.
+electronFuses:
+  runAsNode: false
+
+afterPack: ./scripts/app/after-pack.mjs
+
+mac:
+  # Both Macs get their own build, so each download carries only its own Electron. (electron-builder
+  # takes the architectures per target; there is no mac.arch.)
+  target:
+    - target: zip
+      arch: [arm64, x64]
+    - target: dmg
+      arch: [arm64, x64]
+  # Signed by after-pack.mjs, not here: electron-builder will not sign with an untrusted identity.
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  notarize: false
+  extendInfo:
+    # A normal app with a Dock icon while its window is open; a launch at login hides the icon.
+    LSUIElement: false
+    # Shown by macOS when Parcels first asks to talk to Calendar.
+    NSAppleEventsUsageDescription: Parcels adds pickups to Calendar when you ask it to.
