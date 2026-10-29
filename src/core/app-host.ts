@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
+import { homedir } from 'node:os'
+import { dirname, join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { loadRuntimeConfig, type Config } from './config.js'
 import type { ToMain, ToServer } from './app-ipc.js'
@@ -9,7 +12,14 @@ import { openDb, type Database } from '../db/index.js'
 import { readyCount } from '../db/parcels.js'
 import { createAppNotifier } from '../notify/send.js'
 import { runPollOnce } from '../poll.js'
-import { buildServer, refreshIdle, startServer, type WebDeps } from '../web/server.js'
+import { buildServer, refreshIdle, startServer, type AppWebDeps, type WebDeps } from '../web/server.js'
+import {
+  appUpdateStatusPath, defaultDownload, readAppUpdateStatus, runCommand, stageUpdate, writeAppUpdateStatus,
+  type AppUpdateStatus, type StageDeps,
+} from './app-update.js'
+import { resourceRoot } from './host.js'
+import { appVersion } from './version.js'
+import { recordUpdateInstalled } from '../db/update-state.js'
 
 /** The longest delay `setTimeout` honours; anything larger fires at once, so it is clamped to this. */
 const MAX_TIMER_MS = 2 ** 31 - 1
@@ -26,6 +36,8 @@ export interface AppHostDeps {
   web?: Partial<WebDeps>
   /** Overrides `config.port`; tests pass 0 and read the real port back from `AppHost.port`. */
   port?: number
+  /** The environment the main process set (`PARCELS_APP_VERSION`, `PARCELS_APP_BUNDLE`, ...); tests pass their own. */
+  env?: NodeJS.ProcessEnv
 }
 
 export interface AppHost {
@@ -48,6 +60,64 @@ const defaultSetTimer = (fn: () => void, ms: number) => {
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
 /**
+ * The SHA-256 of the certificate the bundle was signed with, as shipped in its Resources folder
+ * (`app/signing-cert.sha256`). Read when an update is staged rather than at startup, so a missing file
+ * costs nothing until it matters; then it is empty, and `stageUpdate` refuses with a sentence rather
+ * than trusting whatever it downloaded.
+ */
+function shippedCertSha(env: NodeJS.ProcessEnv): string {
+  try { return readFileSync(join(resourceRoot(env), 'signing-cert.sha256'), 'utf8').trim() } catch { return '' }
+}
+
+/**
+ * The staging the dashboard's Update now runs: `stageUpdate` with what only this process knows (the
+ * Mac it runs on and the certificate in its bundle) and the real download and commands. `process.arch`
+ * is passed through as it is: on anything but arm64 or x64, `stageUpdate` refuses with a sentence.
+ * Exported, with the staging injectable, so a test can check what is passed without downloading anything.
+ */
+export function appStage(
+  env: NodeJS.ProcessEnv, stage: (d: StageDeps) => Promise<AppUpdateStatus> = stageUpdate,
+): NonNullable<AppWebDeps['stage']> {
+  return d => stage({
+    ...d,
+    arch: process.arch as StageDeps['arch'],
+    expectedCertSha: shippedCertSha(env),
+    download: defaultDownload,
+    run: runCommand,
+  })
+}
+
+/**
+ * Settles what an earlier run of the app left in the updater's status file, before anyone reads it.
+ *
+ * - `staged` for the version now running: the swap worked and this is the new app, so it becomes
+ *   `installed` (Health then says "Updated to <v>."), and the check from before the update, which still
+ *   offers this very version, becomes `current`, as the git updater's `recordUpdateInstalled` does.
+ * - `downloading`: the staging runs inside the server process, so a download that is "going" while a
+ *   new process starts died with the old one. It becomes `failed`, so the button comes back at once
+ *   instead of after the staleness bound.
+ *
+ * Never throws: a status file that cannot be settled must not stop the dashboard from starting.
+ */
+function settleUpdateStatus(db: Database, supportDir: string, version: string, at: Date): void {
+  const path = appUpdateStatusPath(supportDir)
+  try {
+    const s = readAppUpdateStatus(path)
+    if (s?.state === 'staged' && s.version === version) {
+      writeAppUpdateStatus(path, { state: 'installed', version, finishedAt: at })
+      recordUpdateInstalled(db, undefined, at)
+    } else if (s?.state === 'downloading') {
+      writeAppUpdateStatus(path, {
+        state: 'failed', version: s.version, startedAt: s.startedAt, finishedAt: at,
+        reason: 'The download stopped when Parcels restarted, so nothing was changed. Press Update now to try again.',
+      })
+    }
+  } catch (err) {
+    console.error(`app-host: could not settle the update status: ${message(err)}`)
+  }
+}
+
+/**
  * The Mac app's server process, minus the Electron glue (`src/app-server.ts` holds that): the same
  * dashboard `src/server.ts` serves, plus the poll schedule launchd runs for the git install, plus the
  * messages that keep the menu-bar icon's count right.
@@ -60,9 +130,31 @@ const message = (err: unknown) => (err instanceof Error ? err.message : String(e
 export async function startAppHost(deps: AppHostDeps): Promise<AppHost> {
   const now = deps.now ?? (() => new Date())
   const setTimer = deps.setTimer ?? defaultSetTimer
+  const env = deps.env ?? process.env
   const config = loadRuntimeConfig(deps.configPath)
   initRuntime(config)
   const db = openDb(config.dbPath)
+
+  // What the dashboard says about the app, from the environment the main process sets. The support
+  // folder is where the config file is (PARCELS_CONFIG). The version is PARCELS_APP_VERSION; a test's
+  // fixed `web.version` comes next, so building the server in a test spawns no git; and the checkout's
+  // answer is the last resort. The process start is when this server started, which "running for"
+  // counts from; PARCELS_RESTARTS is read per request, so it is whatever the main process last set.
+  const supportDir = dirname(deps.configPath)
+  const version = env.PARCELS_APP_VERSION || deps.web?.version || appVersion()
+  const appDeps: AppWebDeps = {
+    supportDir,
+    logDir: env.PARCELS_LOG_DIR || join(homedir(), 'Library', 'Logs', 'Parcels'),
+    appBundle: env.PARCELS_APP_BUNDLE ?? '',
+    version,
+    startedAt: new Date(Date.now() - process.uptime() * 1000),
+    restarts: () => {
+      const n = Number(env.PARCELS_RESTARTS ?? 0)
+      return Number.isInteger(n) && n >= 0 ? n : 0
+    },
+    stage: appStage(env),
+  }
+  settleUpdateStatus(db, supportDir, version, now())
   // The app notifier goes to both the dashboard's refresh and the scheduled poll: inside the bundle the
   // configured terminal-notifier or osascript would post under the wrong identity, or not at all.
   const notifier = createAppNotifier(deps.post)
@@ -87,6 +179,7 @@ export async function startAppHost(deps: AppHostDeps): Promise<AppHost> {
     built = buildServer({
       notifier,
       ...(deps.now ? { now: deps.now } : {}),
+      app: appDeps,
       ...deps.web,
       db, config, configPath: deps.configPath,
     })
@@ -138,7 +231,7 @@ export async function startAppHost(deps: AppHostDeps): Promise<AppHost> {
     if (closing) return
     const from = Math.max(now().getTime(), firedSlot?.getTime() ?? 0)
     const slot = nextSlot(new Date(from))
-    timer = setTimer(() => { firedSlot = slot; void runScheduled() }, slot.getTime() - now().getTime())
+    timer = setTimer(() => { firedSlot = slot; void runScheduled(slot) }, slot.getTime() - now().getTime())
   }
 
   /**
@@ -161,10 +254,14 @@ export async function startAppHost(deps: AppHostDeps): Promise<AppHost> {
    * trigger asked for, and it re-arms when it ends. (`claimRun` inside the poll is what keeps it apart
    * from a dashboard refresh or another process.) Never rejects: a failed poll is logged, and the
    * schedule carries on.
+   *
+   * `slot` is the slot a timer fired for. The run counts as that slot even when the timer fired a hair
+   * before it: recorded as "now", a run at 14:59:59.9 would leave the 15:00 slot looking missed, and a
+   * wake at 15:20 would poll a second time in the same hour.
    */
-  const runScheduled = (): Promise<void> => {
+  const runScheduled = (slot?: Date): Promise<void> => {
     if (inFlight || closing) return inFlight ?? Promise.resolve()
-    lastRun = now()
+    lastRun = new Date(Math.max(now().getTime(), slot?.getTime() ?? 0))
     inFlight = (async () => {
       try {
         await poll(db, freshConfig())
@@ -224,6 +321,11 @@ export async function startAppHost(deps: AppHostDeps): Promise<AppHost> {
     }
   }
 
-  arm()
+  // A slot that passed while the app was not running is polled once now, before the timer is armed (the
+  // run arms it when it ends): the app quit last night and opened at 10:20 has missed 07:00 to 10:00,
+  // and launchd would have coalesced those into one run on the next wake. Only when a poll is on record:
+  // a fresh install has nothing to catch up on, and the git install's poller does not run at load either.
+  if (lastRun !== undefined && missedSlot(lastRun, now())) void runScheduled()
+  else arm()
   return { handle, close, port }
 }

@@ -1,14 +1,18 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { AddressInfo } from 'node:net'
 import { createServer } from 'node:net'
-import { startAppHost, type AppHost, type AppHostDeps } from '../src/core/app-host.js'
+import { appStage, startAppHost, type AppHost, type AppHostDeps } from '../src/core/app-host.js'
+import {
+  appUpdateStatusPath, defaultDownload, readAppUpdateStatus, runCommand, writeAppUpdateStatus, type StageDeps,
+} from '../src/core/app-update.js'
+import { getUpdateCheck, recordUpdateCheck } from '../src/db/update-state.js'
 import { nextSlot } from '../src/core/schedule.js'
 import { recordPoll } from '../src/core/sleepgap.js'
 import type { Config } from '../src/core/config.js'
-import type { ToMain } from '../src/core/app-ipc.js'
+import { setMainChannel, type ToMain } from '../src/core/app-ipc.js'
 import { openDb, type Database } from '../src/db/index.js'
 import { insertParcel, readyCount, setArchived, updateParcelState } from '../src/db/parcels.js'
 import { listRuns } from '../src/db/poll-runs.js'
@@ -52,6 +56,7 @@ function harness(start: Date) {
 const hosts: AppHost[] = []
 const dirs: string[] = []
 afterEach(async () => {
+  setMainChannel(undefined)
   for (const h of hosts.splice(0)) await h.close()
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true })
 })
@@ -195,6 +200,156 @@ describe('startAppHost', () => {
     } finally {
       await new Promise(r => blocker.close(r))
     }
+  })
+})
+
+describe('the poll schedule catches up and never polls a slot twice', () => {
+  test('a start after a missed slot polls once before arming the timer', async () => {
+    const h = harness(at(10, 20))
+    const db = openDb(h.dbPath)
+    recordPoll(db, at(7, 0).getTime())   // the app was quit after the 07:00 poll
+    db.close()
+    await started(h)
+    await vi.waitFor(() => expect(h.polls).toHaveLength(1))
+    await vi.waitFor(() => expect(h.live()).toHaveLength(1))
+    expect(h.live()[0]!.ms).toBe(nextSlot(at(10, 20)).getTime() - at(10, 20).getTime())
+  })
+
+  test('a start with no slot missed since the last poll does not poll', async () => {
+    const h = harness(at(10, 20))
+    const db = openDb(h.dbPath)
+    recordPoll(db, at(10, 0).getTime())
+    db.close()
+    await started(h)
+    expect(h.polls).toHaveLength(0)
+    expect(h.live()).toHaveLength(1)
+  })
+
+  test('a timer that fires a moment early still counts as its slot, so a later wake in that hour does not poll again', async () => {
+    const h = harness(at(14, 50))
+    const db = openDb(h.dbPath)
+    recordPoll(db, at(14, 0).getTime())
+    db.close()
+    const host = await started(h)
+    expect(h.polls).toHaveLength(0)
+    // The 15:00 timer fires 100 ms before 15:00.
+    h.clock.now = new Date(at(15, 0).getTime() - 100)
+    h.live()[0]!.fn()
+    await vi.waitFor(() => expect(h.polls).toHaveLength(1))
+    await vi.waitFor(() => expect(h.live()).toHaveLength(1))
+    h.clock.now = at(15, 20)
+    await host.handle({ type: 'wake' })
+    expect(h.polls).toHaveLength(1)
+  })
+})
+
+describe('the app host fills in what the dashboard says about the app', () => {
+  const appEnv = (h: ReturnType<typeof harness>, over: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => ({
+    PARCELS_HOST: 'app',
+    PARCELS_CONFIG: h.configPath,
+    PARCELS_APP_VERSION: '0.3.0',
+    PARCELS_APP_BUNDLE: join(h.dir, 'Applications', 'Parcels.app'),
+    PARCELS_LOG_DIR: join(h.dir, 'Logs'),
+    PARCELS_RESTARTS: '2',
+    ...over,
+  })
+  // No fixed `version` here: the app's own comes from PARCELS_APP_VERSION.
+  const appWeb = { adapters: [], http: bodyHttp() }
+
+  test('Health shows the app\'s version and restarts from the environment', async () => {
+    const h = harness(at(8, 30))
+    const host = await started(h, { env: appEnv(h), web: appWeb })
+    const body = await (await fetch(`http://127.0.0.1:${host.port}/health`)).text()
+    expect(body).toContain('Parcels 0.3.0, running for')
+    expect(body).toContain('restarted 2 times')
+    expect(body).not.toContain('launchd')
+  })
+
+  test('Show in Finder reveals the folder the config file is in', async () => {
+    const h = harness(at(8, 30))
+    // The routes reach the main process through the channel src/app-server.ts sets; here, the harness's.
+    setMainChannel(h.deps.post)
+    const host = await started(h, { env: appEnv(h), web: appWeb })
+    const res = await fetch(`http://127.0.0.1:${host.port}/app/reveal-data`, {
+      method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: '',
+    })
+    expect(res.status).toBe(303)
+    expect(h.posted).toContainEqual({ type: 'reveal', path: dirname(h.configPath) })
+  })
+
+  test('a staged update of the version now running becomes installed, and Health says so', async () => {
+    const h = harness(at(8, 30))
+    const status = appUpdateStatusPath(dirname(h.configPath))
+    writeAppUpdateStatus(status, { state: 'staged', version: '0.3.0', staged: '/Applications/.Parcels-update-0.3.0/Parcels.app', startedAt: at(8, 0) })
+    // The check from before the update still says 0.3.0 is new; it is what is running now.
+    const db = openDb(h.dbPath)
+    recordUpdateCheck(db, { state: 'behind', behind: 1, changes: [], version: '0.3.0', upstream: 'GitHub Releases' }, at(7, 0))
+    db.close()
+    const host = await started(h, { env: appEnv(h), web: appWeb })
+    expect(readAppUpdateStatus(status)).toMatchObject({ state: 'installed', version: '0.3.0' })
+    const body = await (await fetch(`http://127.0.0.1:${host.port}/health`)).text()
+    expect(body).toContain('Updated to 0.3.0.')
+    expect(body).not.toContain('Update now</button>')
+  })
+
+  test('a staged update of another version is left staged', async () => {
+    const h = harness(at(8, 30))
+    const status = appUpdateStatusPath(dirname(h.configPath))
+    writeAppUpdateStatus(status, { state: 'staged', version: '0.4.0', staged: '/Applications/.Parcels-update-0.4.0/Parcels.app', startedAt: at(8, 0) })
+    await started(h, { env: appEnv(h), web: appWeb })
+    expect(readAppUpdateStatus(status)).toMatchObject({ state: 'staged', version: '0.4.0' })
+  })
+
+  test('a download a previous run left unfinished is marked failed, so the button comes back', async () => {
+    const h = harness(at(8, 30))
+    const status = appUpdateStatusPath(dirname(h.configPath))
+    writeAppUpdateStatus(status, { state: 'downloading', version: '0.4.0', startedAt: at(8, 25) })
+    await started(h, { env: appEnv(h), web: appWeb })
+    expect(readAppUpdateStatus(status)).toMatchObject({ state: 'failed', version: '0.4.0' })
+  })
+
+  test('the stage it hands the dashboard adds this Mac\'s architecture, the shipped certificate, and the real effects', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'parcels-app-res-'))
+    dirs.push(dir)
+    writeFileSync(join(dir, 'signing-cert.sha256'), `${'ab'.repeat(32)}\n`)
+    const seen: StageDeps[] = []
+    const stage = appStage({ PARCELS_HOST: 'app', PARCELS_RESOURCES: dir }, async d => {
+      seen.push(d)
+      return { state: 'downloading', version: d.version, startedAt: at(9) }
+    })
+    await stage({ version: '0.4.0', appBundle: '/Applications/Parcels.app', supportDir: dir })
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toMatchObject({
+      version: '0.4.0', appBundle: '/Applications/Parcels.app', supportDir: dir,
+      arch: process.arch, expectedCertSha: 'ab'.repeat(32),
+    })
+    expect(seen[0]!.download).toBe(defaultDownload)
+    expect(seen[0]!.run).toBe(runCommand)
+  })
+
+  test('with no certificate file the stage gets an empty one, which it refuses', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'parcels-app-res-'))
+    dirs.push(dir)
+    mkdirSync(join(dir, 'empty'))
+    const seen: StageDeps[] = []
+    const stage = appStage({ PARCELS_HOST: 'app', PARCELS_RESOURCES: join(dir, 'empty') }, async d => {
+      seen.push(d)
+      return { state: 'downloading', version: d.version, startedAt: at(9) }
+    })
+    await stage({ version: '0.4.0', appBundle: '/Applications/Parcels.app', supportDir: dir })
+    expect(seen[0]!.expectedCertSha).toBe('')
+  })
+
+  test('the check before the update is replaced, so the page does not offer the running version again', async () => {
+    const h = harness(at(8, 30))
+    writeAppUpdateStatus(appUpdateStatusPath(dirname(h.configPath)), { state: 'staged', version: '0.3.0', staged: '/x/Parcels.app', startedAt: at(8, 0) })
+    const db = openDb(h.dbPath)
+    recordUpdateCheck(db, { state: 'behind', behind: 1, changes: ['x'], version: '0.3.0', upstream: 'GitHub Releases' }, at(7, 0))
+    db.close()
+    const host = await started(h, { env: appEnv(h), web: appWeb })
+    await host.close()
+    const check = openDb(h.dbPath)
+    try { expect(getUpdateCheck(check)).toMatchObject({ state: 'current' }) } finally { check.close() }
   })
 })
 
