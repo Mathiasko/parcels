@@ -707,6 +707,34 @@ describe('unsafeUnpackedTree', () => {
     expect(unsafeUnpackedTree(root, asListed(LEGIT_APP))).toBeUndefined()
   })
 
+  // Electron's fs reads an app.asar as a folder, so inside the app the walk found Parcels.app's
+  // app.asar to be "a dir the archive did not list as one" and refused every genuine update (the
+  // end-to-end test, Task 12). The walk must see the disk as it is: process.noAsar for its duration.
+  test('walks with Electron\'s asar support off, and puts it back as it was', () => {
+    const root = join(dir, 'staging')
+    const entries: WriteEntry[] = [...LEGIT_APP, { name: 'Parcels.app/Contents/Resources/app.asar', data: 'archive' }]
+    build(root, entries)
+    const seen: unknown[] = []
+    let value: unknown = false
+    const had = Object.getOwnPropertyDescriptor(process, 'noAsar')
+    Object.defineProperty(process, 'noAsar', {
+      configurable: true,
+      get: () => value,
+      set: v => { seen.push(v); value = v },
+    })
+    try {
+      expect(unsafeUnpackedTree(root, asListed(entries))).toBeUndefined()
+      expect(seen).toEqual([true, false])
+      // A refusal returns early, and still restores it.
+      seen.length = 0
+      expect(unsafeUnpackedTree(root, asListed(LEGIT_APP))).toMatch(/the archive did not list/)
+      expect(seen).toEqual([true, false])
+    } finally {
+      if (had) Object.defineProperty(process, 'noAsar', had)
+      else delete (process as { noAsar?: unknown }).noAsar
+    }
+  })
+
   test('a chain that only leaves the folder once the file system follows it is refused', () => {
     const root = join(dir, 'staging')
     const entries: WriteEntry[] = [{ name: 'Parcels.app/' }, { name: 'Parcels.app/x', link: '..' }, { name: 'Parcels.app/y', link: 'x/..' }]

@@ -391,7 +391,7 @@ export function unsafeZipEntry(entries: readonly ZipEntry[]): string | undefined
 
 /**
  * The ground truth, after `ditto` has run: the first reason the unpacked tree at `root` is not what
- * the archive listed, or `undefined` when it is.
+ * the archive listed, or `undefined` when it is. Walked with Electron's asar support off (see below).
  *
  * Walked with `lstat`, never following a link. Every file, directory and link found must be one the
  * directory listed, as the same kind (a directory may also be implied by a listed path below it), and
@@ -403,6 +403,21 @@ export function unsafeZipEntry(entries: readonly ZipEntry[]): string | undefined
  * judged by where it would lead.
  */
 export function unsafeUnpackedTree(root: string, entries: readonly ZipEntry[]): string | undefined {
+  // Inside the app this runs under Electron, whose fs reads an `.asar` file as a folder, so
+  // Parcels.app's own app.asar would be "a dir the archive did not list as one" and every genuine
+  // update would be refused. The walk must see the disk as it is. `process.noAsar` turns that off; the
+  // walk is synchronous, so nothing else runs while it is off. Plain Node ignores the property.
+  const proc = process as { noAsar?: boolean }
+  const before = proc.noAsar
+  proc.noAsar = true
+  try {
+    return unpackedTreeWhy(root, entries)
+  } finally {
+    proc.noAsar = before ?? false
+  }
+}
+
+function unpackedTreeWhy(root: string, entries: readonly ZipEntry[]): string | undefined {
   const listed = new Map<string, 'dir' | 'file' | 'link'>()
   const implied = new Set<string>()
   for (const e of entries) {
