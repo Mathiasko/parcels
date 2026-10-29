@@ -9,7 +9,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { CHANGE_MAX, CHANGES_SHOWN, REASON_MAX, type UpdateCheck } from './update.js'
-import { readZipEntries, unsafeZipEntry, ZipFormatError } from './zip-check.js'
+import { readZipEntries, unsafeUnpackedTree, unsafeZipEntry, ZipFormatError, type ZipEntry } from './zip-check.js'
 
 /**
  * Updating the Mac app from GitHub Releases (spec §5.2).
@@ -365,12 +365,13 @@ function removeLeftovers(appBundle: string, supportDir: string): void {
  *
  * Steps, in order, each one a reason to stop: download the zip and `SHA256SUMS`; compare the zip's
  * SHA-256 with its line there; read the zip's table of contents and refuse any entry that could land
- * outside the staging folder (`zip-check.ts`); unpack with `ditto` into the staging folder and find a
- * real `Parcels.app` in it; `codesign --verify --deep --strict` it; compare its leaf certificate's
- * SHA-256 with `expectedCertSha`; and read its Info.plist, whose bundle identifier must be Parcels's
- * and whose version must be the one that was asked for. On any failure both the staging folder and the downloads are removed, so a
- * half-checked app is never left where the swap could pick it up. On success only the staged app
- * remains. The status file says where it is at every step. Never throws.
+ * outside the staging folder (`zip-check.ts`); unpack with `ditto` into the staging folder, walk what
+ * it made against the archive's list (`unsafeUnpackedTree`), and find a real `Parcels.app` in it;
+ * `codesign --verify --deep --strict` it; compare its leaf certificate's SHA-256 with
+ * `expectedCertSha`; and read its Info.plist, whose bundle identifier must be Parcels's and whose
+ * version must be the one that was asked for. On any failure both the staging folder and the
+ * downloads are removed, so a half-checked app is never left where the swap could pick it up. On
+ * success only the staged app remains. The status file says where it is at every step. Never throws.
  */
 export async function stageUpdate(d: StageDeps): Promise<AppUpdateStatus> {
   const now = d.now ?? (() => new Date())
@@ -448,18 +449,30 @@ export async function stageUpdate(d: StageDeps): Promise<AppUpdateStatus> {
     // 3. Before anything unpacks it, prove no entry can land outside the staging folder. The checksum
     // above only shows the zip is the one its release lists; whoever controls the release controls
     // both, and the certificate check cannot run until the app has been unpacked.
+    const OUTSIDE = 'The download contains files that would land outside its folder, so it was thrown away.'
+    let entries: ZipEntry[] = []
     try {
-      const unsafe = unsafeZipEntry(readZipEntries(zip))
-      if (unsafe !== undefined) fail('The download contains files that would land outside its folder, so it was thrown away.', unsafe)
+      entries = readZipEntries(zip)
     } catch (err) {
-      if (err instanceof StageFailure) throw err
       fail('The download is not a zip this app can check, so it was thrown away.', err instanceof ZipFormatError ? err : String(err))
     }
+    const unsafe = unsafeZipEntry(entries)
+    if (unsafe !== undefined) fail(OUTSIDE, unsafe)
 
     // Unpack, and find a real app: a symlink named Parcels.app would point the checks, and later
     // the swap, at something outside the staging folder.
     const unpacked = await d.run(DITTO, ['-x', '-k', zip, staging])
     if (unpacked.code !== 0) fail('The download could not be unpacked, so it was not installed.', `ditto exited ${unpacked.code}`)
+    // ...and check what ditto actually made, not only what the archive said it would: nothing the
+    // archive did not list, and no link that leads out, lexically or on the real file system. On a
+    // refusal the clean-up's rmSync removes links themselves and never follows them.
+    let unpackedWhy: string | undefined
+    try {
+      unpackedWhy = unsafeUnpackedTree(staging, entries)
+    } catch (err) {
+      unpackedWhy = `the unpacked folder could not be read: ${err instanceof Error ? err.message : String(err)}`
+    }
+    if (unpackedWhy !== undefined) fail(OUTSIDE, unpackedWhy)
     let isApp = false
     try {
       const st = lstatSync(stagedApp)

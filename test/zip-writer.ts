@@ -16,6 +16,10 @@ export interface WriteEntry {
   hidden?: boolean
   /** A different name in the local header than in the central directory. */
   localName?: string
+  /** Values the local header claims instead of the true ones (the central directory keeps the truth). */
+  local?: { comp?: number; flags?: number; crc?: number; method?: number }
+  /** General-purpose flags for both headers (default 0x0800, UTF-8 names). */
+  flags?: number
 }
 
 const u16 = (n: number) => { const b = Buffer.alloc(2); b.writeUInt16LE(n); return b }
@@ -38,16 +42,19 @@ export function makeZip(entries: WriteEntry[], opts: { zip64?: boolean } = {}): 
     const localName = Buffer.from(e.localName ?? e.name)
     const crc = crc32(raw)
     const z = opts.zip64
+    const flags = e.flags ?? 0x0800
+    const lc = e.local?.comp
     const local = Buffer.concat([
-      u32(0x04034b50), u16(45), u16(0x0800), u16(method), u16(0), u16(0), u32(crc),
-      u32(z ? 0xffffffff : body.length), u32(z ? 0xffffffff : raw.length),
+      u32(0x04034b50), u16(45), u16(e.local?.flags ?? flags), u16(e.local?.method ?? method), u16(0), u16(0),
+      u32(e.local?.crc ?? crc),
+      u32(z ? 0xffffffff : lc ?? body.length), u32(z ? 0xffffffff : lc ?? raw.length),
       u16(localName.length), u16(z ? 20 : 0), localName,
       ...(z ? [u16(0x0001), u16(16), u64(raw.length), u64(body.length)] : []),
       body,
     ])
     if (!e.hidden) {
       centrals.push(Buffer.concat([
-        u32(0x02014b50), u16((3 << 8) | 45), u16(45), u16(0x0800), u16(method), u16(0), u16(0), u32(crc),
+        u32(0x02014b50), u16((3 << 8) | 45), u16(45), u16(flags), u16(method), u16(0), u16(0), u32(crc),
         u32(z ? 0xffffffff : body.length), u32(z ? 0xffffffff : raw.length),
         u16(name.length), u16(z ? 28 : 0), u16(0), u16(0), u16(0), u32(external), u32(z ? 0xffffffff : offset),
         name,
@@ -74,6 +81,19 @@ export function makeZip(entries: WriteEntry[], opts: { zip64?: boolean } = {}): 
     u32(opts.zip64 ? 0xffffffff : cd.length), u32(opts.zip64 ? 0xffffffff : cdOffset), u16(0),
   )
   return Buffer.concat([...locals, cd, ...tail])
+}
+
+/**
+ * A bare local header and its stored data, for smuggling an entry inside another entry's data: what a
+ * streaming unpacker that trusts the local sizes would find, and the central directory never lists.
+ */
+export function localHeader(name: string, data: string): Buffer {
+  const n = Buffer.from(name)
+  const d = Buffer.from(data)
+  return Buffer.concat([
+    u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(0), u32(crc32(d)), u32(d.length), u32(d.length),
+    u16(n.length), u16(0), n, d,
+  ])
 }
 
 /** A zip shaped like the real app: a framework with its in-tree symlinks, which must be accepted. */

@@ -8,10 +8,13 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import {
   APP_BUNDLE_ID, appUpdateStatusPath, checkAppRelease, CODESIGN, compareVersions, defaultDownload, DITTO,
-  githubFetchJson, parseSha256Sums, PLUTIL, readAppUpdateStatus, RELEASES_URL, sha256File, stageUpdate, type StageDeps,
+  githubFetchJson, parseSha256Sums, PLUTIL, readAppUpdateStatus, RELEASES_URL, runCommand, sha256File, stageUpdate,
+  type StageDeps,
 } from '../src/core/app-update.js'
-import { readZipEntries, unsafeZipEntry, ZipFormatError } from '../src/core/zip-check.js'
-import { LEGIT_APP, makeZip, type WriteEntry } from './zip-writer.js'
+import {
+  readZipEntries, unsafeUnpackedTree, unsafeZipEntry, ZipFormatError, type ZipEntry,
+} from '../src/core/zip-check.js'
+import { LEGIT_APP, localHeader, makeZip, type WriteEntry } from './zip-writer.js'
 import { CHANGE_MAX, CHANGES_SHOWN } from '../src/core/update.js'
 import { buildPollDeps } from '../src/core/runtime.js'
 import { config, memDb } from './poll-helpers.js'
@@ -205,6 +208,8 @@ interface Fake {
   bundleId?: string
   bundleVersion?: string
   plutilCode?: number
+  /** Runs inside the fake ditto, after it made Parcels.app: what a misbehaving unpacker left behind. */
+  dittoExtra?: (staging: string) => void
   downloadThrows?: string
   dittoCode?: number
   dittoMakesApp?: boolean
@@ -244,6 +249,7 @@ function setup(fake: Fake = {}, over: Partial<StageDeps> = {}) {
         mkdirSync(dest, { recursive: true })
         if (fake.dittoMakesSymlink) symlinkSync(dir, join(dest, 'Parcels.app'))
         else if (fake.dittoMakesApp !== false) mkdirSync(join(dest, 'Parcels.app', 'Contents'), { recursive: true })
+        fake.dittoExtra?.(dest)
         return { code: fake.dittoCode ?? 0, stdout: '' }
       }
       if (cmd === CODESIGN && args[0] === '--verify') return { code: fake.verifyCode ?? 0, stdout: '' }
@@ -439,6 +445,100 @@ describe('stageUpdate', () => {
     })
   }
 
+  // Bypass A from the review, as the reviewer built it: the directory lists a harmless link and a
+  // regular file; the file's local header claims 4 bytes, and the rest of its data is a second local
+  // header reusing the link's name with an escaping target, plus a hidden entry. ditto walks the local
+  // headers by their own sizes and would make `l -> ../../..`.
+  const BYPASS_A: WriteEntry[] = [
+    { name: 'Parcels.app/l', link: 'A' },
+    {
+      name: 'Parcels.app/u',
+      data: Buffer.concat([Buffer.from('abcd'), localHeader('Parcels.app/l', '../../..'), localHeader('P/hidden', 'x')]),
+      local: { comp: 4 },
+    },
+  ]
+  // Bypass B: APFS folds the long s into s, so "s/.." walks through the link "ſ -> ..".
+  const BYPASS_B: WriteEntry[] = [
+    { name: 'Parcels.app/\u017f', link: '..' },
+    { name: 'Parcels.app/\ufb00', link: 's/..' },
+  ]
+
+  test('bypass A, a local header sized differently from the directory, is refused before ditto runs', async () => {
+    const s = withZip([...LEGIT_APP, ...BYPASS_A])
+    await failsCleanly(s)
+    expect(s.calls).toEqual([])
+  })
+
+  test('bypass B, names that are not ASCII, is refused before ditto runs', async () => {
+    const s = withZip([...LEGIT_APP, ...BYPASS_B])
+    await failsCleanly(s)
+    expect(s.calls).toEqual([])
+  })
+
+  const disagreements: Array<[string, WriteEntry]> = [
+    ['flags', { name: 'Parcels.app/f', data: 'abcd', local: { flags: 0 } }],
+    ['the CRC', { name: 'Parcels.app/f', data: 'abcd', local: { crc: 1 } }],
+    ['the method', { name: 'Parcels.app/f', data: 'abcd', local: { method: 8 } }],
+    ['the size', { name: 'Parcels.app/f', data: 'abcdefgh', local: { comp: 8 + 1 } }],
+  ]
+  for (const [what, entry] of disagreements) {
+    test(`a local header that disagrees with the directory on ${what} is refused`, async () => {
+      const s = withZip([...LEGIT_APP, entry])
+      await failsCleanly(s)
+      expect(s.calls).toEqual([])
+    })
+  }
+
+  test('an entry with a data descriptor (bit 3) is refused', async () => {
+    const s = withZip([...LEGIT_APP, { name: 'Parcels.app/f', data: 'abcd', deflate: true, flags: 0x0808 }])
+    await failsCleanly(s)
+    expect(s.calls).toEqual([])
+  })
+
+  test('a symlink target that is not ASCII is refused', async () => {
+    const s = withZip([...LEGIT_APP, { name: 'Parcels.app/l', link: 'Contents/\u017f' }])
+    await failsCleanly(s)
+    expect(s.calls).toEqual([])
+  })
+
+  test('names with . or empty components are refused', async () => {
+    await failsCleanly(withZip([...LEGIT_APP, { name: 'Parcels.app/./f', data: 'x' }]), OUTSIDE)
+    await failsCleanly(withZip([...LEGIT_APP, { name: 'Parcels.app//f', data: 'x' }]), OUTSIDE)
+  })
+
+  // --- what ditto actually made ---
+
+  const FW = join('Parcels.app', 'Contents', 'Frameworks', 'X.framework', 'Versions')
+
+  test('a link that ditto made pointing outside is refused, and the clean-up does not follow it', async () => {
+    const outside = join(dir, 'outside')
+    mkdirSync(outside)
+    writeFileSync(join(outside, 'keep.txt'), 'still here')
+    const s = setup({
+      dittoExtra: staging => {
+        mkdirSync(join(staging, FW), { recursive: true })
+        symlinkSync(outside, join(staging, FW, 'Current'))
+      },
+    })
+    await failsCleanly(s, OUTSIDE)
+    expect(readFileSync(join(outside, 'keep.txt'), 'utf8')).toBe('still here')
+    expect(s.calls.some(([cmd]) => cmd === CODESIGN)).toBe(false)
+  })
+
+  test('a file ditto made that the archive did not list is refused', async () => {
+    const s = setup({ dittoExtra: staging => writeFileSync(join(staging, 'Parcels.app', 'Contents', 'evil.sh'), 'x') })
+    await failsCleanly(s, OUTSIDE)
+    expect(s.calls.some(([cmd]) => cmd === CODESIGN)).toBe(false)
+  })
+
+  test('an AppleDouble file ditto made is refused', async () => {
+    await failsCleanly(setup({ dittoExtra: staging => writeFileSync(join(staging, 'Parcels.app', '._Contents'), 'x') }), OUTSIDE)
+  })
+
+  test('a listed file that ditto made as something else is refused', async () => {
+    await failsCleanly(setup({ dittoExtra: staging => mkdirSync(join(staging, 'Parcels.app', 'Contents', 'Info.plist')) }), OUTSIDE)
+  })
+
   test('a local header naming a different file than the directory is refused', async () => {
     const s = withZip([...LEGIT_APP, { name: 'Parcels.app/ok', localName: '../evi', data: 'x' }])
     await failsCleanly(s)
@@ -528,6 +628,72 @@ describe('readZipEntries and unsafeZipEntry', () => {
     const evil = join(dir, 'evil.zip')
     execFileSync('/usr/bin/zip', ['-q', '-r', '-y', evil, 'Parcels.app'], { cwd: src })
     expect(unsafeZipEntry(readZipEntries(evil))).toMatch(/outside/)
+  })
+})
+
+describe('unsafeUnpackedTree', () => {
+  const asListed = (entries: WriteEntry[]): ZipEntry[] =>
+    entries.filter(e => !e.hidden).map(e => ({ name: e.name, isSymlink: e.link !== undefined, ...(e.link !== undefined && { target: e.link }) }))
+
+  const build = (root: string, entries: WriteEntry[]) => {
+    for (const e of entries) {
+      const p = join(root, e.name)
+      if (e.link !== undefined) { mkdirSync(dirname(p), { recursive: true }); symlinkSync(e.link, p) }
+      else if (e.name.endsWith('/')) mkdirSync(p, { recursive: true })
+      else { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, e.data ?? '') }
+    }
+  }
+
+  test('the app-shaped tree, framework links and all, passes', () => {
+    const root = join(dir, 'staging')
+    build(root, LEGIT_APP)
+    expect(unsafeUnpackedTree(root, asListed(LEGIT_APP))).toBeUndefined()
+  })
+
+  test('a chain that only leaves the folder once the file system follows it is refused', () => {
+    const root = join(dir, 'staging')
+    const entries: WriteEntry[] = [{ name: 'Parcels.app/' }, { name: 'Parcels.app/x', link: '..' }, { name: 'Parcels.app/y', link: 'x/..' }]
+    build(root, entries)
+    expect(unsafeUnpackedTree(root, asListed(entries))).toMatch(/resolves outside/)
+  })
+
+  // The real /usr/bin/ditto, on crafted zips, in temporary folders only. This is what the reviewer did:
+  // it proves the walk catches both bypasses even if the archive check had let them through.
+  const realDitto = test.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/ditto'))
+  const unpack = async (entries: WriteEntry[]) => {
+    const zip = join(dir, 'u.zip')
+    writeFileSync(zip, makeZip(entries))
+    const root = join(dir, 'staging')
+    expect((await runCommand('/usr/bin/ditto', ['-x', '-k', zip, root])).code).toBe(0)
+    return root
+  }
+
+  realDitto('the real ditto unpacks the app-shaped zip into exactly what it lists', async () => {
+    const root = await unpack(LEGIT_APP)
+    expect(lstatSync(join(root, 'Parcels.app/Contents/Frameworks/X.framework/Versions/Current')).isSymbolicLink()).toBe(true)
+    expect(unsafeUnpackedTree(root, asListed(LEGIT_APP))).toBeUndefined()
+  })
+
+  realDitto('after the real ditto, bypass A is caught by the walk', async () => {
+    const entries: WriteEntry[] = [...LEGIT_APP,
+      { name: 'Parcels.app/l', link: 'A' },
+      { name: 'Parcels.app/u', data: Buffer.concat([Buffer.from('abcd'), localHeader('Parcels.app/l', '../../..'), localHeader('P/hidden', 'x')]), local: { comp: 4 } },
+    ]
+    const root = await unpack(entries)
+    expect(unsafeUnpackedTree(root, asListed(entries))).toBeDefined()
+  })
+
+  realDitto('after the real ditto, bypass B is caught by the walk', async () => {
+    const entries: WriteEntry[] = [...LEGIT_APP, { name: 'Parcels.app/\u017f', link: '..' }, { name: 'Parcels.app/\ufb00', link: 's/..' }]
+    const root = await unpack(entries)
+    expect(unsafeUnpackedTree(root, asListed(entries))).toMatch(/outside/)
+  })
+
+  realDitto('stageUpdate with the real ditto stages the app-shaped zip', async () => {
+    const s = setup()
+    const fake = s.deps.run
+    s.deps.run = (cmd, args) => (cmd === DITTO ? runCommand(cmd, args) : fake(cmd, args))
+    expect((await stageUpdate(s.deps)).state).toBe('staged')
   })
 })
 
