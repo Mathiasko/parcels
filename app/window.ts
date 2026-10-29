@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { app, BrowserWindow, Notification, shell, type Session } from 'electron'
-import { downloadName, isDashboardUrl, isWebUrl } from './guards.js'
+import { downloadName, isDashboardUrl, isFirstRunUrl, isWebUrl } from './guards.js'
 
 let win: BrowserWindow | undefined
 /** Sessions already given a download handler; the window is recreated on every open, the session is not. */
@@ -14,8 +14,20 @@ const CONNECTION_REFUSED = -102
 /** Loads a page; a failed load is reported through `did-fail-load`, so the promise's rejection is not news. */
 const load = (w: BrowserWindow, url: string) => { w.loadURL(url).catch(() => {}) }
 
-/** The port of a dashboard origin like `http://127.0.0.1:8799`, so navigation can be checked against it. */
-const portOf = (origin: string): number => Number(new URL(origin).port)
+/**
+ * The dashboard's port, taken from the last http origin the window was opened on, so navigation is
+ * checked against the server's current address and not the one it had when the window was made.
+ */
+let dashboardPort: number | undefined
+/** While the app is not set up, the window may also show the first-run pages on `parcels://`. */
+let firstRunPages = false
+
+/** Allows or ends the first-run pages. Main turns them off once the dashboard is up. */
+export function allowFirstRunPages(on: boolean): void { firstRunPages = on }
+
+/** Where the window may go by itself (a link, a form, a redirect): the dashboard, or a first-run page during a first run. */
+const allowed = (url: string): boolean =>
+  (dashboardPort !== undefined && isDashboardUrl(url, dashboardPort)) || (firstRunPages && isFirstRunUrl(url))
 
 /**
  * A link that leaves the dashboard: denied in the window, and handed to the default browser only if
@@ -57,6 +69,7 @@ function handleDownloads(session: Session): void {
  */
 export function openWindow(origin: string, path?: string): BrowserWindow {
   const target = origin + (path ?? '/')
+  if (new URL(origin).protocol === 'http:') dashboardPort = Number(new URL(origin).port)
   void app.dock?.show()
   if (win && !win.isDestroyed()) {
     if (path !== undefined) load(win, target)
@@ -66,7 +79,6 @@ export function openWindow(origin: string, path?: string): BrowserWindow {
     app.focus({ steal: true })
     return win
   }
-  const port = portOf(origin)
   const w = new BrowserWindow({
     width: 1100,
     height: 820,
@@ -81,7 +93,7 @@ export function openWindow(origin: string, path?: string): BrowserWindow {
   win = w
   handleDownloads(w.webContents.session)
   const guard = (event: { preventDefault(): void }, url: string) => {
-    if (isDashboardUrl(url, port)) return
+    if (allowed(url)) return
     event.preventDefault()
     sendOut(url)
   }
@@ -89,7 +101,7 @@ export function openWindow(origin: string, path?: string): BrowserWindow {
   w.webContents.on('will-redirect', (event) => guard(event, event.url))
   // A target=_blank link to the dashboard stays in this window; any other new window is refused.
   w.webContents.setWindowOpenHandler(({ url }) => {
-    if (isDashboardUrl(url, port)) load(w, url)
+    if (allowed(url)) load(w, url)
     else sendOut(url)
     return { action: 'deny' }
   })

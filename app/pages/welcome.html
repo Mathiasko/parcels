@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- Served by app/protocol.ts at parcels://welcome. Static: the main process fills the double-brace
+     placeholders, each HTML-escaped (the stylesheet excepted), and no script runs here. -->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome - Parcels</title>
+<style>{{style}}
+/* The brand without a link: there is no dashboard to go to yet. */
+nav .brand{font-weight:600;padding:.25rem 0}
+/* The error notice is always in the page, empty until there is something to say. */
+.notice:empty{display:none}
+/* The hint runs the width of the form; the field itself only needs room for five digits. */
+.fields input[name=postcode]{max-width:12rem}
+</style></head>
+<body><div class="frame">
+<header><nav aria-label="Main"><span class="brand">Parcels</span></nav></header>
+<main><div class="col">
+<h1>Welcome to Parcels</h1>
+<p class="lede">Parcels tracks your parcels from your shipping emails. First, the postcode some carriers ask for.</p>
+<p class="notice warn" role="alert">{{error}}</p>
+<form method="post" action="parcels://welcome/">
+<div class="fields">
+<label class="wide">Your postcode<input name="postcode" value="{{postcode}}" size="8" inputmode="numeric" autocomplete="postal-code" pattern="[0-9]{3} ?[0-9]{2}" required autofocus><span class="meta hint">Five digits, like 81101. GLS and DPD need it to answer; a parcel can have its own later.</span></label>
+</div>
+<p><button class="pri">Continue</button></p>
+</form>
+<p class="meta">Next, Settings shows how to connect your Gmail.</p>
+</div></main></div></body></html>

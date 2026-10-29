@@ -23,6 +23,16 @@ export function isDashboardUrl(url: string, port: number): boolean {
 }
 
 /**
+ * True only for the two first-run pages, `parcels://welcome/` and `parcels://move-in/` (spec §4). The
+ * window may show them while the app is not set up yet; nothing else on that scheme is a page.
+ */
+export function isFirstRunUrl(url: string): boolean {
+  const u = parse(url)
+  return u !== undefined && u.protocol === 'parcels:' && (u.host === 'welcome' || u.host === 'move-in')
+    && u.pathname === '/' && !u.username && !u.password && u.port === ''
+}
+
+/**
  * What may be handed to the default browser: http and https only. `shell.openExternal` would also
  * open `file:` (which can launch an app), `smb:` or a custom scheme, none of which a dashboard link
  * should ever do.

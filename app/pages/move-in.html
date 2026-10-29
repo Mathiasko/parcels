@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- Served by app/protocol.ts at parcels://move-in. Static: the main process fills the double-brace
+     placeholders, each HTML-escaped (the stylesheet excepted), and no script runs here. -->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Move in - Parcels</title>
+<style>{{style}}
+/* The brand without a link: there is no dashboard to go to yet. */
+nav .brand{font-weight:600;padding:.25rem 0}
+/* A long folder path wraps instead of widening the page. */
+p .mono{white-space:normal;overflow-wrap:anywhere}
+.acts{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center}
+.acts button{height:2.25rem}
+</style></head>
+<body><div class="frame">
+<header><nav aria-label="Main"><span class="brand">Parcels</span></nav></header>
+<main><div class="col">
+<h1>Move your parcels into the app</h1>
+<p class="lede">Parcels is already installed in <span class="mono">{{clone}}</span>. Move your parcels, settings and Gmail connection into the app? The folder is left as it is.</p>
+<form method="post" action="parcels://move-in/">
+<p class="acts"><button class="pri" name="action" value="move">Move in</button><button name="action" value="quit">Not now (quit)</button></p>
+</form>
+<p class="meta">The two can't run side by side: they would share one address and read your mailbox twice. Moving in stops the old install's background jobs and copies what it kept. Its folder stays where it is, so you can go back to it.</p>
+</div></main></div></body></html>

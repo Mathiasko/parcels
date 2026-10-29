@@ -1,20 +1,28 @@
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { app, dialog, Notification, powerMonitor, shell, utilityProcess } from 'electron'
+import { app, BrowserWindow, dialog, Notification, powerMonitor, protocol, shell, utilityProcess } from 'electron'
 import type { ToMain } from '../src/core/app-ipc.js'
+import { decideFirstRun, type FirstRun } from './first-run.js'
 import { dashboardOrigin, isInside, notificationPath } from './guards.js'
 import { appendRotating } from './logs.js'
+import { moveIn, type MoveInDeps, type MoveInResult } from './move-in.js'
 import { appPaths, bundlePath } from './paths.js'
+import { readPages, registerFirstRun, SCHEME } from './protocol.js'
 import { Supervisor, type Child } from './supervise.js'
 import { createTray, type ParcelsTray } from './tray.js'
-import { currentWindow, openWindow } from './window.js'
+import { allowFirstRunPages, currentWindow, openWindow } from './window.js'
 
 // Before anything reads it: the menu, the notifications and app.getPath('userData') say "Parcels"
 // in a dev run too, not "Electron".
 app.setName('Parcels')
 
 const DEFAULT_PORT = 8787
+
+// The first-run pages are served on parcels:// (spec §4). Only a scheme registered as standard and
+// secure before the app is ready gets real URLs (a host and a path) and may receive a form's POST.
+protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: true, secure: true } }])
 
 const paths = appPaths(homedir())
 
@@ -33,7 +41,30 @@ function log(line: string): void {
 }
 
 const describe = (err: unknown) => (err instanceof Error ? (err.stack ?? err.message) : String(err))
-process.on('uncaughtException', err => log(`uncaught: ${describe(err)}`))
+
+/** Set once startup has finished, so a later failure is not reported as one at startup. */
+let startedUp = false
+let failed = false
+
+/**
+ * A failure the app cannot carry on from: logged, said in a dialog, and the app exits. Carrying on
+ * after an uncaught exception would leave a menu-bar icon over a main process in an unknown state,
+ * which is worse than a clear stop the user can recover from by opening Parcels again.
+ */
+function fatal(err: unknown): void {
+  if (failed) return
+  failed = true
+  const reason = err instanceof Error ? err.message : String(err)
+  try {
+    dialog.showErrorBox(
+      startedUp ? 'Parcels stopped' : 'Parcels could not start',
+      `Something went wrong, so Parcels has to close. Open it again; if this keeps happening, the details are in ${mainLogPath}.\n\n${reason}`,
+    )
+  } catch { /* No dialog either: the log has it. */ }
+  app.exit(1)
+}
+
+process.on('uncaughtException', err => { log(`uncaught: ${describe(err)}`); fatal(err) })
 process.on('unhandledRejection', err => log(`unhandled rejection: ${describe(err)}`))
 
 /**
@@ -96,11 +127,93 @@ function forkServer(env: Record<string, string>): Child {
   }
 }
 
+/**
+ * What a second launch does: bring the window forward. Until startup has got far enough to know which
+ * window that is, the wish is remembered and granted then.
+ */
+let reveal: (() => void) | undefined
+let revealWanted = false
+function setReveal(f: () => void): void {
+  reveal = f
+  if (revealWanted) { revealWanted = false; f() }
+}
+
 if (!app.requestSingleInstanceLock()) {
   // Another Parcels is running; it gets 'second-instance' and shows its window.
   app.quit()
 } else {
-  void run()
+  // Registered at once: a second launch during startup must not be lost.
+  app.on('second-instance', () => { if (reveal) reveal(); else revealWanted = true })
+  run().catch(err => { log(`startup failed: ${describe(err)}`); fatal(err) })
+}
+
+/**
+ * The launchctl the move in runs. A packaged app always runs /bin/launchctl, by absolute path and
+ * without a shell. An unpackaged dev run may name another program in PARCELS_DEV_LAUNCHCTL: the hand
+ * rehearsal points it at a stub that only records its arguments, so a rehearsal never stops or starts
+ * a real launchd job. A packaged app ignores the variable.
+ */
+function launchctl(): MoveInDeps['launchctl'] {
+  const dev = process.env.PARCELS_DEV_LAUNCHCTL
+  const bin = !app.isPackaged && dev ? dev : '/bin/launchctl'
+  return args => {
+    log(`launchctl ${args.join(' ')}${bin === '/bin/launchctl' ? '' : ` (dev: ${bin})`}`)
+    try {
+      execFileSync(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 30_000 })
+      return { code: 0, stderr: '' }
+    } catch (err) {
+      const e = err as { status?: number | null; stderr?: string; message?: string }
+      const r = { code: typeof e.status === 'number' ? e.status : 1, stderr: e.stderr || e.message || '' }
+      log(`launchctl exit ${r.code}: ${r.stderr.trim()}`)
+      return r
+    }
+  }
+}
+
+/**
+ * Dev-only stand-ins for a click, for the hand rehearsal, which cannot click in the window: with
+ * PARCELS_DEV_AUTO_MOVE_IN=1 the Move in button is pressed once the page has loaded, and with
+ * PARCELS_DEV_AUTO_POSTCODE=<text> the postcode is typed and Continue pressed. They press the page's
+ * real button, so the form, the POST and the handler are the ones a user's click goes through. A
+ * packaged app ignores both.
+ */
+function devAutoSubmit(w: BrowserWindow, first: FirstRun): void {
+  if (app.isPackaged) return
+  const postcode = process.env.PARCELS_DEV_AUTO_POSTCODE
+  const script = first.kind === 'move-in' && process.env.PARCELS_DEV_AUTO_MOVE_IN === '1'
+    ? "document.querySelector('button[value=move]').click()"
+    : first.kind === 'welcome' && postcode !== undefined
+      // noValidate: the field's own pattern would stop a bad postcode in the page, and the rehearsal is
+      // of the check behind it, which is what any postcode that gets past the page meets.
+      ? `const f = document.querySelector('form'); f.noValidate = true; f.postcode.value = ${JSON.stringify(postcode)}; f.requestSubmit()`
+      : undefined
+  if (script === undefined) return
+  w.webContents.once('did-finish-load', () => {
+    log(`dev: pressing the ${first.kind} button`)
+    w.webContents.executeJavaScript(script).catch(err => log(`dev: could not press it: ${describe(err)}`))
+  })
+}
+
+/**
+ * Dev-only: with PARCELS_DEV_CAPTURE_DIR set, every page the window finishes loading is saved there as
+ * a PNG, numbered in order. The rehearsal uses it to see the real window without Screen Recording
+ * permission. A packaged app ignores it.
+ */
+function devCapture(w: BrowserWindow): void {
+  const dir = process.env.PARCELS_DEV_CAPTURE_DIR
+  if (app.isPackaged || !dir) return
+  let n = 0
+  w.webContents.on('did-finish-load', () => {
+    const name = `${++n}-${new URL(w.webContents.getURL()).host.replace(/[^\w.-]/g, '_')}.png`
+    // A moment for the first paint after the load event.
+    setTimeout(() => {
+      if (w.isDestroyed()) return
+      w.webContents.capturePage().then(
+        img => { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, name), img.toPNG()); log(`dev: captured ${name}`) },
+        err => log(`dev: capture failed: ${describe(err)}`),
+      )
+    }, 500)
+  })
 }
 
 async function run(): Promise<void> {
@@ -109,22 +222,26 @@ async function run(): Promise<void> {
 
   await app.whenReady()
   log(`starting ${app.getVersion()}${app.isPackaged ? '' : ' (dev run)'}`)
+  // Logout, restart and shutdown take the same path as Quit, so the server is stopped cleanly. The
+  // event's preventDefault asks macOS to wait while that happens; Electron's typings leave the event
+  // out of the listener, so it is taken from the arguments.
+  powerMonitor.on('shutdown', (...args: unknown[]) => {
+    (args[0] as { preventDefault?: () => void } | undefined)?.preventDefault?.()
+    app.quit()
+  })
 
-  if (!existsSync(paths.config)) {
-    // First-run routing (Welcome, Move in) comes later; until then there is nothing to start.
-    await dialog.showMessageBox({ type: 'info', message: 'Parcels is not set up yet.', buttons: ['Quit'] })
-    app.exit(0)
-    return
-  }
+  const first = decideFirstRun(paths)
+  log(`first run: ${first.kind}${first.kind === 'move-in' ? ` from ${first.clone}` : ''}`)
 
-  // Opened at login: Parcels starts in the menu bar only, with no Dock icon and no window.
-  const atLogin = app.getLoginItemSettings().wasOpenedAtLogin
+  // Opened at login: Parcels starts in the menu bar only, with no Dock icon and no window. A Mac that
+  // is not set up yet shows its first-run page either way.
+  const atLogin = first.kind === 'ready' && app.getLoginItemSettings().wasOpenedAtLogin
   if (atLogin) app.dock?.hide()
-
-  setLoginItemOnce()
 
   let port = configPort()
   let shownAtStart = atLogin
+  /** The page the dashboard opens on when the server first answers: `/settings` after Welcome. */
+  let firstPath: string | undefined
   const origin = () => dashboardOrigin(port)
   const open = (path?: string) => { openWindow(origin(), path) }
 
@@ -156,8 +273,10 @@ async function run(): Promise<void> {
           break
         case 'listening':
           port = m.port
-          // A normal launch opens the dashboard once it can answer; a launch at login does not.
-          if (!shownAtStart) { shownAtStart = true; open() }
+          // A normal launch opens the dashboard once it can answer; a launch at login does not. After
+          // a first run this replaces the first-run page in the same window.
+          if (!shownAtStart) { shownAtStart = true; open(firstPath) }
+          allowFirstRunPages(false)
           break
         case 'reveal':
           // openPath launches apps and scripts as readily as it opens folders, so only the app's own
@@ -173,27 +292,76 @@ async function run(): Promise<void> {
     },
   })
 
-  tray = createTray({
-    open,
-    refresh: () => supervisor.send({ type: 'refresh' }),
-    quit: () => app.quit(),
-    port: configPort,
-    loginItemEditable: app.isPackaged,
-  })
+  let quitting = false
+  /** A move in under way: quitting waits for it, so it is never cut off between its steps. */
+  let moving: Promise<MoveInResult> | undefined
 
-  app.on('second-instance', () => open())
+  /** Starts the server and the menu-bar icon, once: at launch when set up, else when a first run ends. */
+  let serving = false
+  const startServer = (path?: string) => {
+    if (serving || quitting) return
+    serving = true
+    port = configPort()
+    firstPath = path
+    setLoginItemOnce()
+    tray = createTray({
+      open,
+      refresh: () => supervisor.send({ type: 'refresh' }),
+      quit: () => app.quit(),
+      port: configPort,
+      loginItemEditable: app.isPackaged,
+    })
+    supervisor.start()
+  }
+
+  /** Shows the first-run page, in a window of its own that quits the app when closed before setup ends. */
+  const openFirstRun = (f: Exclude<FirstRun, { kind: 'ready' }>) => {
+    if (currentWindow()) { openWindow(`${SCHEME}://${f.kind}`); return }
+    const w = openWindow(`${SCHEME}://${f.kind}`)
+    // Not set up, there is nothing to do in the menu bar: closing the window is "not now".
+    w.once('closed', () => { if (!serving) app.quit() })
+    devAutoSubmit(w, f)
+    devCapture(w)
+  }
+
+  if (first.kind !== 'ready') {
+    allowFirstRunPages(true)
+    registerFirstRun(protocol, {
+      firstRun: first,
+      configPath: paths.config,
+      pages: readPages(join(app.getAppPath(), 'app', 'pages')),
+      start: startServer,
+      moveIn: () => {
+        moving = moveIn({
+          clone: first.kind === 'move-in' ? first.clone : '',
+          plists: first.kind === 'move-in' ? first.plists : [],
+          support: paths.support,
+          uid: process.getuid?.() ?? 0,
+          launchctl: launchctl(),
+        }).finally(() => { moving = undefined })
+        return moving
+      },
+      quit: () => app.quit(),
+      log,
+    })
+  }
+
+  const show = () => {
+    if (serving) open()
+    else if (first.kind !== 'ready') openFirstRun(first)
+  }
+  setReveal(show)
   // Clicking the Dock icon while the window is closed brings it back.
-  app.on('activate', () => { if (!currentWindow()) open() })
+  app.on('activate', () => { if (!currentWindow()) show() })
   // The server re-plans its next poll; a slot that passed during sleep is caught up.
   powerMonitor.on('resume', () => supervisor.send({ type: 'wake' }))
 
-  let quitting = false
   app.on('before-quit', event => {
     if (quitting) return
     event.preventDefault()
     quitting = true
     log('quitting')
-    supervisor.stop().then(
+    Promise.resolve(moving).catch(() => {}).then(() => supervisor.stop()).then(
       () => app.quit(),
       err => { log(`stop failed: ${describe(err)}`); app.exit(0) },
     )
@@ -202,7 +370,9 @@ async function run(): Promise<void> {
   process.on('SIGTERM', () => app.quit())
   process.on('SIGINT', () => app.quit())
 
-  supervisor.start()
+  if (first.kind === 'ready') startServer()
+  else openFirstRun(first)
+  startedUp = true
 }
 
 /**

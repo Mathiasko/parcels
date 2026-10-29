@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest'
-import { dashboardOrigin, downloadName, isDashboardUrl, isInside, isWebUrl, notificationPath } from '../../app/guards.js'
+import {
+  dashboardOrigin, downloadName, isDashboardUrl, isFirstRunUrl, isInside, isWebUrl, notificationPath,
+} from '../../app/guards.js'
 
 test('dashboardOrigin is the loopback origin on the port', () => {
   expect(dashboardOrigin(8799)).toBe('http://127.0.0.1:8799')
@@ -61,4 +63,13 @@ test('downloadName keeps the base name and picks a free one when the file exists
   expect(downloadName('/d', '../../.zshrc', exists)).toBe('/d/.zshrc')
   expect(downloadName('/d', '', exists)).toBe('/d/download')
   expect(downloadName('/d', '..', exists)).toBe('/d/download')
+})
+
+test('isFirstRunUrl accepts the two first-run pages and nothing else on the scheme', () => {
+  expect(isFirstRunUrl('parcels://welcome/')).toBe(true)
+  expect(isFirstRunUrl('parcels://move-in/')).toBe(true)
+  for (const url of [
+    'parcels://welcome/x', 'parcels://result/', 'parcels://u:p@welcome/', 'parcels://welcome:1/',
+    'http://welcome/', 'http://127.0.0.1:8787/', 'file:///welcome/', 'parcels:welcome', 'not a url',
+  ]) expect(isFirstRunUrl(url), url).toBe(false)
 })
