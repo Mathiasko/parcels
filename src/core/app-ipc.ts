@@ -40,3 +40,30 @@ const SERVER_MESSAGES: ReadonlySet<unknown> = new Set(['refresh', 'wake', 'shutd
 export function isToServer(v: unknown): v is ToServer {
   return typeof v === 'object' && v !== null && SERVER_MESSAGES.has((v as { type?: unknown }).type)
 }
+
+const isString = (v: unknown): v is string => typeof v === 'string'
+
+/**
+ * The main process's side of the same check: a message from the server process is acted on (a
+ * notification, a Finder window, an install) only when its type is known and every field has the
+ * shape that type promises. A count must be a whole number and a port a real one, since both end up
+ * in the menu bar title and in a URL.
+ */
+export function isToMain(v: unknown): v is ToMain {
+  if (typeof v !== 'object' || v === null) return false
+  const m = v as Record<string, unknown>
+  switch (m.type) {
+    case 'notify':
+      return isString(m.groupKey) && isString(m.title) && isString(m.message) && (m.url === undefined || isString(m.url))
+    case 'ready-count':
+      return Number.isInteger(m.n) && (m.n as number) >= 0
+    case 'install':
+      return isString(m.staged) && isString(m.version)
+    case 'reveal':
+      return isString(m.path)
+    case 'listening':
+      return Number.isInteger(m.port) && (m.port as number) >= 1 && (m.port as number) <= 65535
+    default:
+      return false
+  }
+}
