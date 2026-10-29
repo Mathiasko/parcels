@@ -146,11 +146,18 @@ export function createNotifier(mode: Config['notifier'], spawn: SpawnFn = defaul
  * own, so it hands the banner to the main process, which posts it under the app's identity. Nothing
  * is spawned. Like the other notifier it never rejects: a channel that throws (the main process went
  * away mid-shutdown) is reported as not started rather than raised into the poll.
+ *
+ * `post` may answer `false` to say there was no channel to post on, which is what `postToMain` does
+ * when nothing set one. That is a delivery that went nowhere, and it is reported as such rather than
+ * counted as handed over.
  */
-export function createAppNotifier(post: (m: ToMain) => void): ReportingNotifier {
+export function createAppNotifier(post: (m: ToMain) => boolean | void): ReportingNotifier {
   async function deliver(n: Notification): Promise<Delivery> {
     try {
-      post({ type: 'notify', groupKey: n.groupKey, title: n.title, message: n.message, ...(n.url ? { url: n.url } : {}) })
+      const posted = post({ type: 'notify', groupKey: n.groupKey, title: n.title, message: n.message, ...(n.url ? { url: n.url } : {}) })
+      if (posted === false) {
+        return { mechanism: 'app', started: false, exitCode: null, note: 'there is no channel to the main process' }
+      }
       return { mechanism: 'app', started: true, exitCode: 0 }
     } catch {
       return { mechanism: 'app', started: false, exitCode: null }

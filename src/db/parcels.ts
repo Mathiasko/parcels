@@ -171,6 +171,19 @@ export function listActive(db: Database): Parcel[] {
 }
 
 /**
+ * How many parcels are waiting at a pickup point: the number the Mac app's menu-bar icon shows. The
+ * same set as the dashboard's "ready for pickup": the home page lists `listActive` (not archived, not
+ * delivered or returned) and counts those whose status is `ready_for_pickup`. A parcel marked collected
+ * leaves the set because marking it moves its status on, so no separate column is consulted here.
+ */
+export function readyCount(db: Database): number {
+  const row = db.prepare(`
+    SELECT COUNT(*) AS n FROM parcels WHERE archived_at IS NULL AND status = 'ready_for_pickup'
+  `).get() as { n: number }
+  return row.n
+}
+
+/**
  * `cause` is what the activity log records against the transition this write may be: who acted, in
  * which run, on which clock (see db/activity-log.ts). It is optional because this is the chokepoint
  * every status write goes through and a missing attribution must degrade to an honest "nobody said"

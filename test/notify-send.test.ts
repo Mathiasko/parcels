@@ -241,6 +241,18 @@ test('notifierFor gives the app notifier under PARCELS_HOST=app whatever the con
   }
 })
 
+test('under PARCELS_HOST=app with no channel to the main process, a delivery reports not started', async () => {
+  // Nothing set the channel (an entry that forgot to, or a run outside the app): postToMain refuses,
+  // and the notifier must say the banner went nowhere rather than claim it was handed over.
+  setMainChannel(undefined)
+  const config = validateConfig({ defaultPostalCode: '81101' })
+  const n = notifierFor(config, { PARCELS_HOST: 'app' })
+  const d = await n.deliver(base)
+  expect(d).toMatchObject({ mechanism: 'app', started: false, exitCode: null })
+  expect(d.note).toMatch(/main process/)
+  await expect(n.send(base)).resolves.toBeUndefined()
+})
+
 test('notifierFor gives the configured notifier on the git host', async () => {
   const config = validateConfig({ defaultPostalCode: '81101', notifier: 'osascript' })
   expect(notifierFor(config, {})).toHaveProperty('deliver')
