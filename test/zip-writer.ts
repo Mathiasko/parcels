@@ -20,6 +20,11 @@ export interface WriteEntry {
   local?: { comp?: number; flags?: number; crc?: number; method?: number }
   /** General-purpose flags for both headers (default 0x0800, UTF-8 names). */
   flags?: number
+  /**
+   * Bytes appended after the compressed data and counted in the compressed size (both headers agree):
+   * a deflate stream that ends early, with something hidden behind it.
+   */
+  trailing?: Buffer
 }
 
 const u16 = (n: number) => { const b = Buffer.alloc(2); b.writeUInt16LE(n); return b }
@@ -34,7 +39,7 @@ export function makeZip(entries: WriteEntry[], opts: { zip64?: boolean } = {}): 
   for (const e of entries) {
     const isDir = e.name.endsWith('/')
     const raw = Buffer.from(e.link ?? e.data ?? '')
-    const body = e.deflate ? deflateRawSync(raw) : raw
+    const body = Buffer.concat([e.deflate ? deflateRawSync(raw) : raw, e.trailing ?? Buffer.alloc(0)])
     const method = e.deflate ? 8 : 0
     const mode = e.link !== undefined ? 0o120755 : isDir ? 0o040755 : 0o100644
     const external = ((mode << 16) | (isDir ? 0x10 : 0)) >>> 0

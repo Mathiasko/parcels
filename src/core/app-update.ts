@@ -452,7 +452,7 @@ export async function stageUpdate(d: StageDeps): Promise<AppUpdateStatus> {
     const OUTSIDE = 'The download contains files that would land outside its folder, so it was thrown away.'
     let entries: ZipEntry[] = []
     try {
-      entries = readZipEntries(zip)
+      entries = await readZipEntries(zip)
     } catch (err) {
       fail('The download is not a zip this app can check, so it was thrown away.', err instanceof ZipFormatError ? err : String(err))
     }

@@ -1,6 +1,9 @@
-import { closeSync, fstatSync, lstatSync, openSync, readdirSync, readlinkSync, readSync, realpathSync } from 'node:fs'
+import {
+  closeSync, createReadStream, fstatSync, lstatSync, openSync, readdirSync, readlinkSync, readSync, realpathSync,
+} from 'node:fs'
 import { dirname, join, relative, resolve as resolvePath, sep } from 'node:path'
-import { inflateRawSync } from 'node:zlib'
+import { pipeline } from 'node:stream/promises'
+import { crc32, createInflateRaw, inflateRawSync } from 'node:zlib'
 
 /**
  * Reading an update zip's table of contents before anything unpacks it.
@@ -13,22 +16,30 @@ import { inflateRawSync } from 'node:zlib'
  * outside the folder it is unpacked into. Symlinks that stay inside it are allowed: Electron's
  * frameworks are full of them (`Versions/Current -> A`).
  *
- * Read with plain file reads rather than a library, because what matters is exactly what an unpacker
- * could see. `ditto` walks the LOCAL headers in order, sizing each entry by its local header, and takes
- * attributes (a symlink's mode among them) from the central-directory entry of the same name. So each
- * local header must agree with its directory entry on name, method, flags, CRC and both sizes; the
- * local entries must tile the file exactly, from offset 0 up to the directory; and data descriptors
- * (flag bit 3, where the local sizes are left blank) are refused outright. Only then does an unpacker
- * that streams the local headers see the same list as one that reads the directory. electron-builder's
- * archiver (7za, `-mm=Deflate -mcu -snl`) writes no data descriptors, so a real release never has one.
+ * Three layers, because no check of an archive can prove what a particular unpacker will do with it:
  *
- * Names and link targets must be printable ASCII. The app has no other, and it removes a whole class
- * of tricks: APFS folds case and Unicode in ways a check would have to reproduce exactly (`ſ` is `s`).
+ * 1. `readZipEntries` - the archive is self-consistent. Read with plain file reads rather than a
+ *    library, so the checks are about the bytes an unpacker sees. Every local header agrees with its
+ *    central-directory entry on name, method, flags, CRC and both sizes; the local entries tile the
+ *    file exactly, from offset 0 up to the directory; data descriptors (flag bit 3) are refused; a
+ *    directory entry carries no data; and every deflated entry's stream ends exactly at its stated
+ *    compressed size and inflates to its stated size and CRC. These close the differentials known
+ *    between a reader of the directory and `ditto`, which walks the local headers and finds the end of
+ *    deflated data from the deflate stream itself. They do not prove that no other differential exists.
+ * 2. `unsafeZipEntry` - what the archive lists is safe: printable ASCII names and link targets only
+ *    (APFS folds case and Unicode in ways a check would otherwise have to reproduce exactly - `ſ` is
+ *    `s`), no `.`, `..`, empty, absolute or backslashed components, nothing written through a link,
+ *    and every link resolving, through the archive's other links, to a listed path inside the folder.
+ * 3. `unsafeUnpackedTree` - the ground truth, after `ditto` has run. The staging tree is walked
+ *    without following links; anything the archive did not list (as that kind of thing) is refused,
+ *    and so is any link that does not resolve on the real file system, or resolves - lexically or
+ *    there - outside the folder. This is the layer that holds even if 1 and 2 missed a trick: what is
+ *    left in the folder is exactly what was listed, and every link in it lands inside it. It cannot
+ *    see a write that `ditto` made outside the folder through a link it then replaced; layers 1 and
+ *    2 are what stand in the way of that.
  *
- * The archive is the claim; `unsafeUnpackedTree` checks the result. After `ditto` has run, the
- * staging tree is walked without following links, and anything the directory did not list, or any
- * link that resolves - lexically or on the real file system - outside the folder, is refused before
- * the unpacked app is used for anything.
+ * electron-builder's archiver (7za, `-mm=Deflate -mcu -snl`) writes exactly what these allow: no data
+ * descriptors, matching local and central fields, ASCII names, in-tree links. So a real release passes.
  */
 
 /** Something that is not a zip this module can vouch for: truncated, multi-disk, encrypted, odd. */
@@ -60,6 +71,9 @@ const MAX_LINK = 4096
 const MAX_CENTRAL_DIRECTORY = 64 * 1024 * 1024
 const S_IFMT = 0o170000
 const S_IFLNK = 0o120000
+const S_IFDIR = 0o040000
+/** The MS-DOS directory attribute, in the low byte of the external attributes. */
+const DOS_DIR = 0x10
 /** How many links may be followed while resolving one target; more is a loop. */
 const MAX_LINK_DEPTH = 40
 
@@ -79,8 +93,40 @@ function decodeName(raw: Buffer, what: string): string {
   return raw.toString('latin1')
 }
 
-/** Reads every entry of the zip at `path`. Throws `ZipFormatError` for anything it cannot vouch for. */
-export function readZipEntries(path: string): ZipEntry[] {
+/**
+ * Checks that a deflated entry's stream ends exactly at its stated compressed size and inflates to its
+ * stated size and CRC. Streamed, because `app.asar` is tens of megabytes. `ditto` finds the end of
+ * deflated data from the stream itself, so a stream that ends early would leave bytes - possibly a
+ * hidden local header - that it reads as the next entry. zlib's `bytesWritten` is the input consumed
+ * up to the end of the stream, whatever follows it.
+ */
+async function checkDeflate(path: string, start: number, comp: number, uncomp: number, crc: number, name: string): Promise<void> {
+  if (comp === 0) bad(`${name} is deflated but has no data`)
+  const inflater = createInflateRaw()
+  let out = 0
+  let sum = 0
+  inflater.on('data', (chunk: Buffer) => {
+    out += chunk.length
+    sum = crc32(chunk, sum)
+    // Bounded by the stated size, so a small entry cannot inflate into gigabytes while being checked.
+    if (out > uncomp) inflater.destroy(new ZipFormatError(`${name} inflates to more than its stated size`))
+  })
+  try {
+    await pipeline(createReadStream(path, { start, end: start + comp - 1 }), inflater)
+  } catch (err) {
+    if (err instanceof ZipFormatError) throw err
+    bad(`${name} does not inflate`)
+  }
+  if (inflater.bytesWritten !== comp) bad(`${name}'s deflate stream ends before its stated size`)
+  if (out !== uncomp) bad(`${name} inflates to a different size than stated`)
+  if ((sum >>> 0) !== crc) bad(`${name} does not match its CRC`)
+}
+
+/**
+ * Reads every entry of the zip at `path`. Rejects with `ZipFormatError` for anything it cannot vouch
+ * for. Asynchronous only because deflated data is streamed through zlib.
+ */
+export async function readZipEntries(path: string): Promise<ZipEntry[]> {
   const fd = openSync(path, 'r')
   try {
     const size = fstatSync(fd).size
@@ -185,6 +231,11 @@ export function readZipEntries(path: string): ZipEntry[] {
       if (comp === 0xffffffff || uncomp === 0xffffffff || local === 0xffffffff) bad('zip64 values without a zip64 extra field')
       const name = decodeName(rawName, 'an entry name')
       const mode = external >>> 16
+      // `ditto` skips a directory entry's data; anything there would be read as further entries. A
+      // directory by any of its three signs must be named as one and carry nothing.
+      const dirLike = name.endsWith('/') || (mode & S_IFMT) === S_IFDIR || (external & DOS_DIR) !== 0
+      if (dirLike && !name.endsWith('/')) bad(`${name} is a directory not named like one`)
+      if (dirLike && (comp !== 0 || uncomp !== 0)) bad(`the directory ${name} carries data`)
       raws.push({ entry: { name, isSymlink: (mode & S_IFMT) === S_IFLNK }, rawName, method, flags, crc, comp, uncomp, local })
       p = end
     }
@@ -245,6 +296,7 @@ export function readZipEntries(path: string): ZipEntry[] {
           : bad('a symlink stored with an unknown compression method')
         r.entry.target = decodeName(target, 'a symlink target')
       }
+      if (r.method === 8) await checkDeflate(path, dataStart, r.comp, r.uncomp, r.crc, r.entry.name)
       const next = i + 1 < byOffset.length ? byOffset[i + 1]!.local : cdOffset
       if (next !== dataEnd) bad('there is data between entries')
       expected = next
@@ -269,7 +321,8 @@ const keyOf = (parts: readonly string[]): string => parts.join('/').toLowerCase(
  * Refused: an empty, absolute or backslashed name, anything but printable ASCII, any `.` or `..` or empty
  * component, two entries for one path, any entry whose path passes through a symlink entry, and a
  * symlink whose target - resolved through the archive's other links, as the file system would - is
- * absolute or leaves the folder. A link may point at another link; a chain that loops is refused.
+ * absolute, leaves the folder, or lands on nothing the archive lists. A link may point at another
+ * link; a chain that loops is refused.
  */
 export function unsafeZipEntry(entries: readonly ZipEntry[]): string | undefined {
   const seen = new Set<string>()
@@ -322,9 +375,16 @@ export function unsafeZipEntry(entries: readonly ZipEntry[]): string | undefined
     return stack
   }
 
+  // Every path the archive lists, and every folder above one: what a link may land on.
+  const present = new Set<string>()
+  for (const { parts } of paths) for (let i = 1; i <= parts.length; i++) present.add(keyOf(parts.slice(0, i)))
+
   for (const [key, link] of links) {
     if (/[^\x20-\x7e]/.test(link.target)) return `the symlink ${key} has a character in its target that is not printable ASCII`
-    if (!resolve(link.dir, link.target, 0)) return `the symlink ${key} -> ${link.target} points outside the folder`
+    const landed = resolve(link.dir, link.target, 0)
+    if (!landed) return `the symlink ${key} -> ${link.target} points outside the folder`
+    // A genuine app has no dangling links; and a link to the folder itself is a step away from its parent.
+    if (landed.length === 0 || !present.has(keyOf(landed))) return `the symlink ${key} -> ${link.target} points at nothing the archive lists`
   }
   return undefined
 }
@@ -337,8 +397,10 @@ export function unsafeZipEntry(entries: readonly ZipEntry[]): string | undefined
  * directory listed, as the same kind (a directory may also be implied by a listed path below it), and
  * nothing else may exist - which also refuses AppleDouble `._*` files `ditto` would make from
  * `__MACOSX` entries; the release archiver writes none. Every link's target is resolved twice: lexically
- * against its own directory, and through `realpath` when it exists, so a chain of links that only
- * escapes once the file system follows it is still caught. (`realpath` here is libc's, see below.) Either leaving `root` is a refusal.
+ * against its own directory, and through libc's `realpath`, so a chain of links that only escapes once
+ * the file system follows it is still caught. Either leaving `root` is a refusal, and so is a link that
+ * does not resolve at all: a genuine app has no dangling or looping links, and a dangling one cannot be
+ * judged by where it would lead.
  */
 export function unsafeUnpackedTree(root: string, entries: readonly ZipEntry[]): string | undefined {
   const listed = new Map<string, 'dir' | 'file' | 'link'>()
@@ -367,11 +429,11 @@ export function unsafeUnpackedTree(root: string, entries: readonly ZipEntry[]): 
       if (kind === 'link') {
         const target = readlinkSync(abs)
         if (!inside(absRoot, resolvePath(dirname(abs), target))) return `${rel} -> ${target} points outside the folder`
-        let real: string | undefined
+        let real: string
         // `.native` is libc's realpath, which asks the kernel. Node's own JS `realpathSync` normalizes
         // each link's target lexically (`x/..` becomes `.`), which is exactly the chain this must catch.
-        try { real = realpathSync.native(abs) } catch { /* dangling, or a loop: the lexical answer stands */ }
-        if (real !== undefined && !inside(realRoot, real)) return `${rel} -> ${target} resolves outside the folder`
+        try { real = realpathSync.native(abs) } catch { return `${rel} -> ${target} does not resolve` }
+        if (!inside(realRoot, real)) return `${rel} -> ${target} resolves outside the folder`
       } else if (kind === 'dir') {
         const why = walk(abs)
         if (why) return why

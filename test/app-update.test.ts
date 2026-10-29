@@ -506,6 +506,62 @@ describe('stageUpdate', () => {
     await failsCleanly(withZip([...LEGIT_APP, { name: 'Parcels.app//f', data: 'x' }]), OUTSIDE)
   })
 
+  // Round 3, P3: a deflated file whose stream ends early. Flags, CRC and sizes all agree, but ditto
+  // finds the end of deflated data from the stream, and reads what follows it as further entries.
+  const P3: WriteEntry[] = [
+    { name: 'Parcels.app/f', data: 'real content '.repeat(20), deflate: true, trailing: localHeader('Parcels.app/hidden', 'x') },
+  ]
+  // P6: a directory entry that carries data; ditto skips a directory's data and reads what is in it.
+  const P6: WriteEntry[] = [{ name: 'Parcels.app/d/', data: localHeader('Parcels.app/hidden', 'x') }]
+  // P12: P3's trick used to rewrite two listed, harmless links into a chain that dangles above the folder.
+  const P12: WriteEntry[] = [
+    { name: 'Parcels.app/x', link: 'Contents' },
+    { name: 'Parcels.app/y', link: 'Contents' },
+    {
+      name: 'Parcels.app/f', data: 'real content '.repeat(20), deflate: true,
+      trailing: Buffer.concat([localHeader('Parcels.app/x', '..'), localHeader('Parcels.app/y', 'x/../nonexistent')]),
+    },
+  ]
+
+  for (const [what, entries] of [['P3, a deflate stream that ends early', P3], ['P6, a directory with data', P6], ['P12, a short stream rewriting links', P12]] as const) {
+    test(`${what}, is refused before ditto runs`, async () => {
+      const s = withZip([...LEGIT_APP, ...entries])
+      await failsCleanly(s, /not a zip this app can check/)
+      expect(s.calls).toEqual([])
+    })
+  }
+
+  test('a deflated entry whose data is corrupt is refused before ditto runs', async () => {
+    const zip = makeZip([...LEGIT_APP, { name: 'Parcels.app/f', data: 'real content '.repeat(20), deflate: true }])
+    // The first match is the local header; its data starts right after the name (no extra field).
+    const at = zip.indexOf(Buffer.from('Parcels.app/f')) + 'Parcels.app/f'.length + 3
+    zip[at] = zip[at]! ^ 0xff
+    const s = setup({ zipBytes: zip, sums: `${sha(zip)}  ${ZIP}\n` })
+    await failsCleanly(s, /not a zip this app can check/)
+    expect(s.calls).toEqual([])
+  })
+
+  test('a link that lands on nothing the archive lists is refused before ditto runs', async () => {
+    const s = withZip([...LEGIT_APP, { name: 'Parcels.app/l', link: 'Contents/nonexistent' }])
+    await failsCleanly(s, OUTSIDE)
+    expect(s.calls).toEqual([])
+  })
+
+  test('P12 got past ditto anyway: a dangling link in the unpacked tree is refused', async () => {
+    const s = withZip([...LEGIT_APP, { name: 'Parcels.app/x', link: 'Contents' }, { name: 'Parcels.app/y', link: 'Contents' }])
+    const fake = s.deps.run
+    s.deps.run = async (cmd, args) => {
+      const r = await fake(cmd, args)
+      if (cmd === DITTO) {
+        symlinkSync('..', join(args[3]!, 'Parcels.app', 'x'))
+        symlinkSync('x/../nonexistent', join(args[3]!, 'Parcels.app', 'y'))
+      }
+      return r
+    }
+    await failsCleanly(s, OUTSIDE)
+    expect(s.calls.some(([cmd]) => cmd === CODESIGN)).toBe(false)
+  })
+
   // --- what ditto actually made ---
 
   const FW = join('Parcels.app', 'Contents', 'Frameworks', 'X.framework', 'Versions')
@@ -590,44 +646,44 @@ describe('stageUpdate', () => {
 describe('readZipEntries and unsafeZipEntry', () => {
   const write = (zip: Buffer) => { const p = join(dir, `z-${Math.random()}.zip`); writeFileSync(p, zip); return p }
 
-  test('lists names and symlink targets, stored or deflated', () => {
-    const entries = readZipEntries(write(makeZip(LEGIT_APP)))
+  test('lists names and symlink targets, stored or deflated', async () => {
+    const entries = await readZipEntries(write(makeZip(LEGIT_APP)))
     expect(entries.map(e => e.name)).toEqual(LEGIT_APP.map(e => e.name))
     expect(entries.find(e => e.name.endsWith('Versions/Current'))).toMatchObject({ isSymlink: true, target: 'A' })
     expect(entries.find(e => e.name.endsWith('X.framework/Resources'))).toMatchObject({ isSymlink: true, target: 'Versions/Current/Resources' })
     expect(unsafeZipEntry(entries)).toBeUndefined()
   })
 
-  test('a truncated zip is a format error', () => {
+  test('a truncated zip is a format error', async () => {
     const zip = makeZip(LEGIT_APP)
-    expect(() => readZipEntries(write(zip.subarray(0, zip.length - 30)))).toThrow(ZipFormatError)
+    await expect(readZipEntries(write(zip.subarray(0, zip.length - 30)))).rejects.toThrow(ZipFormatError)
   })
 
-  test('a name that is not valid UTF-8 is a format error', () => {
+  test('a name that is not valid UTF-8 is a format error', async () => {
     // A lone 0xC0 where the slash was: a lenient decoder and the unpacker could disagree about the name.
     const zip = makeZip([{ name: 'Parcels.app/a', data: 'x' }])
     const at = zip.lastIndexOf(Buffer.from('Parcels.app/a'))
     zip[at + 11] = 0xc0
     const first = zip.indexOf(Buffer.from('Parcels.app/a'))
     zip[first + 11] = 0xc0
-    expect(() => readZipEntries(write(zip))).toThrow(ZipFormatError)
+    await expect(readZipEntries(write(zip))).rejects.toThrow(ZipFormatError)
   })
 
-  test.skipIf(!existsSync('/usr/bin/zip'))('reads what /usr/bin/zip writes, symlinks included', () => {
+  test.skipIf(!existsSync('/usr/bin/zip'))('reads what /usr/bin/zip writes, symlinks included', async () => {
     const src = join(dir, 'src')
     mkdirSync(join(src, 'Parcels.app', 'Versions', 'A'), { recursive: true })
     writeFileSync(join(src, 'Parcels.app', 'Versions', 'A', 'bin'), 'x')
     symlinkSync('A', join(src, 'Parcels.app', 'Versions', 'Current'))
     const good = join(dir, 'good.zip')
     execFileSync('/usr/bin/zip', ['-q', '-r', '-y', good, 'Parcels.app'], { cwd: src })
-    const entries = readZipEntries(good)
+    const entries = await readZipEntries(good)
     expect(entries.find(e => e.name === 'Parcels.app/Versions/Current')).toMatchObject({ isSymlink: true, target: 'A' })
     expect(unsafeZipEntry(entries)).toBeUndefined()
 
     symlinkSync('../../../../Library', join(src, 'Parcels.app', 'Versions', 'Out'))
     const evil = join(dir, 'evil.zip')
     execFileSync('/usr/bin/zip', ['-q', '-r', '-y', evil, 'Parcels.app'], { cwd: src })
-    expect(unsafeZipEntry(readZipEntries(evil))).toMatch(/outside/)
+    expect(unsafeZipEntry(await readZipEntries(evil))).toMatch(/outside/)
   })
 })
 
@@ -664,7 +720,7 @@ describe('unsafeUnpackedTree', () => {
     const zip = join(dir, 'u.zip')
     writeFileSync(zip, makeZip(entries))
     const root = join(dir, 'staging')
-    expect((await runCommand('/usr/bin/ditto', ['-x', '-k', zip, root])).code).toBe(0)
+    await runCommand('/usr/bin/ditto', ['-x', '-k', zip, root])
     return root
   }
 
@@ -688,6 +744,27 @@ describe('unsafeUnpackedTree', () => {
     const root = await unpack(entries)
     expect(unsafeUnpackedTree(root, asListed(entries))).toMatch(/outside/)
   })
+
+  // Round 3's three, through the real ditto: whatever it makes of them, the walk refuses the result.
+  const P_REAL: Array<[string, WriteEntry[]]> = [
+    ['P3', [{ name: 'Parcels.app/f', data: 'real content '.repeat(20), deflate: true, trailing: localHeader('Parcels.app/hidden', 'x') }]],
+    ['P6', [{ name: 'Parcels.app/d/', data: localHeader('Parcels.app/hidden', 'x') }]],
+    ['P12', [
+      { name: 'Parcels.app/x', link: 'Contents' },
+      { name: 'Parcels.app/y', link: 'Contents' },
+      {
+        name: 'Parcels.app/f', data: 'real content '.repeat(20), deflate: true,
+        trailing: Buffer.concat([localHeader('Parcels.app/x', '..'), localHeader('Parcels.app/y', 'x/../nonexistent')]),
+      },
+    ]],
+  ]
+  for (const [what, extra] of P_REAL) {
+    realDitto(`after the real ditto, ${what} is caught by the walk`, async () => {
+      const entries = [...LEGIT_APP, ...extra]
+      const root = await unpack(entries)
+      expect(unsafeUnpackedTree(root, asListed(entries))).toBeDefined()
+    })
+  }
 
   realDitto('stageUpdate with the real ditto stages the app-shaped zip', async () => {
     const s = setup()
