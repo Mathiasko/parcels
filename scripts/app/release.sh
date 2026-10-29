@@ -121,7 +121,12 @@ fi
 notes_args=(--generate-notes)
 [ -z "$notes" ] || notes_args=(--notes-file "$notes")
 
+# The prompt can wait a long time; a build in another pane must not have swapped the zips meanwhile.
+(cd release && shasum -a 256 -c -s SHA256SUMS) \
+  || refuse "release/ changed after it was checked. Run the release again."
+
 git tag "$tag"
+trap 'echo "release: publishing stopped partway. If $tag never reached GitHub, remove it with: git tag -d $tag. If it did, finish with: gh release create $tag ${assets[*]} --repo $REPO_SLUG --verify-tag" >&2' ERR
 git push origin "$tag"
 # --verify-tag: the release is made only from the tag just pushed, never from a tag gh would create.
 gh release create "$tag" "${assets[@]}" --repo "$REPO_SLUG" --title "Parcels $version" --verify-tag "${notes_args[@]}"

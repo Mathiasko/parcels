@@ -31,6 +31,8 @@ die() { echo "build-release: $1" >&2; exit 1; }
 # Old artifacts must not be published by mistake beside the new ones.
 step "Clearing release/"
 rm -rf "$ROOT/release"
+# tsc never deletes output, so a file left in dist/ by another branch would otherwise ship.
+rm -rf "$ROOT/dist" "$ROOT/dist-app"
 
 step "Installing exactly the lockfile (npm ci)"
 run_npm "$ROOT" ci

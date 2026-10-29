@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, Notification, powerMonitor, protocol, shell, utilityProcess } from 'electron'
 import type { ToMain } from '../src/core/app-ipc.js'
@@ -35,9 +35,10 @@ const paths = appPaths(homedir())
  * It skips the login item, the offer to move to Applications and the window, and refuses to show a
  * first-run page: the smoke script writes the config, on a free port, into a temporary HOME. It is
  * read from the environment only, never from the command line, so it holds in a packaged build too,
- * which is the build the smoke test is for.
+ * which is the build the smoke test is for. It never holds under the user's real home folder, so a
+ * stray PARCELS_SMOKE cannot change how Parcels starts on a real Mac.
  */
-const smoke = process.env.PARCELS_SMOKE === '1'
+const smoke = process.env.PARCELS_SMOKE === '1' && homedir() !== userInfo().homedir
 
 // Chromium's own state (cookies, caches, the GPU cache) gets a folder of its own inside the support
 // folder, instead of being spread among config.json and data/. It is also placed from HOME: Electron's

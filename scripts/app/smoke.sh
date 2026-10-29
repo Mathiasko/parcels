@@ -89,6 +89,7 @@ prefs_existed=0
 # --- a temporary HOME with a config on a free port ------------------------------------------------
 tmp="${TMPDIR:-/tmp}"
 home="$(mktemp -d "${tmp%/}/parcels-smoke.XXXXXX")"
+[ -n "$home" ] && [ -d "$home" ] || { echo "smoke: could not make a temporary HOME." >&2; exit 1; }
 pid=""
 kids=""
 cleanup() {

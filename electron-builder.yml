@@ -5,6 +5,9 @@ productName: Parcels
 artifactName: "Parcels-${version}-${arch}.${ext}"   # The updater downloads exactly these names.
 directories:
   output: release/
+# electron-builder never publishes (it would on CI, or under `npm run release`): release.sh does, and
+# only after it has checked the zips the way the installed app will.
+publish: null
 
 files:
   - dist/**

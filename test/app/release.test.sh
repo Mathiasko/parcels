@@ -40,9 +40,12 @@ echo "build-release $*" >> "$CALLS"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 v="$(/usr/bin/plutil -extract version raw -o - "$ROOT/package.json")"
 mkdir -p "$ROOT/release"
-for f in "Parcels-$v-arm64.zip" "Parcels-$v-x64.zip" "Parcels-$v-arm64.dmg" "Parcels-$v-x64.dmg" SHA256SUMS; do
-  : > "$ROOT/release/$f"
+for f in "Parcels-$v-arm64.zip" "Parcels-$v-x64.zip" "Parcels-$v-arm64.dmg" "Parcels-$v-x64.dmg"; do
+  echo "$f" > "$ROOT/release/$f"
 done
+(cd "$ROOT/release" && /usr/bin/shasum -a 256 Parcels-* > SHA256SUMS)
+# A build in another pane rewriting a zip while the prompt waits.
+[ -z "${STUB_ZIP_CHANGES:-}" ] || echo changed >> "$ROOT/release/Parcels-$v-arm64.zip"
 [ -z "${STUB_BUILD_FAILS:-}" ] || exit 1
 EOF
 chmod +x "$REPO/scripts/app/build-release.sh"
@@ -166,8 +169,12 @@ check "  and says nothing was published"              says buildfails "nothing w
 check "  and nothing calls gh release"                not_called buildfails "gh release"
 check "  or git tag"                                  not_called buildfails "git tag"
 
+run zipchanged STUB_ZIP_CHANGES=1 -- --notes-file "$TMP/notes.md" --yes
+check "a zip changed after the check is not published" failed zipchanged
+check "  and says release/ changed"                   says zipchanged "release/ changed"
+
 # Every refusal, whatever stopped it: nothing tagged, pushed or released.
-for r in dirty localtag remotetag remotedown noidentity noauth nonotes badarg buildfails; do
+for r in dirty localtag remotetag remotedown noidentity noauth nonotes badarg buildfails zipchanged; do
   check "$r: no git tag, git push or gh release" \
     bash -c "! grep -qE '^(git tag|git push|gh release)' '$TMP/$r.calls'"
 done
