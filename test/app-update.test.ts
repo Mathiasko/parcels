@@ -5,10 +5,13 @@ import {
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { execFileSync } from 'node:child_process'
 import {
-  appUpdateStatusPath, checkAppRelease, CODESIGN, compareVersions, defaultDownload, DITTO, githubFetchJson,
-  parseSha256Sums, readAppUpdateStatus, RELEASES_URL, sha256File, stageUpdate, type StageDeps,
+  APP_BUNDLE_ID, appUpdateStatusPath, checkAppRelease, CODESIGN, compareVersions, defaultDownload, DITTO,
+  githubFetchJson, parseSha256Sums, PLUTIL, readAppUpdateStatus, RELEASES_URL, sha256File, stageUpdate, type StageDeps,
 } from '../src/core/app-update.js'
+import { readZipEntries, unsafeZipEntry, ZipFormatError } from '../src/core/zip-check.js'
+import { LEGIT_APP, makeZip, type WriteEntry } from './zip-writer.js'
 import { CHANGE_MAX, CHANGES_SHOWN } from '../src/core/update.js'
 import { buildPollDeps } from '../src/core/runtime.js'
 import { config, memDb } from './poll-helpers.js'
@@ -193,12 +196,15 @@ describe('sha256File', () => {
 
 const VERSION = '0.3.0'
 const ZIP = `Parcels-${VERSION}-arm64.zip`
-const ZIP_BYTES = 'pretend this is a 130 MB zip'
+const ZIP_BYTES = makeZip(LEGIT_APP)
 const CERT = Buffer.from('the leaf certificate, DER')
 
 interface Fake {
-  zipBytes?: string
+  zipBytes?: string | Buffer
   sums?: string
+  bundleId?: string
+  bundleVersion?: string
+  plutilCode?: number
   downloadThrows?: string
   dittoCode?: number
   dittoMakesApp?: boolean
@@ -247,6 +253,13 @@ function setup(fake: Fake = {}, over: Partial<StageDeps> = {}) {
         writeFileSync(`${prefix}1`, 'the issuer, which is the same self-signed one')
         return { code: 0, stdout: '' }
       }
+      if (cmd === PLUTIL) {
+        if (fake.plutilCode) return { code: fake.plutilCode, stdout: '' }
+        const key = args[1]
+        if (key === 'CFBundleIdentifier') return { code: 0, stdout: `${fake.bundleId ?? APP_BUNDLE_ID}\n` }
+        if (key === 'CFBundleShortVersionString') return { code: 0, stdout: `${fake.bundleVersion ?? VERSION}\n` }
+        return { code: 1, stdout: '' }
+      }
       return { code: 127, stdout: '' }
     },
     ...over,
@@ -277,7 +290,10 @@ describe('stageUpdate', () => {
     expect(s.calls[2]![0]).toBe(CODESIGN)
     expect(s.calls[2]![1][0]).toBe('-d')
     expect(s.calls[2]![1].at(-1)).toBe(staged)
-    expect(s.calls).toHaveLength(3)
+    const plist = join(staged, 'Contents', 'Info.plist')
+    expect(s.calls[3]).toEqual([PLUTIL, ['-extract', 'CFBundleIdentifier', 'raw', '-o', '-', plist]])
+    expect(s.calls[4]).toEqual([PLUTIL, ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', plist]])
+    expect(s.calls).toHaveLength(5)
   })
 
   test('the checksum and the certificate hash are compared without regard to case', async () => {
@@ -347,12 +363,98 @@ describe('stageUpdate', () => {
     expect(s.calls).toHaveLength(2)
   })
 
+  test('a stale status is removed, and if the first status cannot be written nothing is downloaded', async () => {
+    const s = setup()
+    mkdirSync(dirname(s.statusPath), { recursive: true })
+    writeFileSync(s.statusPath, JSON.stringify({ state: 'installed', version: '0.2.0', finishedAt: new Date().toISOString() }))
+    // A directory where the writer's temporary file goes: only the status write fails, nothing else.
+    mkdirSync(`${s.statusPath}.tmp.${process.pid}`)
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const out = await stageUpdate(s.deps)
+      expect(out.state).toBe('failed')
+      expect(s.urls).toEqual([])
+      expect(s.calls).toEqual([])
+      expect(existsSync(s.statusPath)).toBe(false)
+      expect(existsSync(s.downloads)).toBe(false)
+    } finally { errors.mockRestore() }
+  })
+
   test('a different certificate fails', async () => {
     await failsCleanly(setup({ cert: Buffer.from('somebody else') }), /not signed by the same certificate/)
   })
 
+  test('another app signed with the same certificate fails', async () => {
+    await failsCleanly(setup({ bundleId: 'local.parcelsspike.app' }), /not the version it claims to be/)
+  })
+
+  test('an older Parcels signed with the same certificate fails', async () => {
+    await failsCleanly(setup({ bundleVersion: '0.2.0' }), /not the version it claims to be/)
+  })
+
+  test('an Info.plist that cannot be read fails', async () => {
+    await failsCleanly(setup({ plutilCode: 1 }), /not the version it claims to be/)
+  })
+
   test('a missing expected certificate hash fails rather than accepting anything', async () => {
     await failsCleanly(setup({}, { expectedCertSha: '' }))
+  })
+
+  const withZip = (entries: WriteEntry[], opts: { zip64?: boolean } = {}) => {
+    const zip = makeZip(entries, opts)
+    return setup({ zipBytes: zip, sums: `${sha(zip)}  ${ZIP}\n` })
+  }
+  const OUTSIDE = /outside its folder/
+
+  test('a zip shaped like the real app, framework symlinks and all, is unpacked (zip64 too)', async () => {
+    expect((await stageUpdate(withZip(LEGIT_APP).deps)).state).toBe('staged')
+    expect((await stageUpdate(withZip(LEGIT_APP, { zip64: true }).deps)).state).toBe('staged')
+  })
+
+  const escapes: Array<[string, WriteEntry[]]> = [
+    ['a ../ name', [{ name: '../evil', data: 'x' }]],
+    ['a ../ inside the app', [{ name: 'Parcels.app/../../evil', data: 'x' }]],
+    ['an absolute name', [{ name: '/abs', data: 'x' }]],
+    ['a backslash', [{ name: 'Parcels.app\\..\\..\\evil', data: 'x' }]],
+    ['a symlink to /Users', [{ name: 'Parcels.app/l', link: '/Users' }]],
+    ['a symlink to ../../x', [{ name: 'Parcels.app/l', link: '../../x' }]],
+    ['a deflated symlink out', [{ name: 'Parcels.app/l', link: '../../../Library/LaunchAgents', deflate: true }]],
+    ['a write through a symlinked directory', [
+      { name: 'Parcels.app/d', link: 'Contents' }, { name: 'Parcels.app/d/evil', data: 'x' },
+    ]],
+    ['a write through a symlink spelled in another case', [
+      { name: 'Parcels.app/D', link: 'Contents' }, { name: 'parcels.app/d/evil', data: 'x' },
+    ]],
+    ['a chain of in-tree links that ends outside', [
+      { name: 'Parcels.app/x', link: '..' }, { name: 'Parcels.app/y', link: 'x/..' },
+    ]],
+    ['a link loop', [{ name: 'Parcels.app/a', link: 'b' }, { name: 'Parcels.app/b', link: 'a' }]],
+    ['the same path twice', [{ name: 'Parcels.app/f', data: 'x' }, { name: 'Parcels.app/f', link: 'Contents' }]],
+  ]
+  for (const [what, entries] of escapes) {
+    test(`a zip with ${what} is refused before ditto runs`, async () => {
+      const s = withZip([...LEGIT_APP, ...entries])
+      await failsCleanly(s, OUTSIDE)
+      expect(s.calls).toEqual([])
+    })
+  }
+
+  test('a local header naming a different file than the directory is refused', async () => {
+    const s = withZip([...LEGIT_APP, { name: 'Parcels.app/ok', localName: '../evi', data: 'x' }])
+    await failsCleanly(s)
+    expect(s.calls).toEqual([])
+  })
+
+  test('an entry hidden from the directory is refused', async () => {
+    const s = withZip([...LEGIT_APP, { name: '../evil', data: 'x', hidden: true }])
+    await failsCleanly(s)
+    expect(s.calls).toEqual([])
+  })
+
+  test('a download that is not a zip at all is refused before ditto runs', async () => {
+    const s = setup({ zipBytes: 'not a zip', sums: `${sha('not a zip')}  ${ZIP}\n` })
+    await failsCleanly(s)
+    expect(s.calls).toEqual([])
   })
 
   test('an http download base is refused unless it is this Mac', async () => {
@@ -380,6 +482,52 @@ describe('stageUpdate', () => {
     expect(lstatSync(s.statusPath).isFile()).toBe(true)
     expect(statSync(s.statusPath).mode & 0o777).toBe(0o600)
     expect(readdirSync(dirname(s.statusPath)).filter(n => n.includes('.tmp'))).toEqual([])
+  })
+})
+
+// --- the zip check on its own ------------------------------------------------------------------------
+
+describe('readZipEntries and unsafeZipEntry', () => {
+  const write = (zip: Buffer) => { const p = join(dir, `z-${Math.random()}.zip`); writeFileSync(p, zip); return p }
+
+  test('lists names and symlink targets, stored or deflated', () => {
+    const entries = readZipEntries(write(makeZip(LEGIT_APP)))
+    expect(entries.map(e => e.name)).toEqual(LEGIT_APP.map(e => e.name))
+    expect(entries.find(e => e.name.endsWith('Versions/Current'))).toMatchObject({ isSymlink: true, target: 'A' })
+    expect(entries.find(e => e.name.endsWith('X.framework/Resources'))).toMatchObject({ isSymlink: true, target: 'Versions/Current/Resources' })
+    expect(unsafeZipEntry(entries)).toBeUndefined()
+  })
+
+  test('a truncated zip is a format error', () => {
+    const zip = makeZip(LEGIT_APP)
+    expect(() => readZipEntries(write(zip.subarray(0, zip.length - 30)))).toThrow(ZipFormatError)
+  })
+
+  test('a name that is not valid UTF-8 is a format error', () => {
+    // A lone 0xC0 where the slash was: a lenient decoder and the unpacker could disagree about the name.
+    const zip = makeZip([{ name: 'Parcels.app/a', data: 'x' }])
+    const at = zip.lastIndexOf(Buffer.from('Parcels.app/a'))
+    zip[at + 11] = 0xc0
+    const first = zip.indexOf(Buffer.from('Parcels.app/a'))
+    zip[first + 11] = 0xc0
+    expect(() => readZipEntries(write(zip))).toThrow(ZipFormatError)
+  })
+
+  test.skipIf(!existsSync('/usr/bin/zip'))('reads what /usr/bin/zip writes, symlinks included', () => {
+    const src = join(dir, 'src')
+    mkdirSync(join(src, 'Parcels.app', 'Versions', 'A'), { recursive: true })
+    writeFileSync(join(src, 'Parcels.app', 'Versions', 'A', 'bin'), 'x')
+    symlinkSync('A', join(src, 'Parcels.app', 'Versions', 'Current'))
+    const good = join(dir, 'good.zip')
+    execFileSync('/usr/bin/zip', ['-q', '-r', '-y', good, 'Parcels.app'], { cwd: src })
+    const entries = readZipEntries(good)
+    expect(entries.find(e => e.name === 'Parcels.app/Versions/Current')).toMatchObject({ isSymlink: true, target: 'A' })
+    expect(unsafeZipEntry(entries)).toBeUndefined()
+
+    symlinkSync('../../../../Library', join(src, 'Parcels.app', 'Versions', 'Out'))
+    const evil = join(dir, 'evil.zip')
+    execFileSync('/usr/bin/zip', ['-q', '-r', '-y', evil, 'Parcels.app'], { cwd: src })
+    expect(unsafeZipEntry(readZipEntries(evil))).toMatch(/outside/)
   })
 })
 

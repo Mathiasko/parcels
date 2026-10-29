@@ -9,6 +9,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { CHANGE_MAX, CHANGES_SHOWN, REASON_MAX, type UpdateCheck } from './update.js'
+import { readZipEntries, unsafeZipEntry, ZipFormatError } from './zip-check.js'
 
 /**
  * Updating the Mac app from GitHub Releases (spec §5.2).
@@ -38,6 +39,13 @@ export const releaseDownloadBase = (version: string): string =>
  */
 export const DITTO = '/usr/bin/ditto'
 export const CODESIGN = '/usr/bin/codesign'
+export const PLUTIL = '/usr/bin/plutil'
+
+/**
+ * The bundle identifier electron-builder gives the app (its `appId`). Pinned because the certificate
+ * alone does not say which app it signed: the spike app, and every older Parcels, carry the same one.
+ */
+export const APP_BUNDLE_ID = 'local.parcels.app'
 
 /** How long one `ditto` or `codesign` may take. Unpacking 280 MB is seconds; this is generous. */
 export const RUN_TIMEOUT_MS = 5 * 60_000
@@ -333,10 +341,10 @@ export function isSafeDownloadUrl(url: string): boolean {
 }
 
 /**
- * Removes what an earlier attempt left behind: this version's staging and download folders, and
- * those of any other version (a crash mid-download, or a staged version a newer release replaced).
- * Only names this module creates are touched, matched exactly, because the staging folder sits in
- * /Applications beside other people's apps.
+ * Removes what an earlier attempt left behind: this version's staging and download folders, those of
+ * any other version (a crash mid-download, or a staged version a newer release replaced), and the
+ * old status file, which describes an attempt that is over. Only names this module creates are
+ * touched, matched exactly, because the staging folder sits in /Applications beside other people's apps.
  */
 function removeLeftovers(appBundle: string, supportDir: string): void {
   const sweep = (parent: string, pattern: RegExp) => {
@@ -349,15 +357,18 @@ function removeLeftovers(appBundle: string, supportDir: string): void {
   }
   sweep(dirname(appBundle), /^\.Parcels-update-(.+)$/)
   sweep(join(supportDir, 'updates'), /^(.+)$/)
+  rmSync(appUpdateStatusPath(supportDir), { force: true })
 }
 
 /**
  * Downloads a release and stages it beside the app, verified, or explains why not.
  *
  * Steps, in order, each one a reason to stop: download the zip and `SHA256SUMS`; compare the zip's
- * SHA-256 with its line there; unpack with `ditto` into the staging folder and find a real
- * `Parcels.app` in it; `codesign --verify --deep --strict` it; compare its leaf certificate's SHA-256
- * with `expectedCertSha`. On any failure both the staging folder and the downloads are removed, so a
+ * SHA-256 with its line there; read the zip's table of contents and refuse any entry that could land
+ * outside the staging folder (`zip-check.ts`); unpack with `ditto` into the staging folder and find a
+ * real `Parcels.app` in it; `codesign --verify --deep --strict` it; compare its leaf certificate's
+ * SHA-256 with `expectedCertSha`; and read its Info.plist, whose bundle identifier must be Parcels's
+ * and whose version must be the one that was asked for. On any failure both the staging folder and the downloads are removed, so a
  * half-checked app is never left where the swap could pick it up. On success only the staged app
  * remains. The status file says where it is at every step. Never throws.
  */
@@ -365,9 +376,13 @@ export async function stageUpdate(d: StageDeps): Promise<AppUpdateStatus> {
   const now = d.now ?? (() => new Date())
   const startedAt = now()
   const statusPath = appUpdateStatusPath(d.supportDir)
-  const save = (s: AppUpdateStatus) => {
-    try { writeAppUpdateStatus(statusPath, s) } catch (err) {
+  const save = (s: AppUpdateStatus): boolean => {
+    try {
+      writeAppUpdateStatus(statusPath, s)
+      return true
+    } catch (err) {
       console.error(`update: could not write ${statusPath}: ${err instanceof Error ? err.message : String(err)}`)
+      return false
     }
   }
 
@@ -397,7 +412,11 @@ export async function stageUpdate(d: StageDeps): Promise<AppUpdateStatus> {
 
   try {
     removeLeftovers(d.appBundle, d.supportDir)
-    save({ state: 'downloading', version, startedAt })
+    // A download the page cannot see is one the user cannot follow or retry sensibly, and the same
+    // fault (a full disk, a folder that is not writable) would only fail the download later.
+    if (!save({ state: 'downloading', version, startedAt })) {
+      fail('The update could not record its progress in the support folder, so nothing was downloaded.')
+    }
 
     const base = (d.releaseBase ?? releaseDownloadBase(version)).replace(/\/+$/, '')
     const zipUrl = `${base}/${zipName}`
@@ -426,7 +445,18 @@ export async function stageUpdate(d: StageDeps): Promise<AppUpdateStatus> {
     const actual = await sha256File(zip)
     if (actual !== expected) fail('The download did not match its published checksum, so it was thrown away.', `${actual} != ${expected}`)
 
-    // 3. Unpack, and find a real app: a symlink named Parcels.app would point the checks, and later
+    // 3. Before anything unpacks it, prove no entry can land outside the staging folder. The checksum
+    // above only shows the zip is the one its release lists; whoever controls the release controls
+    // both, and the certificate check cannot run until the app has been unpacked.
+    try {
+      const unsafe = unsafeZipEntry(readZipEntries(zip))
+      if (unsafe !== undefined) fail('The download contains files that would land outside its folder, so it was thrown away.', unsafe)
+    } catch (err) {
+      if (err instanceof StageFailure) throw err
+      fail('The download is not a zip this app can check, so it was thrown away.', err instanceof ZipFormatError ? err : String(err))
+    }
+
+    // Unpack, and find a real app: a symlink named Parcels.app would point the checks, and later
     // the swap, at something outside the staging folder.
     const unpacked = await d.run(DITTO, ['-x', '-k', zip, staging])
     if (unpacked.code !== 0) fail('The download could not be unpacked, so it was not installed.', `ditto exited ${unpacked.code}`)
@@ -458,6 +488,21 @@ export async function stageUpdate(d: StageDeps): Promise<AppUpdateStatus> {
     }
     const got = await sha256File(leaf)
     if (got !== want) fail('The new version is not signed by the same certificate as this one, so it was not installed.', `${got} != ${want}`)
+
+    // 6. ...and is this app, at the version asked for. The certificate signs every build ever made
+    // with it, so without this an older Parcels with a known flaw, or another app signed with the same
+    // identity, would pass as this update.
+    const plist = join(stagedApp, 'Contents', 'Info.plist')
+    const plistValue = async (key: string): Promise<string | undefined> => {
+      const r = await d.run(PLUTIL, ['-extract', key, 'raw', '-o', '-', plist])
+      return r.code === 0 ? r.stdout.trim() : undefined
+    }
+    const bundleId = await plistValue('CFBundleIdentifier')
+    const bundleVersion = await plistValue('CFBundleShortVersionString')
+    if (bundleId !== APP_BUNDLE_ID || bundleVersion !== version) {
+      fail('The download is not the version it claims to be, so it was not installed.',
+        `CFBundleIdentifier ${String(bundleId)}, CFBundleShortVersionString ${String(bundleVersion)}`)
+    }
 
     rmSync(downloads, { recursive: true, force: true })
     const staged: AppUpdateStatus = { state: 'staged', version, staged: stagedApp, startedAt }
