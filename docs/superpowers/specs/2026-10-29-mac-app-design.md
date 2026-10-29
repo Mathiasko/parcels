@@ -295,3 +295,76 @@ New dev dependencies: `electron` and `electron-builder`. No new runtime dependen
   floor. Pin an Electron version whose Node meets it.
 - **Two copies running.** The single-instance lock covers the app. The Move in page, and the port
   check in §2.2, cover the git install.
+
+## 10. Spike findings (2026-10-29)
+
+A throwaway Electron 45.1.0 / electron-builder 26.18.0 app ("ParcelsSpike", arm64) was built from
+its own `spike/` folder, signed with "Parcels Signing", and run from `/Applications`. Go: nothing
+below forces a change to §2 or §5; three build details do.
+
+1. **better-sqlite3 in the utility process: works.** better-sqlite3 13 is an N-API addon that ships
+   its own `prebuilds/darwin-arm64.node` (and `darwin-x64.node`) inside the npm package. The same
+   file loads in Node 24.21 (ABI 137) and in Electron 45.1.0 (Node 24.22.1, ABI 150): the utility
+   process posted `{ '1': 1 }` (SQLite 3.53.4), loading
+   `app.asar/node_modules/better-sqlite3/prebuilds/darwin-arm64.node` (served from
+   `app.asar.unpacked`). There is no "Electron prebuild" to fetch, and no Electron-ABI rebuild.
+   - electron-builder's default `npmRebuild: true` runs `@electron/rebuild` **in place** on the
+     project's `node_modules`. For better-sqlite3 13 it is a no-op: `binding.gyp` builds nothing
+     when a prebuild exists, so it only adds `build/` (Makefiles, stamps, `.forge-meta`) and leaves
+     `prebuilds/*.node` byte-identical. The repo's `node_modules` stays usable by vitest either way
+     (R4 holds), but the release build should set **`npmRebuild: false`**: it is not needed.
+   - The Electron binary also loads the repo's own, unmodified `node_modules/better-sqlite3`.
+2. **Grants surviving a rebuild: evidence good, hand check owed.** Three builds signed with the same
+   identity have the identical designated requirement
+   `identifier "local.parcelsspike.app" and certificate leaf = H"0ef12a68…8ddc"` (leaf SHA-1). TCC
+   keys Automation and notification grants on it, so they should survive an update. Only a
+   regenerated certificate changes it. The user still has to click once to confirm (Calendar, then
+   rebuild, then no second prompt).
+3. **The swap: works.** From inside the running 0.0.2 app: `ditto -x -k` the 0.0.3 zip into
+   `~/Library/Application Support/<app>/updates/0.0.3/`, `codesign --verify --deep --strict` (pass),
+   no quarantine attribute on the unpacked app, then a detached `/bin/sh` script waited for the PID,
+   renamed `/Applications/ParcelsSpike.app` to `.old-0.0.2`, moved the staged app in, removed the old
+   one and `open`ed it. 0.0.3 started 3 s later. No App Management prompt, no
+   `Operation not permitted`. A forced step-3 failure renamed the old bundle back, reopened it and
+   left the marker, as §5.2 says. `~/Applications` was not needed.
+4. **Notifications: no error.** `Notification.isSupported()` is `true`; `new Notification(...).show()`
+   does not throw and emits `show`; `failed` never fired. Whether the banner shows under the app's
+   name, and the permission prompt, are part of the hand check (2).
+5. **A file inside app.asar from the utility process: works.** `fs.readFileSync` of
+   `app.asar/dist/db/schema.sql` returned its text. Keep `asar: true`.
+
+**Builder settings that worked** (arm64, 0.0.1–0.0.3):
+
+- `asar: true`, `asarUnpack: ["**/*.node"]`, `mac.hardenedRuntime: false`, `mac.notarize: false`,
+  `mac.gatekeeperAssess: false`, `mac.extendInfo.NSAppleEventsUsageDescription` set.
+- **`mac.identity: null` plus an `afterPack` hook that signs.** electron-builder only accepts
+  identities that `security find-identity -v` lists, i.e. trusted ones, and skips signing with
+  "Identity name is specified, but no valid identity with this name in the keychain". "Parcels
+  Signing" is untrusted (`CSSMERR_TP_NOT_TRUSTED`), and `codesign` signs with it without complaint,
+  so the hook calls `@electron/osx-sign`'s `signAsync({ app, identity: 'Parcels Signing',
+  identityValidation: false, platform: 'darwin', preAutoEntitlements: false, optionsForFile: () =>
+  ({ hardenedRuntime: false, timestamp: 'none' }) })`. The zip target is then built from the signed
+  app. (`mac.sign` does not help: it is only called after an identity is found.) Trusting the
+  certificate with `security add-trusted-cert` needs the user's password in a GUI, so it is not done.
+- **`timestamp: 'none'`.** Apple's timestamp server failed mid-build ("The timestamp service is not
+  available."), and a self-signed app gains nothing from a timestamp.
+- `npmRebuild: false` (see 1).
+
+**What changes in the design and plan:**
+
+- The release script signs through the `afterPack` hook above, not through electron-builder's
+  `identity`, and checks the result with `codesign --verify --deep --strict` and the leaf hash.
+  `app/signing-cert.sha256` is lowercase hex, equal to `shasum -a 256` of the `c0` that
+  `codesign -d --extract-certificates` writes.
+- **`ELECTRON_RUN_AS_NODE`.** With it set (some terminals and Electron-based tools set it), the app
+  binary runs as plain Node and exits; `open` passes the caller's environment on. Set the fuse
+  `electronFuses: { runAsNode: false }` (the app only uses `utilityProcess`, which the fuse does not
+  affect; not tried in the spike), and the swap script's `open` should use
+  `env -u ELECTRON_RUN_AS_NODE`.
+- **Size.** arm64 zip 127 MB (126,994,688 bytes); unpacked app 284 MB, of which 252 MB is Electron's
+  frameworks. electron-builder unpacks the whole better-sqlite3 package (26 MB: SQLite's C source and
+  eight platforms' prebuilds). Excluding `node_modules/better-sqlite3/{deps,src}/**` and the
+  non-darwin prebuilds in `files` saves about 24 MB per architecture.
+- **Build time.** About 4 minutes per architecture, mostly `@electron/osx-sign` signing every file.
+- The git install's `npm ci` now also installs electron-builder's tree (Electron's binary is fetched
+  lazily, on first use, so not by `npm ci`).
