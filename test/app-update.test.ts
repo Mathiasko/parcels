@@ -217,6 +217,8 @@ interface Fake {
   dittoMakesSymlink?: boolean
   verifyCode?: number
   cert?: Buffer
+  /** codesign -d succeeds but extracts no certificate: an ad hoc signature carries none. */
+  adHoc?: boolean
 }
 
 function setup(fake: Fake = {}, over: Partial<StageDeps> = {}) {
@@ -255,6 +257,7 @@ function setup(fake: Fake = {}, over: Partial<StageDeps> = {}) {
       }
       if (cmd === CODESIGN && args[0] === '--verify') return { code: fake.verifyCode ?? 0, stdout: '' }
       if (cmd === CODESIGN && args[0] === '-d') {
+        if (fake.adHoc) return { code: 0, stdout: '' }
         const prefix = args.find(a => a.startsWith('--extract-certificates='))!.slice('--extract-certificates='.length)
         writeFileSync(`${prefix}0`, fake.cert ?? CERT)
         writeFileSync(`${prefix}1`, 'the issuer, which is the same self-signed one')
@@ -389,6 +392,12 @@ describe('stageUpdate', () => {
 
   test('a different certificate fails', async () => {
     await failsCleanly(setup({ cert: Buffer.from('somebody else') }), /not signed by the same certificate/)
+  })
+
+  // The end-to-end test's tampered build (Task 12): re-signed ad hoc, so `codesign -d` succeeds and
+  // extracts nothing. That is not a certificate that could not be read; it is no certificate of ours.
+  test('an app signed ad hoc, with no certificate at all, is not signed by the same certificate', async () => {
+    await failsCleanly(setup({ adHoc: true }), /not signed by the same certificate/)
   })
 
   test('another app signed with the same certificate fails', async () => {

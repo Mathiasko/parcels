@@ -437,13 +437,15 @@ export async function checkAppBundle(
     const prefix = join(certDir, 'c')
     const extracted = await run(CODESIGN, ['-d', `--extract-certificates=${prefix}`, appPath])
     const leaf = `${prefix}0`
-    if (extracted.code !== 0 || !existsSync(leaf)) {
+    const NOT_OURS = 'The new version is not signed by the same certificate as this one, so it was not installed.'
+    if (extracted.code !== 0) {
       return { reason: 'The new version\'s certificate could not be read, so it was not installed.', detail: `codesign -d exited ${extracted.code}` }
     }
+    // codesign read the signature and found no certificate in it: an ad hoc signature (`codesign -s -`)
+    // or none. That is an answer, not a fault: whoever made this app did not sign it with ours.
+    if (!existsSync(leaf)) return { reason: NOT_OURS, detail: 'the signature carries no certificate (ad hoc)' }
     const got = await sha256File(leaf)
-    if (got !== want) {
-      return { reason: 'The new version is not signed by the same certificate as this one, so it was not installed.', detail: `${got} != ${want}` }
-    }
+    if (got !== want) return { reason: NOT_OURS, detail: `${got} != ${want}` }
   } finally {
     rmSync(certDir, { recursive: true, force: true })
   }

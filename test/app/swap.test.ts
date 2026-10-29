@@ -353,6 +353,13 @@ describe('verifyStaged', () => {
     await refused(setup({ cert: 'somebody else' }).deps, /same certificate/)
   })
 
+  test('an app re-signed ad hoc, which carries no certificate, is not signed by the same certificate', async () => {
+    const s = setup({})
+    const run = s.deps.run
+    s.deps.run = async (cmd, args) => (cmd === CODESIGN && args[0] === '-d' ? { code: 0, stdout: '' } : run(cmd, args))
+    await refused(s.deps, /not signed by the same certificate/)
+  })
+
   test('a certificate that cannot be read is refused', async () => {
     await refused(setup({ noCert: true }).deps, /certificate could not be read/)
   })
