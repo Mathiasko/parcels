@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
+import { createServer as createNetServer, type AddressInfo } from 'node:net'
 import {
   APP_BUNDLE_ID, appUpdateStatusPath, checkAppRelease, CODESIGN, compareVersions, defaultDownload, DITTO,
   downloadBaseBeside, githubFetchJson, parseSha256Sums, PLUTIL, readAppUpdateStatus, RELEASES_URL, releasesUrlOverride,
@@ -774,9 +775,9 @@ describe('unsafeUnpackedTree', () => {
   })
 })
 
-// --- the real fetch wrappers, with fetch stubbed --------------------------------------------------------
+// --- the real fetch wrapper, with fetch stubbed, and the real download -------------------------------------------------------
 
-describe('githubFetchJson and defaultDownload', () => {
+describe('githubFetchJson', () => {
   test('the JSON fetch sends GitHub headers and returns the parsed body', async () => {
     const seen: Array<{ url: string; init: RequestInit | undefined }> = []
     vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
@@ -794,26 +795,94 @@ describe('githubFetchJson and defaultDownload', () => {
     vi.stubGlobal('fetch', async () => new Response('rate limited', { status: 403 }))
     await expect(githubFetchJson('0.2.0')(RELEASES_URL)).rejects.toMatchObject({ status: 403 })
   })
+})
 
-  test('the download streams the body to the file', async () => {
-    vi.stubGlobal('fetch', async () => new Response('zip body', { status: 200 }))
-    const dest = join(dir, 'out.zip')
-    await defaultDownload('https://github.com/x/y.zip', dest)
-    expect(readFileSync(dest, 'utf8')).toBe('zip body')
+/**
+ * A server on this Mac that answers as the simplest HTTP servers do (python's http.server among them):
+ * HTTP/1.0, no length, the body ending when the connection closes. Undici (fetch) in Electron's Node
+ * crashes the process on such a body when it arrives faster than the file is written
+ * ("assert(!this.paused)"), which is why the download does not use fetch.
+ */
+async function rawServer(answer: (path: string) => { head: string; body?: Buffer }) {
+  const seen: string[] = []
+  const server = createNetServer(socket => {
+    let req = ''
+    socket.on('data', chunk => {
+      req += chunk.toString('latin1')
+      if (!req.includes('\r\n\r\n')) return
+      const path = req.split(' ')[1] ?? '/'
+      seen.push(path)
+      const a = answer(path)
+      socket.write(`${a.head}\r\n\r\n`)
+      if (a.body) socket.write(a.body)
+      socket.end()
+    })
+    socket.on('error', () => {})
+  })
+  await new Promise<void>(r => server.listen(0, '127.0.0.1', r))
+  const port = (server.address() as AddressInfo).port
+  return { base: `http://127.0.0.1:${port}`, seen, close: () => new Promise<void>(r => server.close(() => r())) }
+}
+
+describe('defaultDownload', () => {
+  const noFetch = () => vi.stubGlobal('fetch', async () => { throw new Error('the download must not use fetch') })
+
+  test('streams a large body that ends when the server closes the connection, without fetch', async () => {
+    noFetch()
+    const body = Buffer.alloc(24 * 1024 * 1024, 7)
+    const srv = await rawServer(() => ({ head: 'HTTP/1.0 200 OK\r\nContent-Type: application/zip', body }))
+    try {
+      const dest = join(dir, 'out.zip')
+      await defaultDownload(`${srv.base}/y.zip`, dest)
+      expect(statSync(dest).size).toBe(body.length)
+      expect(sha(readFileSync(dest))).toBe(sha(body))
+      expect(statSync(dest).mode & 0o777).toBe(0o600)
+    } finally { await srv.close() }
+  })
+
+  test('follows a redirect, relative or absolute, on a safe address', async () => {
+    noFetch()
+    const srv = await rawServer(path => path === '/a' ? { head: 'HTTP/1.1 302 Found\r\nLocation: /b\r\nContent-Length: 0' }
+      : path === '/b' ? { head: `HTTP/1.1 301 Moved\r\nLocation: http://127.0.0.1:${new URL(srvBase()).port}/c\r\nContent-Length: 0` }
+      : { head: 'HTTP/1.0 200 OK', body: Buffer.from('zip body') })
+    const srvBase = () => srv.base
+    try {
+      const dest = join(dir, 'out.zip')
+      await defaultDownload(`${srv.base}/a`, dest)
+      expect(readFileSync(dest, 'utf8')).toBe('zip body')
+      expect(srv.seen).toEqual(['/a', '/b', '/c'])
+    } finally { await srv.close() }
   })
 
   test('a download answered with 404 throws with the status', async () => {
-    vi.stubGlobal('fetch', async () => new Response('nope', { status: 404 }))
-    await expect(defaultDownload('https://github.com/x/y.zip', join(dir, 'out.zip'))).rejects.toMatchObject({ status: 404 })
+    noFetch()
+    const srv = await rawServer(() => ({ head: 'HTTP/1.0 404 Not Found', body: Buffer.from('nope') }))
+    try {
+      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'))).rejects.toMatchObject({ status: 404 })
+    } finally { await srv.close() }
   })
 
-  test('a download redirected to plain http is refused', async () => {
-    vi.stubGlobal('fetch', async () => {
-      const res = new Response('zip body', { status: 200 })
-      Object.defineProperty(res, 'url', { value: 'http://objects.example.com/y.zip' })
-      return res
-    })
-    await expect(defaultDownload('https://github.com/x/y.zip', join(dir, 'out.zip'))).rejects.toThrow(/https/)
+  test('a redirect to plain http elsewhere is refused before anything is asked of it', async () => {
+    noFetch()
+    const srv = await rawServer(() => ({ head: 'HTTP/1.1 302 Found\r\nLocation: http://objects.example.com/y.zip\r\nContent-Length: 0' }))
+    try {
+      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'))).rejects.toThrow(/redirected away from https/)
+      expect(srv.seen).toEqual(['/y.zip'])
+    } finally { await srv.close() }
+  })
+
+  test('a redirect loop ends', async () => {
+    noFetch()
+    const srv = await rawServer(() => ({ head: 'HTTP/1.1 302 Found\r\nLocation: /again\r\nContent-Length: 0' }))
+    try {
+      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'))).rejects.toThrow(/redirects/)
+      expect(srv.seen.length).toBeLessThanOrEqual(6)
+    } finally { await srv.close() }
+  })
+
+  test('plain http to another machine is refused without a request', async () => {
+    noFetch()
+    await expect(defaultDownload('http://example.com/y.zip', join(dir, 'out.zip'))).rejects.toThrow(/not https/)
   })
 })
 

@@ -1,13 +1,13 @@
 import { execFile } from 'node:child_process'
+import { get as httpGet, type IncomingMessage } from 'node:http'
+import { get as httpsGet } from 'node:https'
 import { createHash } from 'node:crypto'
 import {
   createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync,
   renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { CHANGE_MAX, CHANGES_SHOWN, REASON_MAX, UPDATE_STALE_MS, type UpdateCheck } from './update.js'
 import { readZipEntries, unsafeUnpackedTree, unsafeZipEntry, ZipFormatError, type ZipEntry } from './zip-check.js'
 
@@ -607,23 +607,52 @@ export async function stageUpdate(d: StageDeps): Promise<AppUpdateStatus> {
 
 // --- the real effects ---------------------------------------------------------------------------------
 
+/** How many redirects a download follows. GitHub's asset URLs take one, to its object storage. */
+const MAX_REDIRECTS = 5
+
+/**
+ * One GET with `node:http`/`node:https`, following redirects itself so that every address on the way
+ * is checked before it is asked (`isSafeDownloadUrl`). Resolves with the final 2xx response, its body
+ * not yet read; anything else rejects, a non-2xx with its status.
+ */
+function getFollowing(url: string, signal: AbortSignal, left: number = MAX_REDIRECTS): Promise<IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    const get = new URL(url).protocol === 'https:' ? httpsGet : httpGet
+    const req = get(url, { signal, headers: { 'user-agent': 'Parcels' } }, res => {
+      const status = res.statusCode ?? 0
+      const location = res.headers.location
+      if (status >= 300 && status < 400 && location !== undefined) {
+        res.resume()
+        if (left <= 0) return reject(new Error(`too many redirects downloading ${url}`))
+        let next: string
+        try { next = new URL(location, url).href } catch { return reject(new Error(`a redirect from ${url} to an address that is not one`)) }
+        if (!isSafeDownloadUrl(next)) return reject(new Error(`refusing to download from ${next}: redirected away from https`))
+        return getFollowing(next, signal, left - 1).then(resolve, reject)
+      }
+      if (status < 200 || status >= 300) {
+        res.resume()
+        return reject(new HttpError(status, url))
+      }
+      resolve(res)
+    })
+    req.on('error', reject)
+  })
+}
+
 /**
  * Downloads `url` to `dest`, streamed. GitHub's asset URLs redirect to its object storage, so
- * redirects are followed - but the address it ends at must still be a safe one.
+ * redirects are followed - but each address on the way must still be a safe one.
+ *
+ * `node:http(s)`, not `fetch`: Electron 45's Node (24.22.1, undici 7.30.1) dies on an uncaught
+ * `assert(!this.paused)` inside undici when a body that ends with the connection (no length, or
+ * `Connection: close`) arrives faster than the file is written, which takes the whole server process
+ * down mid-download. The end-to-end test against a plain HTTP server hit it two times in three.
  */
 export async function defaultDownload(url: string, dest: string): Promise<void> {
   if (!isSafeDownloadUrl(url)) throw new Error(`refusing to download from ${url}: not https`)
-  const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
-  if (res.url && !isSafeDownloadUrl(res.url)) {
-    await res.body?.cancel().catch(() => {})
-    throw new Error(`refusing to download from ${res.url}: redirected away from https`)
-  }
-  if (!res.ok) {
-    await res.body?.cancel().catch(() => {})
-    throw new HttpError(res.status, url)
-  }
-  if (!res.body) throw new Error(`no body from ${url}`)
-  await pipeline(Readable.fromWeb(res.body as WebReadableStream<Uint8Array>), createWriteStream(dest, { mode: 0o600 }))
+  const signal = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
+  const res = await getFollowing(url, signal)
+  await pipeline(res, createWriteStream(dest, { mode: 0o600 }), { signal })
 }
 
 /**
