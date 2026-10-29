@@ -7,6 +7,9 @@ import type { Config } from './config.js'
 import { createBinaryFetch, createHttpClient } from './http.js'
 import { tileDirFor } from './tiles.js'
 import type { PollDeps } from './poll.js'
+import { checkAppRelease, githubFetchJson } from './app-update.js'
+import { host } from './host.js'
+import { appVersion } from './version.js'
 
 /**
  * Process-wide setup every long-lived entry point (poller, CLI, web server) must do before it polls
@@ -43,7 +46,11 @@ export function buildPollDeps(db: Database, config: Config, overrides: Partial<P
     // adoption of an update that finished while nothing was watching. Present here rather than inside
     // `runPoll` so that a test which builds its own PollDeps spawns no git at all, and so that the
     // "Refresh now" button - which does not use this function - stays a pure parcel refresh.
-    updateCheck: {},
+    // The Mac app has no checkout to fetch: it asks GitHub Releases once a day instead, under the same
+    // rate limit, and the injected check also tells the poll to leave the git status file alone.
+    updateCheck: host() === 'app'
+      ? { check: () => checkAppRelease(appVersion(), githubFetchJson(appVersion())) }
+      : {},
     ...overrides,
   }
 }

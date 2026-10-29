@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   adoptUpdateOutcome, checkForUpdate, checkForUpdateAsync, maybeCheckForUpdate, updateScriptRunnerAsync, parseUpdateCheck, readUpdateRun,
   startUpdate, updateLogPath, updateOutcome, updateStatusPath, UPDATE_CHECK_INTERVAL_MS,
-  UPDATE_STALE_MS, writeRunningUpdate, type ScriptResult, type SpawnOptions,
+  UPDATE_STALE_MS, writeRunningUpdate, type ScriptResult, type SpawnOptions, type UpdateCheck,
 } from '../src/core/update.js'
 import {
   dueForUpdateCheck, getUpdateCheck, loggedUpdateStart, recordUpdateCheck,
@@ -188,38 +188,38 @@ describe('reading what scripts/update.sh --check reports', () => {
 })
 
 describe('the daily check is rate-limited', () => {
-  test('the first poll of a fresh database checks', () => {
+  test('the first poll of a fresh database checks', async () => {
     const db = memDb()
     const r = runner(CURRENT)
-    expect(maybeCheckForUpdate(db, NOW, { run: r.run })?.state).toBe('current')
+    expect((await maybeCheckForUpdate(db, NOW, { run: r.run }))?.state).toBe('current')
     expect(r.calls).toHaveLength(1)
   })
 
-  test('it runs at most once a day, however many polls happen in between', () => {
+  test('it runs at most once a day, however many polls happen in between', async () => {
     const db = memDb()
     const r = runner(BEHIND)
-    maybeCheckForUpdate(db, NOW, { run: r.run })
+    await maybeCheckForUpdate(db, NOW, { run: r.run })
     for (const hours of [1, 2, 6, 12, 23]) {
-      expect(maybeCheckForUpdate(db, new Date(NOW.getTime() + hours * 3_600_000), { run: r.run })).toBeUndefined()
+      expect(await maybeCheckForUpdate(db, new Date(NOW.getTime() + hours * 3_600_000), { run: r.run })).toBeUndefined()
     }
     expect(r.calls).toHaveLength(1)
     // ...and it does check again once a day has passed.
-    expect(maybeCheckForUpdate(db, new Date(NOW.getTime() + UPDATE_CHECK_INTERVAL_MS), { run: r.run })).toBeDefined()
+    expect(await maybeCheckForUpdate(db, new Date(NOW.getTime() + UPDATE_CHECK_INTERVAL_MS), { run: r.run })).toBeDefined()
     expect(r.calls).toHaveLength(2)
   })
 
-  test('a check that was refused still counts as a check, so a broken checkout is not fetched hourly', () => {
+  test('a check that was refused still counts as a check, so a broken checkout is not fetched hourly', async () => {
     const db = memDb()
     const r = runner(blocked('the working tree has uncommitted changes, so nothing was updated.'))
-    maybeCheckForUpdate(db, NOW, { run: r.run })
-    maybeCheckForUpdate(db, new Date(NOW.getTime() + 3_600_000), { run: r.run })
+    await maybeCheckForUpdate(db, NOW, { run: r.run })
+    await maybeCheckForUpdate(db, new Date(NOW.getTime() + 3_600_000), { run: r.run })
     expect(r.calls).toHaveLength(1)
     expect(getUpdateCheck(db)!.state).toBe('blocked')
   })
 
-  test('what was found is stored for the page to read, check and all', () => {
+  test('what was found is stored for the page to read, check and all', async () => {
     const db = memDb()
-    maybeCheckForUpdate(db, NOW, { run: runner(BEHIND).run })
+    await maybeCheckForUpdate(db, NOW, { run: runner(BEHIND).run })
     const stored = getUpdateCheck(db)!
     expect(stored.checkedAt).toEqual(NOW)
     expect(stored.state).toBe('behind')
@@ -227,6 +227,32 @@ describe('the daily check is rate-limited', () => {
     expect(stored.changes).toHaveLength(3)
     expect(stored.changes[0]).toContain('pickup code')
     expect(stored.upstream).toBe('origin/main')
+  })
+
+  test('an injected check replaces update.sh: it is awaited, stored, and rate-limited the same way', async () => {
+    const db = memDb()
+    const r = runner(CURRENT)
+    let calls = 0
+    const check = async (): Promise<UpdateCheck> => {
+      calls++
+      return { state: 'behind', behind: 1, changes: ['Faster start'], version: '0.3.0', upstream: 'GitHub Releases' }
+    }
+    expect((await maybeCheckForUpdate(db, NOW, { run: r.run, check }))?.state).toBe('behind')
+    expect(r.calls).toHaveLength(0)
+    expect(getUpdateCheck(db)!.version).toBe('0.3.0')
+    expect(getUpdateCheck(db)!.changes).toEqual(['Faster start'])
+    expect(await maybeCheckForUpdate(db, new Date(NOW.getTime() + 3_600_000), { check })).toBeUndefined()
+    expect(calls).toBe(1)
+    expect(await maybeCheckForUpdate(db, new Date(NOW.getTime() + UPDATE_CHECK_INTERVAL_MS), { check })).toBeDefined()
+    expect(calls).toBe(2)
+  })
+
+  test('an injected check that rejects anyway is stored as blocked, so it is not retried hourly', async () => {
+    const db = memDb()
+    const check = async (): Promise<UpdateCheck> => { throw new Error('socket hang up') }
+    expect((await maybeCheckForUpdate(db, NOW, { check }))?.state).toBe('blocked')
+    expect(getUpdateCheck(db)!.state).toBe('blocked')
+    expect(await maybeCheckForUpdate(db, new Date(NOW.getTime() + 3_600_000), { check })).toBeUndefined()
   })
 
   test('dueForUpdateCheck is what the gap is measured with, and it keys on the last attempt', () => {
@@ -497,6 +523,28 @@ describe('the outcome reaches the activity log', () => {
     }))
   }
   const entries = (db: Database) => listActivity(db, 20).filter(e => e.kind === 'update')
+
+  test('a poll with an injected check (the app) leaves a git status file alone: it is not its updater', async () => {
+    const db = memDb()
+    statusFile({ state: 'ok', from: 'ffa1f20', to: '9f8e7d6', finishedAt: NOW })
+    const check = async (): Promise<UpdateCheck> => ({ state: 'current', behind: 0, changes: [] })
+    await runPoll({
+      db, config: { ...config, dbPath: join(dir, 'parcels.db') }, http: bodyHttp(), adapters: [], now: NOW,
+      updateCheck: { check },
+    })
+    expect(entries(db)).toHaveLength(0)
+    expect(getUpdateCheck(db)!.state).toBe('current')
+  })
+
+  test('the git poll still adopts it, as before', async () => {
+    const db = memDb()
+    statusFile({ state: 'ok', from: 'ffa1f20', to: '9f8e7d6', finishedAt: NOW })
+    await runPoll({
+      db, config: { ...config, dbPath: join(dir, 'parcels.db') }, http: bodyHttp(), adapters: [], now: NOW,
+      updateCheck: { run: runner(CURRENT).run },
+    })
+    expect(entries(db)).toHaveLength(1)
+  })
 
   test('a successful update is recorded, saying where it came from and where it went', () => {
     const db = memDb()

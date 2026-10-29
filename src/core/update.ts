@@ -232,6 +232,12 @@ export async function checkForUpdateAsync(
 export interface UpdateCheckOptions {
   /** Injected by tests; defaults to really running `scripts/update.sh` in this checkout. */
   run?: ScriptRunner
+  /**
+   * A different engine for the same question: the Mac app asks GitHub Releases instead of running
+   * `scripts/update.sh`. When present, `run` is not used, and the git updater's status file is not
+   * adopted by the poll (it belongs to an updater that is not the one running).
+   */
+  check?: () => Promise<UpdateCheck>
   /** Overridable so the rate limit can be tested without a day of fake clock. */
   intervalMs?: number
 }
@@ -242,12 +248,27 @@ export interface UpdateCheckOptions {
  * The result is stored before it is returned, which is what the rate limit keys on and what the
  * notification rules and /health read - so a check made by the hourly poller is what the page shows,
  * and the page costs no `git fetch` of its own.
+ *
+ * Asynchronous because the app's check is an HTTP request. The git check is still the synchronous
+ * `checkForUpdate`, run exactly as before. An injected check is promised never to reject; if one does
+ * anyway it is stored as `blocked`, so a broken check is still rate-limited rather than retried hourly.
+ * Two overlapping calls could both find the check due; the poll's run claim (`claimRun`) is what
+ * keeps two polls from overlapping in the first place.
  */
-export function maybeCheckForUpdate(
+export async function maybeCheckForUpdate(
   db: Database, now: Date, opts: UpdateCheckOptions = {},
-): UpdateCheck | undefined {
+): Promise<UpdateCheck | undefined> {
   if (!dueForUpdateCheck(db, now, opts.intervalMs)) return undefined
-  const check = checkForUpdate(opts.run)
+  let check: UpdateCheck
+  if (opts.check) {
+    try {
+      check = await opts.check()
+    } catch (err) {
+      check = unrunnable(err)
+    }
+  } else {
+    check = checkForUpdate(opts.run)
+  }
   recordUpdateCheck(db, check, now)
   return check
 }

@@ -189,7 +189,7 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   }
   // Before the notifications, so an update found in this run is announced in this run rather than an
   // hour later. After the carriers, because a `git fetch` is not allowed to delay parcel tracking.
-  report.update = updateStep(deps, cause)
+  report.update = await updateStep(deps, cause)
   // Before the notifications, so the banner that first announces a pickup point the carrier never
   // located can already say where it is. Local file reads only; it costs the run nothing external.
   report.codes = await pickupCodes(deps)
@@ -208,16 +208,22 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
  * The adoption is here as well as on /health because an update that went wrong has to be visible
  * afterwards even if nobody opens the page: whichever of the two gets there first writes the row, and
  * `logged_started_at` stops the second one writing it again.
+ *
+ * The adoption is the git updater's alone, so it is skipped when another check is injected (the Mac
+ * app). The app's data folder can hold a git install's `update-status.json`, carried over when it
+ * moved in, and adopting it there would mark the app "current" at a git commit.
  */
-function updateStep(deps: PollDeps, cause: Cause): UpdateCheck | undefined {
+async function updateStep(deps: PollDeps, cause: Cause): Promise<UpdateCheck | undefined> {
   if (!deps.updateCheck) return undefined
-  try {
-    adoptUpdateOutcome(deps.db, dirname(deps.config.dbPath), deps.now, cause)
-  } catch (err) {
-    console.error(`update: could not adopt the last outcome: ${describe(err)}`)
+  if (!deps.updateCheck.check) {
+    try {
+      adoptUpdateOutcome(deps.db, dirname(deps.config.dbPath), deps.now, cause)
+    } catch (err) {
+      console.error(`update: could not adopt the last outcome: ${describe(err)}`)
+    }
   }
   try {
-    return maybeCheckForUpdate(deps.db, deps.now, deps.updateCheck)
+    return await maybeCheckForUpdate(deps.db, deps.now, deps.updateCheck)
   } catch (err) {
     console.error(`update: the check failed: ${describe(err)}`)
     return undefined
