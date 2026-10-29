@@ -1,16 +1,19 @@
-import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawn } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, Notification, powerMonitor, protocol, shell, utilityProcess } from 'electron'
 import type { ToMain } from '../src/core/app-ipc.js'
+import { appUpdateStatusPath, readAppUpdateStatus, runCommand, writeAppUpdateStatus } from '../src/core/app-update.js'
 import { decideFirstRun, type FirstRun } from './first-run.js'
 import { dashboardOrigin, isInside, notificationPath } from './guards.js'
+import { offerMoveToApplications, MOVE_DETAIL, MOVE_QUESTION } from './location.js'
 import { appendRotating } from './logs.js'
 import { finishInterruptedMoveIn, moveIn, type MoveInDeps, type MoveInResult } from './move-in.js'
 import { appPaths, bundlePath } from './paths.js'
 import { readPages, registerFirstRun, SCHEME } from './protocol.js'
 import { Supervisor, type Child } from './supervise.js'
+import { readSwapFailedMarker, swapScript, verifyStaged } from './swap.js'
 import { createTray, type ParcelsTray } from './tray.js'
 import { allowFirstRunPages, currentWindow, openWindow } from './window.js'
 
@@ -33,6 +36,9 @@ const paths = appPaths(homedir())
 app.setPath('userData', join(paths.support, 'Chromium'))
 app.setPath('crashDumps', join(paths.support, 'Chromium', 'Crashpad'))
 const mainLogPath = join(paths.logs, 'main.log')
+const updatesDir = join(paths.support, 'updates')
+const swapScriptPath = join(updatesDir, 'swap.sh')
+const swapFailedPath = join(updatesDir, 'swap-failed')
 const serverLogPath = join(paths.logs, 'server.log')
 
 /** One line in main.log. Never throws: a full disk must not turn a logged problem into a crash. */
@@ -45,6 +51,8 @@ const describe = (err: unknown) => (err instanceof Error ? (err.stack ?? err.mes
 /** Set once startup has finished, so a later failure is not reported as one at startup. */
 let startedUp = false
 let failed = false
+/** Set while an install is being checked and started, so a second Restart to update is not a second swap. */
+let installing = false
 
 /**
  * A failure the app cannot carry on from: logged, said in a dialog, and the app exits. Carrying on
@@ -233,6 +241,27 @@ async function run(): Promise<void> {
   const first = decideFirstRun(paths)
   log(`first run: ${first.kind}${first.kind === 'move-in' ? ` from ${first.clone}` : ''}`)
 
+  // Asked once the route is known but before anything acts on it: no server, no window, no move in
+  // has started, so a move that quits and relaunches the app cuts nothing off, and the relaunched app
+  // decides its route again from where it now lives. A "no" lasts for this launch only.
+  const moved = await offerMoveToApplications({
+    packaged: app.isPackaged,
+    bundle: bundlePath(process.execPath),
+    home: homedir(),
+    ask: async () => (await dialog.showMessageBox({
+      type: 'question',
+      message: MOVE_QUESTION,
+      detail: MOVE_DETAIL,
+      buttons: ['Move to Applications', 'Not Now'],
+      defaultId: 0,
+      cancelId: 1,
+    })).response === 0,
+    move: () => app.moveToApplicationsFolder(),
+    log,
+  })
+  // Electron is already quitting to relaunch the moved copy.
+  if (moved === 'moved') return
+
   // Opened at login: Parcels starts in the menu bar only, with no Dock icon and no window. A Mac that
   // is not set up yet shows its first-run page either way.
   const atLogin = first.kind === 'ready' && app.getLoginItemSettings().wasOpenedAtLogin
@@ -285,8 +314,8 @@ async function run(): Promise<void> {
           else log(`refused to reveal ${m.path}: not a Parcels folder`)
           break
         case 'install':
-          // The swap and relaunch arrive with the updater's main-process half (Task 10).
           log(`install requested: ${m.version} from ${m.staged}`)
+          void installAndRelaunch(m.staged, m.version)
           break
       }
     },
@@ -391,7 +420,108 @@ async function run(): Promise<void> {
   } else {
     openFirstRun(first)
   }
+  revealFailedSwap()
   startedUp = true
+}
+
+/**
+ * The SHA-256 of the certificate this bundle was signed with. Packaged, it sits in Resources; a dev
+ * run reads the committed file in the repository. Empty when missing, which `verifyStaged` refuses.
+ */
+function shippedCertSha(): string {
+  const file = app.isPackaged
+    ? join(process.resourcesPath, 'signing-cert.sha256')
+    : join(app.getAppPath(), 'app', 'signing-cert.sha256')
+  try { return readFileSync(file, 'utf8').trim() } catch { return '' }
+}
+
+/**
+ * The environment the swap script runs with: this one, without ELECTRON_RUN_AS_NODE (the script also
+ * removes it for `open`), and with PATH set to the system's folders, so `mv`, `rm`, `ps` and `open`
+ * are the system's own whatever PATH the app was started with.
+ */
+function swapEnv(): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k !== 'ELECTRON_RUN_AS_NODE') env[k] = v
+  env.PATH = '/usr/bin:/bin:/usr/sbin:/sbin'
+  return env
+}
+
+/**
+ * Records in the updater's status file that the staged version was refused, so the Health page says
+ * why and offers Update now again, instead of a Restart to update that can only be refused again.
+ */
+function markInstallRefused(version: string, reason: string): void {
+  const path = appUpdateStatusPath(paths.support)
+  try {
+    const s = readAppUpdateStatus(path)
+    const startedAt = s?.state === 'staged' && s.version === version ? s.startedAt : new Date()
+    writeAppUpdateStatus(path, { state: 'failed', version, reason, startedAt, finishedAt: new Date() })
+  } catch (err) {
+    log(`could not record the refused install: ${describe(err)}`)
+  }
+}
+
+/**
+ * Restart to update (spec §5.2). The staged app is checked once more (`verifyStaged`); only then is
+ * the swap script written and started, detached so it outlives this process, and the app quits
+ * through the usual before-quit path, which stops the server cleanly. The script takes over from
+ * there. Any refusal leaves the app running as it is, with a dialog that says why.
+ */
+async function installAndRelaunch(staged: string, version: string): Promise<void> {
+  if (installing) return
+  // A dev run's bundle is node_modules' Electron.app, which an update must never replace.
+  if (!app.isPackaged) {
+    log('install refused: this is a dev run')
+    return
+  }
+  installing = true
+  const refuse = (reason: string, detail?: string) => {
+    installing = false
+    log(`install of ${version} refused: ${reason}${detail ? ` (${detail})` : ''}`)
+    markInstallRefused(version, reason)
+    void dialog.showMessageBox({
+      type: 'warning',
+      message: 'Parcels could not install the update.',
+      detail: `${reason} Parcels keeps running as it is. To try again, open Health and press Update now.`,
+      buttons: ['OK'],
+    })
+  }
+  try {
+    const appBundle = bundlePath(process.execPath)
+    const refused = await verifyStaged({
+      appBundle, staged, version, expectedCertSha: shippedCertSha(), run: runCommand, workDir: updatesDir,
+    })
+    if (refused) { refuse(refused.reason, refused.detail); return }
+    const script = swapScript({ pid: process.pid, app: appBundle, staged, version, marker: swapFailedPath })
+    mkdirSync(updatesDir, { recursive: true, mode: 0o700 })
+    // Removed first and created exclusively, so a link left in its place is not written through.
+    rmSync(swapScriptPath, { force: true })
+    writeFileSync(swapScriptPath, script, { mode: 0o700, flag: 'wx' })
+    spawn('/bin/sh', [swapScriptPath], { detached: true, stdio: 'ignore', env: swapEnv() }).unref()
+    log(`installing ${version}: the swap script is waiting for this process to quit`)
+    app.quit()
+  } catch (err) {
+    refuse('Parcels could not start the update, so nothing was changed.', describe(err))
+  }
+}
+
+/**
+ * After a swap that could not move the new version into place, the script reopened this (old) app
+ * and left a marker. The staged copy is shown in Finder so the user can finish by dragging it in. The
+ * marker goes either way, so the message is shown once.
+ */
+function revealFailedSwap(): void {
+  const failedSwap = readSwapFailedMarker(swapFailedPath)
+  if (!failedSwap) return
+  log(`the swap to ${failedSwap.version} failed; showing ${failedSwap.staged}`)
+  if (!existsSync(failedSwap.staged)) return
+  shell.showItemInFolder(failedSwap.staged)
+  void dialog.showMessageBox({
+    type: 'info',
+    message: `Drag this Parcels into Applications to finish updating to ${failedSwap.version}.`,
+    buttons: ['OK'],
+  })
 }
 
 /**

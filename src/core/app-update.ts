@@ -374,6 +374,72 @@ function removeLeftovers(appBundle: string, supportDir: string): void {
   rmSync(appUpdateStatusPath(supportDir), { force: true })
 }
 
+/** Why `checkAppBundle` refused an app: the sentence the user reads, and the detail for the log only. */
+export interface BundleRefusal { reason: string; detail?: string }
+
+/**
+ * Proves that the app at `appPath` is this app's genuine successor, or says why not. It runs three
+ * checks, in order:
+ *
+ * 1. `codesign --verify --deep --strict` passes, so the signature holds together.
+ * 2. Its leaf certificate's SHA-256 equals `expectedCertSha`, so it is ours. codesign writes the chain
+ *    as <prefix>0 (the leaf), <prefix>1, ...; the leaf's SHA-256 is what app/signing-cert.sha256
+ *    holds (spec §10).
+ * 3. Its Info.plist names Parcels's bundle identifier and `version`. The certificate signs every
+ *    build ever made with it, so without this an older Parcels with a known flaw, or another app
+ *    signed with the same identity, would pass as this update.
+ *
+ * Staging runs it once, after unpacking; the main process runs it again just before the swap, because
+ * the staged app sits in a folder the user can write to in between. The certificates are extracted
+ * into a temporary folder inside `workDir`, which is removed again. Returns undefined when all three
+ * hold.
+ */
+export async function checkAppBundle(
+  appPath: string, version: string, expectedCertSha: string, run: (cmd: string, args: string[]) => Promise<RunResult>,
+  workDir: string,
+): Promise<BundleRefusal | undefined> {
+  const verified = await run(CODESIGN, ['--verify', '--deep', '--strict', appPath])
+  if (verified.code !== 0) {
+    return { reason: 'The new version\'s signature is broken, so it was not installed.', detail: `codesign --verify exited ${verified.code}` }
+  }
+
+  const want = expectedCertSha.trim().toLowerCase()
+  if (!/^[0-9a-f]{64}$/.test(want)) {
+    return { reason: 'This app does not know its own certificate, so it cannot tell whether an update is genuine and installed nothing.' }
+  }
+  mkdirSync(workDir, { recursive: true, mode: 0o700 })
+  const certDir = mkdtempSync(join(workDir, 'cert-'))
+  try {
+    const prefix = join(certDir, 'c')
+    const extracted = await run(CODESIGN, ['-d', `--extract-certificates=${prefix}`, appPath])
+    const leaf = `${prefix}0`
+    if (extracted.code !== 0 || !existsSync(leaf)) {
+      return { reason: 'The new version\'s certificate could not be read, so it was not installed.', detail: `codesign -d exited ${extracted.code}` }
+    }
+    const got = await sha256File(leaf)
+    if (got !== want) {
+      return { reason: 'The new version is not signed by the same certificate as this one, so it was not installed.', detail: `${got} != ${want}` }
+    }
+  } finally {
+    rmSync(certDir, { recursive: true, force: true })
+  }
+
+  const plist = join(appPath, 'Contents', 'Info.plist')
+  const plistValue = async (key: string): Promise<string | undefined> => {
+    const r = await run(PLUTIL, ['-extract', key, 'raw', '-o', '-', plist])
+    return r.code === 0 ? r.stdout.trim() : undefined
+  }
+  const bundleId = await plistValue('CFBundleIdentifier')
+  const bundleVersion = await plistValue('CFBundleShortVersionString')
+  if (bundleId !== APP_BUNDLE_ID || bundleVersion !== version) {
+    return {
+      reason: 'The download is not the version it claims to be, so it was not installed.',
+      detail: `CFBundleIdentifier ${String(bundleId)}, CFBundleShortVersionString ${String(bundleVersion)}`,
+    }
+  }
+  return undefined
+}
+
 /**
  * Downloads a release and stages it beside the app, verified, or explains why not.
  *
@@ -494,42 +560,9 @@ export async function stageUpdate(d: StageDeps): Promise<AppUpdateStatus> {
     } catch { /* missing */ }
     if (!isApp) fail('The download did not contain the Parcels app, so it was not installed.')
 
-    // 4. The signature holds together.
-    const verified = await d.run(CODESIGN, ['--verify', '--deep', '--strict', stagedApp])
-    if (verified.code !== 0) {
-      fail('The new version\'s signature is broken, so it was not installed.', `codesign --verify exited ${verified.code}`)
-    }
-
-    // 5. ...and is ours. codesign writes the chain as <prefix>0 (the leaf), <prefix>1, ...; the leaf's
-    // SHA-256 is what app/signing-cert.sha256 holds (spec §10).
-    const want = d.expectedCertSha.trim().toLowerCase()
-    if (!/^[0-9a-f]{64}$/.test(want)) {
-      fail('This app does not know its own certificate, so it cannot tell whether an update is genuine and installed nothing.')
-    }
-    const certDir = mkdtempSync(join(downloads, 'cert-'))
-    const prefix = join(certDir, 'c')
-    const extracted = await d.run(CODESIGN, ['-d', `--extract-certificates=${prefix}`, stagedApp])
-    const leaf = `${prefix}0`
-    if (extracted.code !== 0 || !existsSync(leaf)) {
-      fail('The new version\'s certificate could not be read, so it was not installed.', `codesign -d exited ${extracted.code}`)
-    }
-    const got = await sha256File(leaf)
-    if (got !== want) fail('The new version is not signed by the same certificate as this one, so it was not installed.', `${got} != ${want}`)
-
-    // 6. ...and is this app, at the version asked for. The certificate signs every build ever made
-    // with it, so without this an older Parcels with a known flaw, or another app signed with the same
-    // identity, would pass as this update.
-    const plist = join(stagedApp, 'Contents', 'Info.plist')
-    const plistValue = async (key: string): Promise<string | undefined> => {
-      const r = await d.run(PLUTIL, ['-extract', key, 'raw', '-o', '-', plist])
-      return r.code === 0 ? r.stdout.trim() : undefined
-    }
-    const bundleId = await plistValue('CFBundleIdentifier')
-    const bundleVersion = await plistValue('CFBundleShortVersionString')
-    if (bundleId !== APP_BUNDLE_ID || bundleVersion !== version) {
-      fail('The download is not the version it claims to be, so it was not installed.',
-        `CFBundleIdentifier ${String(bundleId)}, CFBundleShortVersionString ${String(bundleVersion)}`)
-    }
+    // 4-6. The signature holds together, is ours, and is this app at the version asked for.
+    const refused = await checkAppBundle(stagedApp, version, d.expectedCertSha, d.run, downloads)
+    if (refused) fail(refused.reason, refused.detail)
 
     rmSync(downloads, { recursive: true, force: true })
     const staged: AppUpdateStatus = { state: 'staged', version, staged: stagedApp, startedAt }
