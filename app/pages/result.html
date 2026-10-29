@@ -17,9 +17,9 @@ p .mono{white-space:normal;overflow-wrap:anywhere}
 <header><nav aria-label="Main"><span class="brand">Parcels</span></nav></header>
 <main><div class="col">
 <h1>Your parcels were not moved</h1>
-<p class="lede">Nothing was moved, and <span class="mono">{{clone}}</span> is as it was.</p>
+<p class="lede">{{ledeStart}}<span class="mono">{{clone}}</span>{{ledeEnd}}</p>
 <div class="notice warn" role="alert"><p><strong>{{step}} did not work.</strong></p><p>{{reason}}</p></div>
-<p>You can try again, or quit and go on using the old install.</p>
+<p>{{next}}</p>
 <form method="post" action="parcels://move-in/">
 <p class="acts"><button class="pri" name="action" value="move">Try again</button><button name="action" value="quit">Quit</button></p>
 </form>

@@ -5,7 +5,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { moveIn, type MoveInDeps } from '../../app/move-in.js'
+import { BOOTSTRAP_ATTEMPTS, finishInterruptedMoveIn, moveIn, STOP_WAIT_MS, type MoveInDeps } from '../../app/move-in.js'
 import { authStorePathFor } from '../../src/carriers/dpd.js'
 import { openDb, type Database } from '../../src/db/index.js'
 import { storeMessage } from '../../src/db/messages.js'
@@ -37,8 +37,12 @@ interface Fixture {
   /** The clone's database, still open: the uncheckpointed row is only in its WAL. */
   db: Database
   dbFile: string
+  /** launchctl's bootout and bootstrap calls; `print` (the waiting) is in `log` with the rest. */
   calls: string[][]
-  deps: (launchctl?: MoveInDeps['launchctl']) => MoveInDeps
+  log: string[][]
+  /** Every pause the move took, in ms, on a fake clock that each pause moves on. */
+  slept: number[]
+  deps: (launchctl?: MoveInDeps['launchctl'], o?: { lingers?: number }) => MoveInDeps
 }
 
 /**
@@ -85,13 +89,34 @@ function fixture(o: { dbPath?: 'absolute' | 'default' | 'other'; dpd?: boolean }
     return p
   })
   const calls: string[][] = []
+  const log: string[][] = []
+  const slept: number[] = []
   const ok: MoveInDeps['launchctl'] = () => ({ code: 0, stderr: '' })
   return {
-    clone, support, launchAgents, plists, db, dbFile, calls,
-    deps: (launchctl = ok) => ({
-      clone, plists, support, uid: UID,
-      launchctl: args => { calls.push(args); return launchctl(args) },
-    }),
+    clone, support, launchAgents, plists, db, dbFile, calls, log, slept,
+    deps: (launchctl = ok, o = {}) => {
+      // How many more times `print` finds each label: a stopped job lingers for `lingers` looks.
+      const lingering = new Map<string, number>()
+      let clock = 0
+      return {
+        clone, plists, support, uid: UID,
+        launchctl: args => {
+          log.push(args)
+          const label = args[1]!.split('/').pop()!
+          if (args[0] === 'print') {
+            const n = lingering.get(label) ?? 0
+            if (n > 0) { lingering.set(label, n - 1); return { code: 0, stderr: '' } }
+            return { code: 113, stderr: 'Could not find service in domain for user gui: 501' }
+          }
+          calls.push(args)
+          const r = launchctl(args)
+          if (args[0] === 'bootout' && r.code === 0) lingering.set(label, o.lingers ?? 0)
+          return r
+        },
+        sleep: async ms => { slept.push(ms); clock += ms },
+        now: () => clock,
+      }
+    },
   }
 }
 
@@ -249,7 +274,7 @@ describe('moveIn', () => {
     expect(snapshot(f.clone)).toEqual(before)
   })
 
-  test('a job that will not stop fails at "stop", copies nothing, and starts both again', async () => {
+  test('a job that will not stop fails at "stop", copies nothing, and starts only the job it stopped', async () => {
     const f = fixture()
     const result = await moveIn(f.deps(args =>
       args[1]?.endsWith('web') ? { code: 5, stderr: 'Boot-out failed: 5: Input/output error' } : { code: 0, stderr: '' }))
@@ -258,9 +283,10 @@ describe('moveIn', () => {
     if (!result.ok) expect(result.reason).toContain('Input/output error')
     expect(existsSync(join(f.support, 'data'))).toBe(false)
     expect(existsSync(join(f.support, 'config.json'))).toBe(false)
-    expect(f.calls.filter(c => c[0] === 'bootstrap')).toEqual([
-      ['bootstrap', `gui/${UID}`, f.plists[1]!], ['bootstrap', `gui/${UID}`, f.plists[0]!],
-    ])
+    // The web job's stop failed, so it is still loaded: bootstrapping it would only fail with
+    // "already loaded" and report a restore problem that is not there.
+    expect(f.calls.filter(c => c[0] === 'bootstrap')).toEqual([['bootstrap', `gui/${UID}`, f.plists[0]!]])
+    expect(result).toMatchObject({ oldInstall: 'running' })
   })
 
   test('a plist that cannot be parked fails at "park": the plists go back and the jobs start again', async () => {
@@ -282,14 +308,10 @@ describe('moveIn', () => {
     mkdirSync(join(f.clone, 'launchd-backup'))
     // The web plist vanishes after its job is stopped, so the poller's plist is parked and the web
     // one cannot be.
-    const result = await moveIn({
-      ...f.deps(),
-      launchctl: args => {
-        f.calls.push(args)
-        if (args[0] === 'bootout' && args[1]?.endsWith('web')) rmSync(f.plists[1]!)
-        return { code: 0, stderr: '' }
-      },
-    })
+    const result = await moveIn(f.deps(args => {
+      if (args[0] === 'bootout' && args[1]?.endsWith('web')) rmSync(f.plists[1]!)
+      return { code: 0, stderr: '' }
+    }))
     f.db.close()
     expect(result).toMatchObject({ ok: false, step: 'park' })
     expect(existsSync(f.plists[0]!)).toBe(true)
@@ -337,6 +359,7 @@ describe('moveIn', () => {
     writeFileSync(join(f.support, 'data', 'parcels.db'), 'half')
     writeFileSync(join(f.support, '.moving-in'), '')
     expect(await moveIn(f.deps())).toEqual({ ok: true })
+    expect(existsSync(join(f.support, 'config.json'))).toBe(true)
     f.db.close()
     expect(parcelsIn(join(f.support, 'data', 'parcels.db'))).toHaveLength(3)
     expect(existsSync(join(f.support, '.moving-in'))).toBe(false)
@@ -370,16 +393,153 @@ describe('moveIn', () => {
     expect(f.calls).toEqual([])
   })
 
-  test('a failed restart of the old jobs is said in the reason', async () => {
+  test('a restart that never works is tried as install-agents.sh tries it, then said, and the old install is not running', async () => {
     const f = fixture()
     f.db.close()
     writeFileSync(f.dbFile, Buffer.alloc(8192, 0x5a))
     const result = await moveIn(f.deps(args =>
       args[0] === 'bootstrap' ? { code: 5, stderr: 'Bootstrap failed: 5: Input/output error' } : { code: 0, stderr: '' }))
-    expect(result.ok).toBe(false)
-    if (!result.ok) {
-      expect(result.reason).toContain('Bootstrap failed: 5: Input/output error')
-      expect(result.reason).toContain('install-agents.sh')
-    }
+    expect(result).toMatchObject({ ok: false, oldInstall: 'not-running' })
+    if (!result.ok) expect(result.reason).toContain('Starting the old install again did not work (launchctl could not start local.parcels.web: Bootstrap failed: 5: Input/output error;')
+    expect(f.calls.filter(c => c[0] === 'bootstrap')).toHaveLength(2 * BOOTSTRAP_ATTEMPTS)
+    // A growing pause between attempts, 1 s to 7 s, for each job.
+    expect(f.slept).toEqual([1000, 2000, 3000, 4000, 5000, 6000, 7000, 1000, 2000, 3000, 4000, 5000, 6000, 7000])
+  })
+
+  test('each stopped job is waited for until launchd lets go of it, before the next step', async () => {
+    const f = fixture()
+    const result = await moveIn(f.deps(undefined, { lingers: 2 }))
+    f.db.close()
+    expect(result).toEqual({ ok: true })
+    const P = (l: string) => ['print', `gui/${UID}/${l}`]
+    // Stop, look until gone (twice still there, then gone), and only then the next job.
+    expect(f.log).toEqual([
+      BOOTOUTS[0], P('local.parcels.poller'), P('local.parcels.poller'), P('local.parcels.poller'),
+      BOOTOUTS[1], P('local.parcels.web'), P('local.parcels.web'), P('local.parcels.web'),
+    ])
+    expect(f.slept).toEqual([500, 500, 500, 500])
+  })
+
+  test('a job still there after the time limit fails at "stop" and is started again', async () => {
+    const f = fixture()
+    const result = await moveIn(f.deps(undefined, { lingers: Infinity }))
+    f.db.close()
+    expect(result).toMatchObject({ ok: false, step: 'stop', oldInstall: 'running' })
+    if (!result.ok) expect(result.reason).toContain(`local.parcels.poller was still running ${STOP_WAIT_MS / 1000} seconds`)
+    // Gave up on the poller at the limit, never stopped the web job, copied nothing.
+    expect(f.calls.filter(c => c[0] === 'bootout')).toEqual([BOOTOUTS[0]])
+    expect(f.slept.filter(ms => ms === 500).length).toBeGreaterThanOrEqual(2 * (STOP_WAIT_MS / 500))
+    expect(existsSync(join(f.support, 'data'))).toBe(false)
+    expect(f.calls.filter(c => c[0] === 'bootstrap')).toEqual([['bootstrap', `gui/${UID}`, f.plists[0]!]])
+  })
+
+  test('a restart that fails with EIO while launchd lets go is retried, and the old install runs again', async () => {
+    const f = fixture()
+    f.db.close()
+    writeFileSync(f.dbFile, Buffer.alloc(8192, 0x5a))
+    let eio = 2
+    const result = await moveIn(f.deps(args => {
+      if (args[0] === 'bootstrap' && eio > 0) { eio--; return { code: 5, stderr: 'Bootstrap failed: 5: Input/output error' } }
+      return { code: 0, stderr: '' }
+    }))
+    expect(result).toMatchObject({ ok: false, step: 'copy', oldInstall: 'running' })
+    if (!result.ok) expect(result.reason).toMatch(/The old install was started again\.$/)
+    expect(f.calls.filter(c => c[0] === 'bootstrap')).toEqual([
+      ['bootstrap', `gui/${UID}`, f.plists[1]!], ['bootstrap', `gui/${UID}`, f.plists[1]!], ['bootstrap', `gui/${UID}`, f.plists[1]!],
+      ['bootstrap', `gui/${UID}`, f.plists[0]!],
+    ])
+    expect(f.slept).toEqual([1000, 2000])
+  })
+
+  test('a job that was not loaded is not started on failure: the user had stopped it', async () => {
+    const f = fixture()
+    f.db.close()
+    writeFileSync(f.dbFile, Buffer.alloc(8192, 0x5a))
+    const result = await moveIn(f.deps(args =>
+      args[0] === 'bootout' && args[1]!.endsWith('poller') ? { code: 3, stderr: 'Boot-out failed: 3: No such process' } : { code: 0, stderr: '' }))
+    expect(result).toMatchObject({ ok: false, oldInstall: 'running' })
+    expect(f.calls.filter(c => c[0] === 'bootstrap')).toEqual([['bootstrap', `gui/${UID}`, f.plists[1]!]])
+  })
+
+  test('the marker names the clone and the plists while the move is under way, and is gone after', async () => {
+    const f = fixture()
+    let seen: unknown
+    const result = await moveIn(f.deps(args => {
+      if (args[0] === 'bootout' && args[1]!.endsWith('web')) seen = JSON.parse(readFileSync(join(f.support, '.moving-in'), 'utf8'))
+      return { code: 0, stderr: '' }
+    }))
+    f.db.close()
+    expect(result).toEqual({ ok: true })
+    expect(seen).toEqual({ clone: f.clone, plists: f.plists })
+    expect(mode(f.support)).toBe(0o700)
+    expect(existsSync(join(f.support, '.moving-in'))).toBe(false)
+  })
+})
+
+describe('finishInterruptedMoveIn', () => {
+  /** The state a crash leaves between config.json and the parking: config, marker, the old plists. */
+  function crashed(marker?: string) {
+    const f = fixture()
+    f.db.close()
+    mkdirSync(join(f.support, 'data'), { recursive: true })
+    writeFileSync(join(f.support, 'config.json'), '{"defaultPostalCode":"81101"}')
+    writeFileSync(join(f.support, '.moving-in'), marker ?? `${JSON.stringify({ clone: f.clone, plists: f.plists })}\n`)
+    const d = f.deps(undefined, { lingers: 1 })
+    return { f, d: { support: f.support, launchAgents: f.launchAgents, uid: UID, launchctl: d.launchctl, sleep: d.sleep, now: d.now } }
+  }
+
+  test('does nothing without both config.json and the marker', async () => {
+    const { f, d } = crashed()
+    rmSync(join(f.support, '.moving-in'))
+    expect(await finishInterruptedMoveIn(d)).toEqual({ kind: 'nothing' })
+    writeFileSync(join(f.support, '.moving-in'), '')
+    rmSync(join(f.support, 'config.json'))
+    expect(await finishInterruptedMoveIn(d)).toEqual({ kind: 'nothing' })
+    expect(f.calls).toEqual([])
+    for (const p of f.plists) expect(existsSync(p)).toBe(true)
+  })
+
+  test('stops the old jobs, waits for them, parks the plists and removes the marker', async () => {
+    const { f, d } = crashed()
+    expect(await finishInterruptedMoveIn(d)).toEqual({ kind: 'finished', clone: f.clone })
+    expect(f.calls).toEqual(BOOTOUTS)
+    expect(f.log.filter(c => c[0] === 'print')).toHaveLength(4)
+    for (const p of f.plists) expect(existsSync(p)).toBe(false)
+    expect(readdirSync(join(f.clone, 'launchd-backup')).sort()).toEqual(['local.parcels.poller.plist', 'local.parcels.web.plist'])
+    expect(existsSync(join(f.support, '.moving-in'))).toBe(false)
+    expect(existsSync(join(f.support, 'config.json'))).toBe(true)
+  })
+
+  test('with the plists already parked it only removes the marker', async () => {
+    const { f, d } = crashed()
+    for (const p of f.plists) rmSync(p)
+    expect(await finishInterruptedMoveIn(d)).toEqual({ kind: 'finished', clone: f.clone })
+    expect(f.calls).toEqual([])
+    expect(existsSync(join(f.support, '.moving-in'))).toBe(false)
+  })
+
+  test('an unreadable marker falls back to the web plist for the clone', async () => {
+    const { f, d } = crashed('')
+    writeFileSync(f.plists[1]!, `<plist><dict><key>WorkingDirectory</key><string>${f.clone}</string></dict></plist>`)
+    expect(await finishInterruptedMoveIn(d)).toEqual({ kind: 'finished', clone: f.clone })
+    expect(readdirSync(join(f.clone, 'launchd-backup')).sort()).toEqual(['local.parcels.poller.plist', 'local.parcels.web.plist'])
+  })
+
+  test('a marker naming other files moves only the two Parcels plists', async () => {
+    const { f, d } = crashed()
+    const other = join(f.launchAgents, 'com.example.other.plist')
+    writeFileSync(other, 'x')
+    writeFileSync(join(f.support, '.moving-in'), JSON.stringify({ clone: f.clone, plists: [...f.plists, other] }))
+    expect(await finishInterruptedMoveIn(d)).toMatchObject({ kind: 'finished' })
+    expect(existsSync(other)).toBe(true)
+  })
+
+  test('a failure is reported and keeps the marker, so the next launch tries again', async () => {
+    const { f, d } = crashed()
+    writeFileSync(join(f.clone, 'launchd-backup'), 'in the way')
+    const r = await finishInterruptedMoveIn(d)
+    expect(r.kind).toBe('failed')
+    expect(existsSync(join(f.support, '.moving-in'))).toBe(true)
+    for (const p of f.plists) expect(existsSync(p)).toBe(true)
   })
 })

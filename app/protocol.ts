@@ -27,6 +27,23 @@ const STEP_WORDS: Record<Exclude<MoveInResult, { ok: true }>['step'], string> = 
   park: 'Setting the old install aside',
 }
 
+/**
+ * The result page's lines about the old install, around its folder: whether it runs as before, or
+ * did not start again and how to start it.
+ */
+export const OLD_INSTALL = {
+  running: {
+    ledeStart: 'Nothing was moved, and ',
+    ledeEnd: ' is as it was.',
+    next: 'You can try again, or quit and go on using the old install.',
+  },
+  'not-running': {
+    ledeStart: 'Nothing was moved, but the old install in ',
+    ledeEnd: ' is not running now.',
+    next: 'To start it again, open Terminal in that folder and run scripts/install-agents.sh. Or try moving in again.',
+  },
+} as const
+
 export interface Pages { welcome: string; moveIn: string; result: string }
 
 /** The three page templates, read once at startup: a missing one is found then, not when a button is pressed. */
@@ -108,7 +125,7 @@ export function firstRunHandler(d: FirstRunDeps): (req: Request) => Promise<Resp
       return noContent()
     }
     d.log(`move in: failed at ${result.step}: ${result.reason}`)
-    return page(fillPage(d.pages.result, { clone, step: STEP_WORDS[result.step], reason: result.reason }, STYLE))
+    return page(fillPage(d.pages.result, { clone, step: STEP_WORDS[result.step], reason: result.reason, ...OLD_INSTALL[result.oldInstall] }, STYLE))
   }
 
   return async (req: Request): Promise<Response> => {

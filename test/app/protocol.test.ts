@@ -78,15 +78,26 @@ test('Move in moves, starts the server and shows the dashboard', async () => {
 })
 
 test('a failed move shows the result page with the step and the reason', async () => {
-  const s = setup(MOVE_IN, { ok: false, step: 'check', reason: 'The copied database failed its check: <bad>' })
+  const s = setup(MOVE_IN, { ok: false, step: 'check', reason: 'The copied database failed its check: <bad>', oldInstall: 'running' })
   const res = await s.post('move-in', 'action=move')
   expect(res.status).toBe(200)
   expect(res.headers.get('content-security-policy')).toBe(PAGE_CSP)
   const body = await res.text()
   expect(body).toContain('Checking the copy did not work.')
   expect(body).toContain('The copied database failed its check: &lt;bad&gt;')
-  expect(body).toContain('/Users/a/Desktop/parcels')
+  expect(body).toContain('Nothing was moved, and <span class="mono">/Users/a/Desktop/parcels</span> is as it was.')
+  expect(body).toContain('You can try again, or quit and go on using the old install.')
+  expect(body).not.toContain('install-agents.sh')
   expect(s.started).toEqual([])
+})
+
+test('a failed move whose old install could not be started again says so, and how to start it', async () => {
+  const s = setup(MOVE_IN, { ok: false, step: 'copy', reason: 'x.', oldInstall: 'not-running' })
+  const body = await (await s.post('move-in', 'action=move')).text()
+  expect(body).toContain('Nothing was moved, but the old install in <span class="mono">/Users/a/Desktop/parcels</span> is not running now.')
+  expect(body).toContain('To start it again, open Terminal in that folder and run scripts/install-agents.sh. Or try moving in again.')
+  expect(body).not.toContain('is as it was')
+  expect(body).not.toContain('go on using the old install')
 })
 
 test('Not now (quit) quits', async () => {

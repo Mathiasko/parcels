@@ -7,7 +7,7 @@ import type { ToMain } from '../src/core/app-ipc.js'
 import { decideFirstRun, type FirstRun } from './first-run.js'
 import { dashboardOrigin, isInside, notificationPath } from './guards.js'
 import { appendRotating } from './logs.js'
-import { moveIn, type MoveInDeps, type MoveInResult } from './move-in.js'
+import { finishInterruptedMoveIn, moveIn, type MoveInDeps, type MoveInResult } from './move-in.js'
 import { appPaths, bundlePath } from './paths.js'
 import { readPages, registerFirstRun, SCHEME } from './protocol.js'
 import { Supervisor, type Child } from './supervise.js'
@@ -370,8 +370,27 @@ async function run(): Promise<void> {
   process.on('SIGTERM', () => app.quit())
   process.on('SIGINT', () => app.quit())
 
-  if (first.kind === 'ready') startServer()
-  else openFirstRun(first)
+  if (first.kind === 'ready') {
+    // A move cut off between writing config.json and parking the old plists is finished first, so the
+    // old jobs let go of the port and do not come back at the next login.
+    const finish = await finishInterruptedMoveIn({
+      support: paths.support, launchAgents: paths.launchAgents, uid: process.getuid?.() ?? 0, launchctl: launchctl(),
+    })
+    if (finish.kind === 'finished') log(`finished an interrupted move in from ${finish.clone}`)
+    startServer()
+    if (finish.kind === 'failed') {
+      // The app has the parcels now, so it starts regardless; the old install is what needs a hand.
+      log(`could not finish an interrupted move in: ${finish.reason}`)
+      void dialog.showMessageBox({
+        type: 'warning',
+        message: 'Parcels could not put the old install aside.',
+        detail: `${finish.reason} Parcels has your parcels and runs as usual. So that the old install does not also start when you log in, move local.parcels.web.plist and local.parcels.poller.plist out of ~/Library/LaunchAgents.`,
+        buttons: ['OK'],
+      })
+    }
+  } else {
+    openFirstRun(first)
+  }
   startedUp = true
 }
 

@@ -1,11 +1,12 @@
 import BetterSqlite3 from 'better-sqlite3'
 import {
-  chmodSync, constants, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync,
-  renameSync, rmdirSync, rmSync, unlinkSync, writeFileSync,
+  chmodSync, constants, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync,
+  realpathSync, renameSync, rmdirSync, rmSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { authStorePathFor } from '../src/carriers/dpd.js'
 import { loadConfig, readConfigDocument, validateConfig, writeConfigDocument } from '../src/core/config.js'
+import { LABELS, plistWorkingDirectory } from './first-run.js'
 
 /**
  * Moving a git-clone install into the app (spec §4). It runs on friends' Macs and carries their only
@@ -20,9 +21,18 @@ export interface MoveInDeps {
   uid: number
   /** Runs launchctl with these arguments. Injected, so no test can reach the real launchd. */
   launchctl: (args: string[]) => { code: number; stderr: string }
+  /** Waiting on launchd. Injected so the tests do not wait for real; real timers by default. */
+  sleep?: (ms: number) => Promise<void>
+  now?: () => number
 }
 
-export type MoveInResult = { ok: true } | { ok: false; step: 'stop' | 'copy' | 'check' | 'park'; reason: string }
+/**
+ * `oldInstall` says how a failed move left the git install: `running` (never stopped, or started
+ * again) or `not-running` (starting it again did not work), so the page can say which, and what to do.
+ */
+export type MoveInResult =
+  | { ok: true }
+  | { ok: false; step: 'stop' | 'copy' | 'check' | 'park'; reason: string; oldInstall: 'running' | 'not-running' }
 
 type Step = Exclude<MoveInResult, { ok: true }>['step']
 
@@ -57,6 +67,64 @@ function at<T>(step: Step, f: () => T): T {
 
 /** The launchd label of a plist: install-agents.sh names each file after its label. */
 const labelOf = (plist: string) => basename(plist, '.plist')
+
+type Launchd = Pick<MoveInDeps, 'uid' | 'launchctl' | 'sleep' | 'now'>
+
+const realSleep = (ms: number) => new Promise<void>(resolve => { setTimeout(resolve, ms) })
+
+/** How long a stopped job may linger in launchd before the stop counts as failed. */
+export const STOP_WAIT_MS = 15_000
+const STOP_POLL_MS = 500
+/** Bootstrap attempts, and the pause after attempt n (n seconds), as scripts/install-agents.sh does. */
+export const BOOTSTRAP_ATTEMPTS = 8
+
+/**
+ * Waits until launchd has let go of `label`. `bootout` returns before the job is fully gone: until it
+ * is, its process may still be writing the database or holding the port, and a `bootstrap` of it fails
+ * with EIO (scripts/install-agents.sh learned this on a real Mac). `launchctl print` failing is the
+ * sign it is gone. True once gone, false if it is still there after STOP_WAIT_MS.
+ */
+async function waitGone(d: Launchd, label: string): Promise<boolean> {
+  const sleep = d.sleep ?? realSleep
+  const now = d.now ?? Date.now
+  const deadline = now() + STOP_WAIT_MS
+  for (;;) {
+    if (d.launchctl(['print', `gui/${d.uid}/${label}`]).code !== 0) return true
+    if (now() >= deadline) return false
+    await sleep(STOP_POLL_MS)
+  }
+}
+
+/** Stops one job and waits for it to be gone. 'stopped' if it was running, 'not-loaded' if it never was. */
+async function stopJob(d: Launchd, label: string): Promise<'stopped' | 'not-loaded'> {
+  const r = d.launchctl(['bootout', `gui/${d.uid}/${label}`])
+  if (r.code !== 0) {
+    if (notLoaded(r)) return 'not-loaded'
+    throw new StepError('stop', `launchctl could not stop ${label}: ${r.stderr.trim() || `exit ${r.code}`}`)
+  }
+  if (!(await waitGone(d, label))) {
+    throw new StepError('stop', `${label} was still running ${STOP_WAIT_MS / 1000} seconds after launchctl was told to stop it.`)
+  }
+  return 'stopped'
+}
+
+/**
+ * Starts a job again from its plist: first waits for any trace of the stopped one to go, then tries up
+ * to BOOTSTRAP_ATTEMPTS times with a growing pause, as install-agents.sh does. Undefined on success,
+ * else launchctl's last word.
+ */
+async function startJob(d: Launchd, plist: string): Promise<string | undefined> {
+  const sleep = d.sleep ?? realSleep
+  await waitGone(d, labelOf(plist))
+  let last = ''
+  for (let attempt = 1; attempt <= BOOTSTRAP_ATTEMPTS; attempt++) {
+    const r = d.launchctl(['bootstrap', `gui/${d.uid}`, plist])
+    if (r.code === 0) return undefined
+    last = r.stderr.trim() || `exit ${r.code}`
+    if (attempt < BOOTSTRAP_ATTEMPTS) await sleep(attempt * 1000)
+  }
+  return last
+}
 
 /**
  * launchctl's way of saying a job was not loaded in the first place, which for "stop it" is as good as
@@ -101,7 +169,8 @@ export async function moveIn(d: MoveInDeps): Promise<MoveInResult> {
   const backup = join(d.clone, 'launchd-backup')
 
   // What this move has done so far, so that a failure undoes exactly that and nothing else.
-  let stopped = false
+  /** The plists whose jobs this move stopped: only these are started again on failure. */
+  const stopped: string[] = []
   let madeMarker = false
   let madeData = false
   let madePending = false
@@ -129,13 +198,29 @@ export async function moveIn(d: MoveInDeps): Promise<MoveInResult> {
       return { cloneDoc, sourceDb }
     })
 
-    // --- 1. Stop the old install, so nothing writes to the database while it is copied.
-    stopped = true
+    // The marker goes down before anything is stopped. It names the clone and the plists, so a launch
+    // after a crash between config.json and the parking can finish the job (finishInterruptedMoveIn).
+    at('copy', () => {
+      mkdirSync(d.support, { recursive: true, mode: 0o700 })
+      // Chromium may have made the folder first, with its own looser mode.
+      chmodSync(d.support, 0o700)
+      writeFileSync(marker, `${JSON.stringify({ clone: d.clone, plists: d.plists })}\n`, { mode: 0o600 })
+      madeMarker = true
+    })
+
+    // --- 1. Stop the old install and wait for launchd to let go, so nothing writes to the database
+    // while it is copied and the old web page no longer holds the port the app's server will want.
     for (const plist of d.plists) {
       const label = labelOf(plist)
       const r = d.launchctl(['bootout', `gui/${d.uid}/${label}`])
-      if (r.code !== 0 && !notLoaded(r)) {
+      if (r.code !== 0) {
+        if (notLoaded(r)) continue
         throw new StepError('stop', `launchctl could not stop ${label}: ${r.stderr.trim() || `exit ${r.code}`}`)
+      }
+      // Recorded before the wait: a job that was told to stop but lingers must be started again.
+      stopped.push(plist)
+      if (!(await waitGone(d, label))) {
+        throw new StepError('stop', `${label} was still running ${STOP_WAIT_MS / 1000} seconds after launchctl was told to stop it.`)
       }
     }
 
@@ -144,11 +229,6 @@ export async function moveIn(d: MoveInDeps): Promise<MoveInResult> {
     const appDb = join(data, 'parcels.db')
     await (async () => {
       try {
-        mkdirSync(d.support, { recursive: true, mode: 0o700 })
-        // Chromium may have made the folder first, with its own looser mode.
-        chmodSync(d.support, 0o700)
-        writeFileSync(marker, '', { mode: 0o600 })
-        madeMarker = true
         mkdirSync(data, { mode: 0o700 })
         madeData = true
         chmodSync(data, 0o700)
@@ -228,8 +308,13 @@ export async function moveIn(d: MoveInDeps): Promise<MoveInResult> {
     return { ok: true }
   } catch (err) {
     const failure = err instanceof StepError ? err : new StepError('copy', message(err))
-    const after = rollBack()
-    return { ok: false, step: failure.step, reason: after ? `${failure.message} ${after}` : failure.message }
+    const after = await rollBack()
+    return {
+      ok: false,
+      step: failure.step,
+      reason: after.said ? `${failure.message} ${after.said}` : failure.message,
+      oldInstall: after.running ? 'running' : 'not-running',
+    }
   }
 
   /**
@@ -238,7 +323,7 @@ export async function moveIn(d: MoveInDeps): Promise<MoveInResult> {
    * live state and the login-item marker, and may hold settings or data the move refused to replace,
    * none of which were the move's.
    */
-  function rollBack(): string {
+  async function rollBack(): Promise<{ said: string; running: boolean }> {
     const problems: string[] = []
     const attempt = (what: string, f: () => void) => {
       try { f() } catch (err) { problems.push(`${what}: ${message(err)}`) }
@@ -249,16 +334,20 @@ export async function moveIn(d: MoveInDeps): Promise<MoveInResult> {
     if (madePending) attempt('removing the copied settings', () => rmSync(pendingConfig, { force: true }))
     if (madeData) attempt('removing the copied data', () => rmSync(data, { recursive: true, force: true }))
     if (madeMarker) attempt('removing the move marker', () => rmSync(marker, { force: true }))
-    if (!stopped) return problems.length ? `Cleaning up also failed (${problems.join('; ')}).` : ''
+    const cleanup = problems.length ? `Cleaning up also failed (${problems.join('; ')}).` : ''
+    if (stopped.length === 0) return { said: cleanup, running: true }
 
-    // Started again in the reverse of the order they were stopped: the web page first.
-    for (const plist of [...d.plists].reverse()) {
-      const r = d.launchctl(['bootstrap', `gui/${d.uid}`, plist])
-      if (r.code !== 0) problems.push(`launchctl could not start ${labelOf(plist)}: ${r.stderr.trim() || `exit ${r.code}`}`)
+    // Only the jobs this move stopped, in the reverse order: the web page first. A job that was not
+    // loaded stays as the user left it, and one whose stop failed is still loaded.
+    const failed: string[] = []
+    for (const plist of [...stopped].reverse()) {
+      const why = await startJob(d, plist)
+      if (why !== undefined) failed.push(`launchctl could not start ${labelOf(plist)}: ${why}`)
     }
-    return problems.length
-      ? `Putting the old install back did not fully work either (${problems.join('; ')}). To start it again, run scripts/install-agents.sh in ${d.clone}.`
-      : 'The old install was started again.'
+    if (failed.length) {
+      return { said: [cleanup, `Starting the old install again did not work (${failed.join('; ')}).`].filter(Boolean).join(' '), running: false }
+    }
+    return { said: [cleanup, 'The old install was started again.'].filter(Boolean).join(' '), running: true }
   }
 }
 
@@ -285,5 +374,51 @@ function repointMail(db: string, oldMail: string, newMail: string): void {
     })()
   } finally {
     conn.close()
+  }
+}
+
+export type FinishResult = { kind: 'nothing' } | { kind: 'finished'; clone: string } | { kind: 'failed'; reason: string }
+
+/**
+ * Finishes a move that was cut off after config.json was in place but before the old plists were
+ * parked (a crash, a power cut, a force quit in that moment). The app is then set up, but the old
+ * jobs would start again at the next login and both installs would run. The `.moving-in` marker is
+ * left in exactly that state; it names the clone and the plists. This stops the old jobs, waits for
+ * launchd to let go, parks whichever plists are still in LaunchAgents, and removes the marker.
+ *
+ * Nothing is done without both config.json and the marker. A marker that cannot be read (from an
+ * older build, or damaged) falls back to the web plist's WorkingDirectory and the two known labels.
+ */
+export async function finishInterruptedMoveIn(
+  d: { support: string; launchAgents: string } & Launchd,
+): Promise<FinishResult> {
+  const marker = join(d.support, MARKER)
+  if (!existsSync(join(d.support, 'config.json')) || !existsSync(marker)) return { kind: 'nothing' }
+  try {
+    let clone: string | undefined
+    let plists: string[] | undefined
+    try {
+      const m = JSON.parse(readFileSync(marker, 'utf8')) as { clone?: unknown; plists?: unknown }
+      if (typeof m.clone === 'string' && isAbsolute(m.clone)) clone = m.clone
+      if (Array.isArray(m.plists) && m.plists.every(p => typeof p === 'string' && isAbsolute(p))) plists = m.plists as string[]
+    } catch { /* Read below from the plists themselves. */ }
+    plists ??= LABELS.map(label => join(d.launchAgents, `${label}.plist`))
+    // Only the old install's own two jobs are ever stopped or moved, whatever the marker says.
+    plists = plists.filter(p => (LABELS as readonly string[]).includes(labelOf(p)))
+    const web = plists.find(p => labelOf(p) === 'local.parcels.web')
+    if (clone === undefined && web !== undefined && existsSync(web)) clone = plistWorkingDirectory(readFileSync(web, 'utf8'))
+
+    const left = plists.filter(p => existsSync(p))
+    if (left.length > 0) {
+      if (clone === undefined) throw new Error('It is not known which folder the old install is in.')
+      for (const plist of left) await stopJob(d, labelOf(plist))
+      const backup = join(clone, 'launchd-backup')
+      if (!existsSync(backup)) mkdirSync(backup)
+      for (const plist of left) moveFile(plist, freeName(backup, basename(plist)))
+    }
+    rmSync(marker, { force: true })
+    return { kind: 'finished', clone: clone ?? '' }
+  } catch (err) {
+    return { kind: 'failed', reason: message(err) }
   }
 }

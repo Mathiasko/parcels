@@ -244,6 +244,7 @@ describe('the pages', () => {
   test('the result page shows the step and the reason', () => {
     const html = fillPage(page('result.html'), {
       step: 'Copying your parcels', reason: 'file is not a database', clone: '/c',
+      ledeStart: 'Nothing was moved, and ', ledeEnd: ' is as it was.', next: 'You can try again.',
     }, STYLE)
     expect(html).toContain('Copying your parcels')
     expect(html).toContain('file is not a database')
