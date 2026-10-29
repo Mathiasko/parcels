@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { host } from './host.js'
 
 /**
  * What is running, for the Health page: `0.1.0 (0db9a83)`, or `0.1.0` from an unpacked tarball, or
@@ -47,7 +48,15 @@ export const repoRoot = (): string => REPO_ROOT
 let cached: string | undefined
 
 /**
- * The version of this checkout, resolved once per process and remembered. The web server asks for it
- * while it is being built, so no request ever spawns `git`.
+ * The version of this program. In the git install that is the checkout, resolved once per process and
+ * remembered: the web server asks for it while it is being built, so no request ever spawns `git`.
+ *
+ * In the app it is the version the app was built as, which the main process passes as
+ * `PARCELS_APP_VERSION`; the bundle has no `.git` to ask. That is a plain environment read, so it is
+ * not cached and a test can change it. An app that was started without the variable falls back to
+ * the checkout answer rather than reporting nothing.
  */
-export const appVersion = (): string => (cached ??= resolveVersion(REPO_ROOT))
+export const appVersion = (): string => {
+  if (host() === 'app' && process.env.PARCELS_APP_VERSION) return process.env.PARCELS_APP_VERSION
+  return (cached ??= resolveVersion(REPO_ROOT))
+}

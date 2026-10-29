@@ -49,6 +49,7 @@ import { pollerStatus } from '../core/pollwatch.js'
 import {
   buildSupportBundle, supportBundleFilename, type LaunchdReport, type SupportEnv,
 } from '../core/support.js'
+import { resourceRoot } from '../core/host.js'
 import { appVersion, repoRoot } from '../core/version.js'
 import {
   adoptUpdateOutcome, checkForUpdateAsync, readUpdateRun, startUpdate, updateOutcome, updateStatusPath,
@@ -691,12 +692,13 @@ export function buildServer(deps: WebDeps): FastifyInstance {
 
   /**
    * The Gmail filter, as a download for the guide on /settings: Gmail's Import filters wants a file
-   * chosen from disk, and Downloads is where anyone can find one. Read per request from the checkout -
-   * the one copy, the file the README points at - and the ordinary 404 if it is not there.
+   * chosen from disk, and Downloads is where anyone can find one. Read per request from the resource root -
+   * the checkout in the git install (the one copy, the file the README points at), the bundle's
+   * Resources folder in the app - and the ordinary 404 if it is not there.
    */
   app.get('/gmail-filter.xml', async (_req, reply) => {
     let xml: string
-    try { xml = readFileSync(join(repoRoot(), 'gmail-filter.xml'), 'utf8') } catch { return notFound(reply) }
+    try { xml = readFileSync(join(resourceRoot(), 'gmail-filter.xml'), 'utf8') } catch { return notFound(reply) }
     return reply.code(200)
       .type('application/xml; charset=utf-8')
       .header('content-disposition', 'attachment; filename="gmail-filter.xml"')
