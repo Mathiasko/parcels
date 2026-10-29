@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import {
   APP_BUNDLE_ID, appUpdateStatusPath, checkAppRelease, CODESIGN, compareVersions, defaultDownload, DITTO,
-  githubFetchJson, parseSha256Sums, PLUTIL, readAppUpdateStatus, RELEASES_URL, runCommand, sha256File, stageUpdate,
-  type StageDeps,
+  downloadBaseBeside, githubFetchJson, parseSha256Sums, PLUTIL, readAppUpdateStatus, RELEASES_URL, releasesUrlOverride,
+  runCommand, sha256File, stageUpdate, type StageDeps,
 } from '../src/core/app-update.js'
 import {
   readZipEntries, unsafeUnpackedTree, unsafeZipEntry, ZipFormatError, type ZipEntry,
@@ -837,5 +837,37 @@ describe('the poll uses the app check in the app', () => {
     expect(check.version).toBe('0.3.0')
     expect(seen[0]!.url).toBe(RELEASES_URL)
     expect(new Headers(seen[0]!.init!.headers).get('user-agent')).toBe('Parcels/0.2.0')
+  })
+})
+
+describe('a test release feed (ruling R16)', () => {
+  test('is read from PARCELS_RELEASES_URL when it is https, or http on this Mac', () => {
+    expect(releasesUrlOverride({ PARCELS_RELEASES_URL: 'http://127.0.0.1:8899/releases/latest' })).toBe('http://127.0.0.1:8899/releases/latest')
+    expect(releasesUrlOverride({ PARCELS_RELEASES_URL: 'https://example.com/releases/latest' })).toBe('https://example.com/releases/latest')
+  })
+
+  test('is ignored when absent, empty, plain http elsewhere, or not a URL', () => {
+    expect(releasesUrlOverride({})).toBeUndefined()
+    expect(releasesUrlOverride({ PARCELS_RELEASES_URL: '' })).toBeUndefined()
+    expect(releasesUrlOverride({ PARCELS_RELEASES_URL: 'http://example.com/releases/latest' })).toBeUndefined()
+    expect(releasesUrlOverride({ PARCELS_RELEASES_URL: 'not a url' })).toBeUndefined()
+  })
+
+  test('keeps the release\'s files beside it, laid out as GitHub lays them out', () => {
+    expect(downloadBaseBeside('http://127.0.0.1:8899/releases/latest', '0.90.1')).toBe('http://127.0.0.1:8899/releases/download/v0.90.1')
+  })
+
+  test('is what the app\'s daily check asks when the main process passed one on', async () => {
+    vi.stubEnv('PARCELS_HOST', 'app')
+    vi.stubEnv('PARCELS_APP_VERSION', '0.2.0')
+    vi.stubEnv('PARCELS_RELEASES_URL', 'http://127.0.0.1:8899/releases/latest')
+    const seen: string[] = []
+    vi.stubGlobal('fetch', async (url: string) => {
+      seen.push(url)
+      return new Response(JSON.stringify({ tag_name: 'v0.3.0', draft: false, prerelease: false, body: '' }), { status: 200 })
+    })
+    const check = await buildPollDeps(memDb(), config).updateCheck!.check!()
+    expect(check).toMatchObject({ state: 'behind', version: '0.3.0' })
+    expect(seen).toEqual(['http://127.0.0.1:8899/releases/latest'])
   })
 })

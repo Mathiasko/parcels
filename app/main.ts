@@ -4,7 +4,8 @@ import { homedir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, Notification, powerMonitor, protocol, shell, utilityProcess } from 'electron'
 import type { ToMain } from '../src/core/app-ipc.js'
-import { appUpdateStatusPath, readAppUpdateStatus, runCommand, writeAppUpdateStatus } from '../src/core/app-update.js'
+import { appUpdateStatusPath, readAppUpdateStatus, RELEASES_URL_ENV, runCommand, writeAppUpdateStatus } from '../src/core/app-update.js'
+import { devReleasesUrl, hasDevReleasesFlag } from './dev-releases.js'
 import { decideFirstRun, type FirstRun } from './first-run.js'
 import { dashboardOrigin, isInside, notificationPath } from './guards.js'
 import { offerMoveToApplications, MOVE_DETAIL, MOVE_QUESTION } from './location.js'
@@ -110,8 +111,13 @@ function serverEnv(): Record<string, string> {
   // Inherited from a terminal or an Electron-based tool, this would make a child Electron binary run
   // as plain Node. The server does not need it and nothing it starts should see it.
   delete env.ELECTRON_RUN_AS_NODE
+  // A test feed is passed on only when this run may follow one (ruling R16, app/dev-releases.ts);
+  // otherwise the server must not see an inherited one at all.
+  delete env[RELEASES_URL_ENV]
+  const feed = releasesFeed()
   return {
     ...env,
+    ...(feed !== undefined && { [RELEASES_URL_ENV]: feed }),
     PARCELS_HOST: 'app',
     PARCELS_CONFIG: paths.config,
     PARCELS_APP_VERSION: app.getVersion(),
@@ -122,6 +128,20 @@ function serverEnv(): Record<string, string> {
     // repository root has it (ruling R3).
     PARCELS_RESOURCES: app.isPackaged ? process.resourcesPath : app.getAppPath(),
   }
+}
+
+/**
+ * The release feed to follow instead of GitHub's, if this run may follow one: an unpackaged dev run,
+ * or a test build whose package.json carries `parcelsDevReleases` (ruling R16). Logged when used, so
+ * a test build that updates from somewhere else says so in main.log.
+ */
+function releasesFeed(): string | undefined {
+  let pkg: string | undefined
+  try { pkg = readFileSync(join(app.getAppPath(), 'package.json'), 'utf8') } catch { /* No flag, then. */ }
+  const url = devReleasesUrl({ packaged: app.isPackaged, flagged: hasDevReleasesFlag(pkg), url: process.env[RELEASES_URL_ENV] })
+  if (url !== undefined) log(`following the test release feed at ${url}`)
+  else if (process.env[RELEASES_URL_ENV]) log(`ignored ${RELEASES_URL_ENV}: this build follows GitHub's releases only`)
+  return url
 }
 
 /** Starts one server process, with its output appended to server.log, as a `Child` for the supervisor. */

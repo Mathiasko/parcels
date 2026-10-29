@@ -34,6 +34,30 @@ export const releaseDownloadBase = (version: string): string =>
   `https://github.com/Mathiasko/parcels/releases/download/v${version}`
 
 /**
+ * A release feed other than GitHub's, for test builds only (ruling R16): `PARCELS_RELEASES_URL` names
+ * a `releases/latest` JSON, and the release's files are fetched from beside it, laid out as GitHub
+ * lays them out: `<folder>/download/v<version>/<file>`. So `http://127.0.0.1:8899/releases/latest`
+ * downloads from `http://127.0.0.1:8899/releases/download/v1.2.3/`.
+ *
+ * The server never decides whether to follow it. The app's main process passes the variable on only
+ * from an unpackaged run or a bundle built with `parcelsDevReleases` (app/dev-releases.ts), and removes
+ * it from the server's environment otherwise; a release build refuses to ship with that flag. What
+ * reaches this function has therefore already been allowed. It is still held to the same rule as any
+ * download address (https, or http on this Mac), so a typo cannot send the check somewhere else.
+ */
+export const RELEASES_URL_ENV = 'PARCELS_RELEASES_URL'
+
+/** The release feed override the main process passed on, or undefined for GitHub's. */
+export function releasesUrlOverride(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const url = env[RELEASES_URL_ENV]
+  return url !== undefined && url !== '' && isSafeDownloadUrl(url) ? url : undefined
+}
+
+/** Where a release's files are, beside an overriding `releases/latest` URL (see `RELEASES_URL_ENV`). */
+export const downloadBaseBeside = (latestUrl: string, version: string): string =>
+  new URL(`download/v${version}`, latestUrl).href
+
+/**
  * Absolute paths, not bare names: `execFile` would otherwise look the tool up on `PATH`, and a
  * `codesign` earlier on the path that always says yes would defeat the whole check.
  */

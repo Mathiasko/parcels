@@ -57,8 +57,8 @@ import {
 } from '../core/update.js'
 import { getUpdateCheck, recordUpdateCheck } from '../db/update-state.js'
 import {
-  appUpdateDownloading, appUpdateStatusPath, checkAppRelease, githubFetchJson, readAppUpdateStatus, stagingDir,
-  type AppUpdateStatus, type StageDeps,
+  appUpdateDownloading, appUpdateStatusPath, checkAppRelease, downloadBaseBeside, githubFetchJson, readAppUpdateStatus,
+  RELEASES_URL, stagingDir, type AppUpdateStatus, type StageDeps,
 } from '../core/app-update.js'
 import { postToMain } from '../core/app-ipc.js'
 import { nextSlot } from '../core/schedule.js'
@@ -158,6 +158,11 @@ export interface AppWebDeps {
   stage?: (d: Omit<StageDeps, 'download' | 'run' | 'arch' | 'expectedCertSha'>) => Promise<AppUpdateStatus>
   /** The release check for the Check button; defaults to asking GitHub. Tests pass a fake. */
   check?: () => Promise<UpdateCheck>
+  /**
+   * A `releases/latest` URL to use in place of GitHub's, for a test build (`RELEASES_URL_ENV` in
+   * core/app-update.ts): the default check asks it, and Update now downloads from beside it.
+   */
+  releasesUrl?: string
 }
 
 /**
@@ -1126,7 +1131,8 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   app.post('/update/check', async (_req, reply) => {
     if (appDeps) {
       // The app asks GitHub Releases, as its daily check does (core/runtime.ts); never the checkout's script.
-      const check = appDeps.check ?? (() => checkAppRelease(appDeps.version, githubFetchJson(appDeps.version)))
+      const check = appDeps.check
+        ?? (() => checkAppRelease(appDeps.version, githubFetchJson(appDeps.version), appDeps.releasesUrl ?? RELEASES_URL))
       recordUpdateCheck(db, await check(), now())
       return reply.redirect('/health#update', 303)
     }
@@ -1184,7 +1190,10 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       return sendError(reply, 409, () => errorPage('Cannot update from here', 'This copy of Parcels does not know where it is installed, so it cannot update itself. Download the new version from GitHub and drag it into Applications.', errorCtx()),
         'this copy of Parcels cannot update itself')
     }
-    const run = a.stage({ version: check.version, appBundle: a.appBundle, supportDir: a.supportDir, now })
+    const run = a.stage({
+      version: check.version, appBundle: a.appBundle, supportDir: a.supportDir, now,
+      ...(a.releasesUrl !== undefined && { releaseBase: downloadBaseBeside(a.releasesUrl, check.version) }),
+    })
     staging = run
       .then(() => {}, err => {
         // `stageUpdate` never rejects; a stage that did anyway must not become an unhandled rejection,

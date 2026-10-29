@@ -7,8 +7,9 @@
 // In order: the zip's name is the one the updater downloads; its SHA256SUMS line matches (when the
 // file is given); its table of contents passes readZipEntries and unsafeZipEntry; `ditto -x -k`
 // unpacks it into a temporary folder whose tree passes unsafeUnpackedTree; that folder holds a real
-// Parcels.app; and checkAppBundle accepts it - a valid signature, the leaf certificate whose SHA-256 is
-// in <signing-cert.sha256>, and Parcels's bundle id at <version>.
+// Parcels.app; that app is not a test build (dev-releases-flag.mjs: no `parcelsDevReleases` in its
+// package.json); and checkAppBundle accepts it - a valid signature, the leaf certificate whose SHA-256
+// is in <signing-cert.sha256>, and Parcels's bundle id at <version>.
 //
 // It imports the checks from the built dist/, not copies of them, so it can only ever agree with the
 // app being released. Run `npm run build` first; build-release.sh does. Exit 0: the updater would
@@ -32,6 +33,7 @@ if (!existsSync(new URL('zip-check.js', dist))) {
 }
 const { readZipEntries, unsafeZipEntry, unsafeUnpackedTree, ZipFormatError } = await import(new URL('zip-check.js', dist).href)
 const { checkAppBundle, DITTO, isVersion, parseSha256Sums, runCommand, sha256File } = await import(new URL('app-update.js', dist).href)
+const { devReleasesRefusal } = await import(new URL('./dev-releases-flag.mjs', import.meta.url).href)
 
 /** Thrown for a refusal: the sentence the updater would show, and the detail it would log. */
 class Refused extends Error {
@@ -89,6 +91,11 @@ try {
     isApp = st.isDirectory() && !st.isSymbolicLink()
   } catch { /* Missing: refused below. */ }
   if (!isApp) refuse('The download did not contain the Parcels app, so it was not installed.')
+
+  // Not one of the updater's checks: a test build may follow a release feed other than GitHub's
+  // (ruling R16), so it must never be published. Before codesign, which has nothing to say about it.
+  const testBuild = devReleasesRefusal(app)
+  if (testBuild) refuse(`The zip holds an app that must not be released: ${testBuild}.`)
 
   const refused = await checkAppBundle(app, version, certSha, runCommand, join(work, 'certs'))
   if (refused) refuse(refused.reason, refused.detail)

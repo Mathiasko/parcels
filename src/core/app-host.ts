@@ -14,7 +14,7 @@ import { createAppNotifier } from '../notify/send.js'
 import { runPollOnce } from '../poll.js'
 import { buildServer, refreshIdle, startServer, type AppWebDeps, type WebDeps } from '../web/server.js'
 import {
-  appUpdateStatusPath, defaultDownload, readAppUpdateStatus, runCommand, stageUpdate, writeAppUpdateStatus,
+  appUpdateStatusPath, defaultDownload, readAppUpdateStatus, releasesUrlOverride, runCommand, stageUpdate, writeAppUpdateStatus,
   type AppUpdateStatus, type StageDeps,
 } from './app-update.js'
 import { resourceRoot } from './host.js'
@@ -153,6 +153,8 @@ export async function startAppHost(deps: AppHostDeps): Promise<AppHost> {
       return Number.isInteger(n) && n >= 0 ? n : 0
     },
     stage: appStage(env),
+    // Present only when the main process allowed a test feed (ruling R16); GitHub's otherwise.
+    ...(releasesUrlOverride(env) !== undefined && { releasesUrl: releasesUrlOverride(env) }),
   }
   settleUpdateStatus(db, supportDir, version, now())
   // The app notifier goes to both the dashboard's refresh and the scheduled poll: inside the bundle the

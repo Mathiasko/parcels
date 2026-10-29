@@ -9,7 +9,8 @@
 #      signs both apps with "Parcels Signing" through scripts/app/after-pack.mjs.
 #   2. release/SHA256SUMS over the four artifacts, as the updater reads it.
 #   3. Both .apps, and the app inside each .dmg: `codesign --verify --deep --strict`, the leaf
-#      certificate's SHA-256 equal to app/signing-cert.sha256, and the RunAsNode fuse off.
+#      certificate's SHA-256 equal to app/signing-cert.sha256, the RunAsNode fuse off, and no
+#      `parcelsDevReleases` in its package.json (a test build, which may follow another release feed).
 #   4. Each zip through check-release-zip.mjs: the updater's own checks, from dist/, against the
 #      committed certificate hash and this version.
 #   5. A smoke start of this Mac's app (smoke.sh --no-build).
@@ -59,7 +60,9 @@ check_app() {
   # Fuse 0 is RunAsNode; "0" (48) means disabled. Read by electron-builder's own @electron/fuses.
   "$NODE" -e "require('@electron/fuses').getCurrentFuseWire(process.argv[1]).then(w => process.exit(w[0] === 48 ? 0 : 1))" "$app" \
     || die "$label: the RunAsNode fuse is not disabled"
-  echo "$label: signature valid, leaf $got, RunAsNode off"
+  # A test build may follow a release feed other than GitHub's (ruling R16); it must never ship.
+  "$NODE" scripts/app/dev-releases-flag.mjs "$app" >/dev/null || die "$label: this is a test build, not a release build"
+  echo "$label: signature valid, leaf $got, RunAsNode off, not a test build"
 }
 
 step "Checking the signatures"

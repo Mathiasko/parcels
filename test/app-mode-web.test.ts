@@ -54,9 +54,11 @@ function appServer(opts: {
   db?: Database
   configDoc?: Record<string, unknown>
   stage?: NonNullable<WebDeps['app']>['stage']
-  check?: () => Promise<UpdateCheck>
+  /** `null` leaves the check out, so the server's own default (a real fetch, stubbed) is used. */
+  check?: (() => Promise<UpdateCheck>) | null
   restarts?: number
   now?: Date
+  releasesUrl?: string
 } = {}) {
   const db = opts.db ?? memDb()
   const supportDir = join(root, 'Application Support', 'Parcels')
@@ -97,7 +99,8 @@ function appServer(opts: {
         stages.push(d)
         return { state: 'downloading', version: d.version, startedAt: now }
       }),
-      check: opts.check ?? (async () => BEHIND),
+      ...(opts.check !== null && { check: opts.check ?? (async () => BEHIND) }),
+      ...(opts.releasesUrl !== undefined && { releasesUrl: opts.releasesUrl }),
     },
   })
   return {
@@ -406,6 +409,37 @@ describe('POST /update in app mode', () => {
       expect((await s.post('/update')).statusCode).toBe(303)
       expect((await s.get('/health')).statusCode).toBe(200)
     } finally { errors.mockRestore() }
+  })
+})
+
+describe('a test release feed (ruling R16) in app mode', () => {
+  test('Update now downloads from beside the feed the main process passed on', async () => {
+    const s = appServer({ releasesUrl: 'http://127.0.0.1:8899/releases/latest' })
+    recordUpdateCheck(s.db, BEHIND, NOW)
+    await s.post('/update')
+    expect(s.stages).toEqual([expect.objectContaining({ version: '0.4.0', releaseBase: 'http://127.0.0.1:8899/releases/download/v0.4.0' })])
+  })
+
+  test('without one, Update now leaves the download address to the updater, which uses GitHub', async () => {
+    const s = appServer()
+    recordUpdateCheck(s.db, BEHIND, NOW)
+    await s.post('/update')
+    expect(s.stages).toHaveLength(1)
+    expect(s.stages[0]).not.toHaveProperty('releaseBase')
+  })
+
+  test('Check for updates asks the feed instead of GitHub', async () => {
+    const seen: string[] = []
+    vi.stubGlobal('fetch', async (url: string) => {
+      seen.push(url)
+      return new Response(JSON.stringify({ tag_name: 'v0.4.0', draft: false, prerelease: false, body: '' }), { status: 200 })
+    })
+    try {
+      const s = appServer({ check: null, releasesUrl: 'http://127.0.0.1:8899/releases/latest' })
+      expect((await s.post('/update/check')).statusCode).toBe(303)
+      expect(seen).toEqual(['http://127.0.0.1:8899/releases/latest'])
+      expect(getUpdateCheck(s.db)).toMatchObject({ state: 'behind', version: '0.4.0' })
+    } finally { vi.unstubAllGlobals() }
   })
 })
 
