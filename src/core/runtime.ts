@@ -2,7 +2,7 @@ import { dirname, join } from 'node:path'
 import { allAdapters } from '../carriers/registry.js'
 import { authStorePathFor, setDpdAuthStore } from '../carriers/dpd.js'
 import type { Database } from '../db/index.js'
-import { createNotifier } from '../notify/send.js'
+import { notifierFor } from '../notify/send.js'
 import type { Config } from './config.js'
 import { createBinaryFetch, createHttpClient } from './http.js'
 import { tileDirFor } from './tiles.js'
@@ -31,7 +31,7 @@ export function buildPollDeps(db: Database, config: Config, overrides: Partial<P
     http: createHttpClient(),
     adapters: allAdapters(),
     now: new Date(),
-    notifier: createNotifier(config.notifier),
+    notifier: notifierFor(config),
     // Raw mail lands in data/mail beside the database. Read-only against the mailbox; see ingest/imap.ts.
     ingest: config.imap && { imap: config.imap, mailDir: join(dirname(config.dbPath), 'mail') },
     // Map tiles land in data/tiles, beside the mail. Omitted entirely when the preview is off, so the

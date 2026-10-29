@@ -1,5 +1,7 @@
 import { spawn as nodeSpawn } from 'node:child_process'
+import { postToMain, type ToMain } from '../core/app-ipc.js'
 import type { Config } from '../core/config.js'
+import { host } from '../core/host.js'
 import type { Notification, Notifier } from './types.js'
 
 /**
@@ -11,7 +13,7 @@ export type SpawnFn = (command: string, args: readonly string[]) => Promise<{ co
 
 /** What one delivery attempt did. `started` says a process ran, never that a banner appeared. */
 export interface Delivery {
-  mechanism: 'terminal-notifier' | 'osascript'
+  mechanism: 'terminal-notifier' | 'osascript' | 'app'
   started: boolean
   exitCode: number | null
   note?: string
@@ -137,4 +139,32 @@ export function createNotifier(mode: Config['notifier'], spawn: SpawnFn = defaul
   }
 
   return { deliver, send: async n => { await deliver(n) } }
+}
+
+/**
+ * In the Mac app the server runs in a utility process that has no notification permission of its
+ * own, so it hands the banner to the main process, which posts it under the app's identity. Nothing
+ * is spawned. Like the other notifier it never rejects: a channel that throws (the main process went
+ * away mid-shutdown) is reported as not started rather than raised into the poll.
+ */
+export function createAppNotifier(post: (m: ToMain) => void): ReportingNotifier {
+  async function deliver(n: Notification): Promise<Delivery> {
+    try {
+      post({ type: 'notify', groupKey: n.groupKey, title: n.title, message: n.message, ...(n.url ? { url: n.url } : {}) })
+      return { mechanism: 'app', started: true, exitCode: 0 }
+    } catch {
+      return { mechanism: 'app', started: false, exitCode: null }
+    }
+  }
+  return { deliver, send: async n => { await deliver(n) } }
+}
+
+/**
+ * The notifier the server and poller use. Under the app the configured `notifier` is ignored, since
+ * terminal-notifier and osascript would post under the wrong identity (or not at all) from inside
+ * the bundle; the git install keeps honouring it. The environment is a parameter so a test can ask
+ * without touching `process.env`.
+ */
+export function notifierFor(config: Config, env: NodeJS.ProcessEnv = process.env): ReportingNotifier {
+  return host(env) === 'app' ? createAppNotifier(postToMain) : createNotifier(config.notifier)
 }

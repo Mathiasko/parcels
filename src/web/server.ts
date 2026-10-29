@@ -19,7 +19,7 @@ import { isDormant } from '../core/backoff.js'
 import { recordPollRun, runPoll, type PollDeps } from '../core/poll.js'
 import { claimRun, failRun, getRun, listRuns, reapStaleRuns, runningRun, type PollRun } from '../db/poll-runs.js'
 import { allAdapters } from '../carriers/registry.js'
-import { createNotifier } from '../notify/send.js'
+import { notifierFor } from '../notify/send.js'
 import type { Notifier } from '../notify/types.js'
 import { listDelivered, setLabel, setPostalCode } from '../db/parcels.js'
 import { carrierHealth } from '../db/health.js'
@@ -997,7 +997,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
         forceAll: true, ingest,
         http: deps.http ?? createHttpClient(),
         adapters: deps.adapters ?? allAdapters(),
-        notifier: deps.notifier ?? createNotifier(config.notifier),
+        notifier: deps.notifier ?? notifierFor(config),
         now: now(),
         // A status change found by the button is the WEB acting, not the hourly poller: the whole point
         // of attributing these is that "it changed while I was looking at it" is a different fact.

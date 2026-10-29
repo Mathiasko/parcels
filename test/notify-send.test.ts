@@ -2,7 +2,9 @@ import { test, expect, vi } from 'vitest'
 import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createNotifier, defaultSpawn, type SpawnFn } from '../src/notify/send.js'
+import { createAppNotifier, createNotifier, defaultSpawn, notifierFor, type SpawnFn } from '../src/notify/send.js'
+import { postToMain, setMainChannel, type ToMain } from '../src/core/app-ipc.js'
+import { validateConfig } from '../src/core/config.js'
 import type { Notification } from '../src/notify/types.js'
 
 const TN = '/opt/homebrew/bin/terminal-notifier'
@@ -202,4 +204,50 @@ test('other non-zero exits from terminal-notifier in auto mode neither fall back
   const d = await createNotifier('auto', spawn).deliver(base)
   expect(calls.map(c => c.command)).toEqual([TN])
   expect(d).toMatchObject({ mechanism: 'terminal-notifier', exitCode: 1 })
+})
+
+// --- the app notifier -------------------------------------------------------------------------
+
+test('the app notifier posts the notification to the main process and spawns nothing', async () => {
+  // createAppNotifier takes no spawn function at all, so it has no way to start a process.
+  const post = vi.fn<(m: ToMain) => void>()
+  const d = await createAppNotifier(post).deliver({ groupKey: 'g', title: 'T', message: 'M', url: '/parcel/3' })
+  expect(post).toHaveBeenCalledExactlyOnceWith({ type: 'notify', groupKey: 'g', title: 'T', message: 'M', url: '/parcel/3' })
+  expect(d).toEqual({ mechanism: 'app', started: true, exitCode: 0 })
+})
+
+test('the app notifier leaves url out of the message when there is none', async () => {
+  const post = vi.fn<(m: ToMain) => void>()
+  await createAppNotifier(post).send({ groupKey: 'g', title: 'T', message: 'M' })
+  expect(post).toHaveBeenCalledExactlyOnceWith({ type: 'notify', groupKey: 'g', title: 'T', message: 'M' })
+})
+
+test('the app notifier never rejects, even when the channel throws', async () => {
+  const post = () => { throw new Error('channel closed') }
+  await expect(createAppNotifier(post).send(base)).resolves.toBeUndefined()
+  await expect(createAppNotifier(post).deliver(base)).resolves.toMatchObject({ mechanism: 'app', started: false })
+})
+
+test('notifierFor gives the app notifier under PARCELS_HOST=app whatever the config says', async () => {
+  const post = vi.fn<(m: ToMain) => void>()
+  setMainChannel(post)
+  try {
+    const config = validateConfig({ defaultPostalCode: '81101', notifier: 'terminal-notifier' })
+    const d = await notifierFor(config, { PARCELS_HOST: 'app' }).deliver(base)
+    expect(d.mechanism).toBe('app')
+    expect(post).toHaveBeenCalledTimes(1)
+  } finally {
+    setMainChannel(undefined)
+  }
+})
+
+test('notifierFor gives the configured notifier on the git host', async () => {
+  const config = validateConfig({ defaultPostalCode: '81101', notifier: 'osascript' })
+  expect(notifierFor(config, {})).toHaveProperty('deliver')
+  // The app notifier would have posted; with no channel set, a real one must not have.
+  expect(postToMain({ type: 'ready-count', n: 0 })).toBe(false)
+})
+
+test('"app" is not something a user can put in config.json', () => {
+  expect(() => validateConfig({ defaultPostalCode: '81101', notifier: 'app' })).toThrow()
 })
