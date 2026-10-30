@@ -91,6 +91,8 @@ async function start() {
       TZ: 'Europe/Bratislava', LANG: 'en_US.UTF-8',
       PARCELS_HOST: 'app', PARCELS_APP_VERSION: '0.1.0',
       SIM_PERSONA: persona, SIM_DIR: dir, SIM_VITE_CACHE: join(dir, 'vite-cache'),
+      // The dashboard's theme and mode, if pinned (theme-shots.sh); unset, the defaults.
+      ...(process.env.SIM_THEME && { SIM_THEME: process.env.SIM_THEME }), ...(process.env.SIM_MODE && { SIM_MODE: process.env.SIM_MODE }),
     },
   })
   child.unref()

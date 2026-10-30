@@ -31,7 +31,7 @@ import { POLL_SLOTS } from '../../../src/core/schedule.js'
 import { appUpdateStatusPath, checkAppRelease, stagingDir, writeAppUpdateStatus, type AppUpdateStatus } from '../../../src/core/app-update.js'
 import { setMainChannel, type ToMain } from '../../../src/core/app-ipc.js'
 import { STYLE } from '../../../src/web/views/style.js'
-import { DEFAULT_APPEARANCE } from '../../../src/core/appearance.js'
+import { DEFAULT_APPEARANCE, MODES, THEME_IDS, type Appearance } from '../../../src/core/appearance.js'
 import { getUpdateCheck, recordUpdateInstalled } from '../../../src/db/update-state.js'
 import type { Carrier, CarrierAdapter, HttpClient } from '../../../src/core/types.js'
 import type { Notification } from '../../../src/notify/types.js'
@@ -88,7 +88,13 @@ test('persona simulator', async () => {
   const example = JSON.parse(readFileSync(join(ROOT, 'config.example.json'), 'utf8'))
   const port = await freePort()
   const { imap: exampleImap, ...noImap } = example
-  const cfgDoc: Record<string, unknown> = { ...noImap, dbPath: join(dataDir, 'parcels.db'), port, pickupCalendar: '' }
+  // SIM_THEME / SIM_MODE pin the dashboard's appearance (scripts/dev/persona-sim/theme-shots.sh); unset, the
+  // config has no appearance block and every page wears the defaults, as before.
+  const appearance: Appearance | undefined = process.env.SIM_THEME || process.env.SIM_MODE
+    ? { theme: (process.env.SIM_THEME || DEFAULT_APPEARANCE.theme) as Appearance['theme'], mode: (process.env.SIM_MODE || DEFAULT_APPEARANCE.mode) as Appearance['mode'] }
+    : undefined
+  if (appearance && (!THEME_IDS.includes(appearance.theme) || !MODES.includes(appearance.mode))) throw new Error(`SIM_THEME must be one of ${THEME_IDS.join(', ')} and SIM_MODE one of ${MODES.join(', ')}`)
+  const cfgDoc: Record<string, unknown> = { ...noImap, dbPath: join(dataDir, 'parcels.db'), port, pickupCalendar: '', ...(appearance && { appearance }) }
   const configPath = join(supportDir, 'sim-config.json')
   writeFileSync(configPath, JSON.stringify(cfgDoc, null, 2))
   const config = { ...cfgDoc, notifier: 'auto' } as never as Parameters<typeof buildServer>[0]['config']
@@ -199,6 +205,7 @@ test('persona simulator', async () => {
     firstRun: S.meta.firstRun === 'move-in' ? { kind: 'move-in', clone: S.meta.clone ?? '/Users/you/parcels', plists: ['local.parcels.web.plist', 'local.parcels.poller.plist'] } : { kind: 'welcome' },
     configPath: join(DIR, 'welcome', 'config.json'),
     pages,
+    ...(appearance && { appearance }),
     start: path => { firstRunDone = path },
     moveIn: async () => ({ ok: true }) as never,
     quit: () => { appEvents.push('quit') },
@@ -297,7 +304,7 @@ test('persona simulator', async () => {
   async function appPage(name: string, method: 'GET' | 'POST' = 'GET', form?: URLSearchParams): Promise<{ status: number; body: string; note?: string }> {
     if (name === 'first-run') name = firstRunPath
     if (name === 'result') {
-      const body = fillPage(pages.result, { clone: S.meta.clone ?? '/Users/you/parcels', step: 'Copying your parcels and settings', reason: 'The disk is full: 0 bytes free on Macintosh HD.', ...DEFAULT_APPEARANCE, ...OLD_INSTALL.running }, STYLE)
+      const body = fillPage(pages.result, { clone: S.meta.clone ?? '/Users/you/parcels', step: 'Copying your parcels and settings', reason: 'The disk is full: 0 bytes free on Macintosh HD.', ...(appearance ?? DEFAULT_APPEARANCE), ...OLD_INSTALL.running }, STYLE)
       return { status: 200, body, note: 'This page appears only if moving in fails; it is shown here with sample text.' }
     }
     const res = await firstRun(new Request(`parcels://${name}/`, method === 'POST' ? { method, body: form, headers: { 'content-type': 'application/x-www-form-urlencoded' } } : {}))
@@ -393,6 +400,11 @@ test('persona simulator', async () => {
         const res = await server.inject({ method: 'GET', url: src.replace(/&amp;/g, '&'), headers })
         if (res.statusCode === 200) html = html.split(`src="${src}"`).join(`src="data:${res.headers['content-type']};base64,${res.rawPayload.toString('base64')}"`)
       }
+    }
+    // A theme's fonts (url(/fonts/<file>) in the stylesheet): inlined too, for the saved copy and the app: pages.
+    for (const font of new Set([...html.matchAll(/url\((\/fonts\/[\w.-]+)\)/g)].map(m => m[1]!))) {
+      const res = await server.inject({ method: 'GET', url: font, headers })
+      if (res.statusCode === 200) html = html.split(`url(${font})`).join(`url(data:font/woff2;base64,${res.rawPayload.toString('base64')})`)
     }
     const saved = join(DIR, 'html', `${slug}.html`)
     writeFileSync(saved, html)
