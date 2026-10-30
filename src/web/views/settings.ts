@@ -2,6 +2,7 @@ import { NOTIFIERS } from '../../core/config.js'
 import type { ImapProbeResult } from '../../ingest/imap-probe.js'
 import { CalendarFailure } from '../../core/calendar-app.js'
 import type { SettingsValues } from '../settings.js'
+import { appearanceFields } from './appearance.js'
 import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
@@ -235,6 +236,7 @@ ${gmailGuide(v)}
 ${calendarField(v, state.calendars)}
 </div>
 
+${appearanceFields(v)}
 <details class="adv"${app ? raw(' id="adv"') : ''}><summary>Advanced</summary>
 <p class="meta">Nothing here normally needs changing.</p>
 <div class="fields">

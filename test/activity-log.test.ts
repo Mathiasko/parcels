@@ -327,6 +327,14 @@ describe('saving settings records which fields changed and never a value', () =>
     expect(changedSettingFields(doc(), doc({ mapPreview: false }))).toEqual(['mapPreview'])
   })
 
+  test('appearance is compared as the effective theme and mode, each named on its own', () => {
+    expect(changedSettingFields(doc(), doc({ appearance: { theme: 'postal', mode: 'system' } }))).toEqual([])
+    expect(changedSettingFields(doc(), doc({ appearance: {} }))).toEqual([])
+    expect(changedSettingFields(doc(), doc({ appearance: { theme: 'classic' } }))).toEqual(['appearance.theme'])
+    expect(changedSettingFields(doc({ appearance: { theme: 'classic', mode: 'light' } }), doc({ appearance: { theme: 'classic', mode: 'dark' } })))
+      .toEqual(['appearance.mode'])
+  })
+
   test('a changed App Password is reported as a changed field, never as a value', () => {
     const next = doc({ imap: { ...(doc().imap as object), pass: 'zzzzzzzzzzzzzzzz' } })
     expect(changedSettingFields(doc(), next)).toEqual(['imap.pass'])

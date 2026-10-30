@@ -9,6 +9,7 @@ import type { ImapConfig } from '../src/ingest/imap.js'
 import { fakeImap, type FakeImap } from './imap-fake.js'
 import { config, memDb, NOW } from './poll-helpers.js'
 import { settingsValues, applySettings } from '../src/web/settings.js'
+import { listActivity } from '../src/db/activity-log.js'
 
 const PASS = 'abcdefghijklmnop'
 
@@ -489,5 +490,104 @@ describe('a first-time mail setup asks for two things, not five', () => {
     if (r.ok) expect(r.config.imap).toEqual({
       host: 'imap.gmail.com', port: 993, user: 'friend@gmail.com', pass: 'abcdefghijklmnop', mailbox: 'parcels',
     })
+  })
+})
+
+describe('Settings chooses the theme and the mode', () => {
+  const appExtra = (): Partial<WebDeps> => {
+    const dir = mkdtempSync(join(tmpdir(), 'parcels-web-app-'))
+    return { app: { supportDir: dir, logDir: dir, appBundle: dir, version: '0.3.0', startedAt: NOW, restarts: () => 0 } }
+  }
+  const modes: Array<[string, Partial<WebDeps>]> = [['git', {}], ['app', appExtra()]]
+  const appearanceOf = (path: string) => read(path).appearance
+  const logged = (db: Database) => listActivity(db, 10).filter(e => e.kind === 'settings_saved').map(e => e.detail ?? '')
+
+  test.each(modes)('shows the Appearance block with the defaults when the file has none (%s mode)', async (_name, extra) => {
+    const body = (await harness({}, undefined, extra).get('/settings')).body
+    expect(body).toContain('<h2>Appearance</h2><div class="fields"><label>Theme<select name="theme">')
+    expect(body).toContain('<option value="postal" selected>Postal</option>')
+    expect(body).toContain('<option value="classic">Classic</option>')
+    expect(body).toContain('</select></label><label>Mode<select name="mode">')
+    expect(body).toContain('<option value="system" selected>Same as the Mac</option>')
+    expect(body).toContain('<option value="light">Light</option>')
+    expect(body).toContain('<option value="dark">Dark</option>')
+    expect(body).toContain('<span class="meta hint">Light or dark, or follow the Mac.</span></label></div>')
+  })
+
+  test.each(modes)('shows the stored values selected (%s mode)', async (_name, extra) => {
+    const body = (await harness({ appearance: { theme: 'classic', mode: 'dark' } }, undefined, extra).get('/settings')).body
+    expect(body).toContain('<option value="classic" selected>Classic</option>')
+    expect(body).toContain('<option value="dark" selected>Dark</option>')
+    expect(body).not.toContain('<option value="postal" selected>')
+    expect(body).not.toContain('<option value="system" selected>')
+  })
+
+  test.each(modes)('a save writes the choice, the next page wears it without a restart, and the log names the fields (%s mode)', async (_name, extra) => {
+    const h = harness({}, undefined, extra)
+    expect((await h.get('/')).body).toContain('data-theme="postal" data-mode="system"')
+    const res = await h.post('/settings', fields({ theme: 'classic', mode: 'dark' }))
+    expect(res.statusCode).toBe(303)
+    expect(appearanceOf(h.path)).toEqual({ theme: 'classic', mode: 'dark' })
+    expect((await h.get('/')).body).toContain('data-theme="classic" data-mode="dark"')
+    expect((await h.get('/settings?saved=1')).body).toContain('<option value="classic" selected>Classic</option>')
+    const [detail] = logged(h.db)
+    expect(detail!.split(' ')).toEqual(expect.arrayContaining(['appearance.theme', 'appearance.mode']))
+  })
+
+  test('an unknown theme or mode is refused with the allowed names, and nothing is written', async () => {
+    for (const [over, message] of [
+      [{ theme: 'kraft' }, 'The theme must be one of Postal, Classic.'],
+      [{ mode: 'auto' }, 'The mode must be one of Same as the Mac, Light, Dark.'],
+    ] as Array<[Record<string, string>, string]>) {
+      const h = harness()
+      const before = readFileSync(h.path, 'utf8')
+      const res = await h.post('/settings', fields({ theme: 'postal', mode: 'system', ...over }))
+      expect(res.statusCode).toBe(400)
+      expect(res.body).toContain(message)
+      expect(readFileSync(h.path, 'utf8')).toBe(before)
+      expect(logged(h.db)).toEqual([])
+    }
+  })
+
+  test('a form without theme or mode (a stale tab) keeps what is stored and logs no appearance change', async () => {
+    const h = harness({ appearance: { theme: 'classic', mode: 'light' } })
+    const res = await h.post('/settings', fields({ defaultPostalCode: '04001' }))
+    expect(res.statusCode).toBe(303)
+    expect(appearanceOf(h.path)).toEqual({ theme: 'classic', mode: 'light' })
+    expect(logged(h.db)[0]).toBe('defaultPostalCode')
+  })
+
+  test('a failed save re-renders the typed choice, and a stale form re-renders the stored one', async () => {
+    const h = harness({ appearance: { theme: 'classic', mode: 'light' } })
+    const typed = await h.post('/settings', fields({ defaultPostalCode: 'nope', theme: 'postal', mode: 'dark' }))
+    expect(typed.statusCode).toBe(400)
+    expect(typed.body).toContain('<option value="postal" selected>Postal</option>')
+    expect(typed.body).toContain('<option value="dark" selected>Dark</option>')
+    const stale = await h.post('/settings', fields({ defaultPostalCode: 'nope' }))
+    expect(stale.body).toContain('<option value="classic" selected>Classic</option>')
+    expect(stale.body).toContain('<option value="light" selected>Light</option>')
+  })
+
+  test('writing the defaults over an absent block changes nothing and logs nothing', async () => {
+    const h = harness()
+    expect((await h.post('/settings', fields({ theme: 'postal', mode: 'system' }))).statusCode).toBe(303)
+    expect(logged(h.db)).toEqual([''])
+  })
+
+  test('only the mode changing logs only the mode', async () => {
+    const h = harness({ appearance: { theme: 'classic', mode: 'light' } })
+    await h.post('/settings', fields({ theme: 'classic', mode: 'dark' }))
+    expect(logged(h.db)).toEqual(['appearance.mode'])
+  })
+
+  test('other keys inside a stored appearance object survive a save', async () => {
+    const h = harness({ appearance: { theme: 'classic', mode: 'light', accent: 'teal' } })
+    await h.post('/settings', fields({ theme: 'postal', mode: 'dark' }))
+    expect(appearanceOf(h.path)).toEqual({ theme: 'postal', mode: 'dark', accent: 'teal' })
+  })
+
+  test('settingsValues reads the effective choice: the defaults when absent', () => {
+    expect(settingsValues({ defaultPostalCode: '81101' })).toMatchObject({ theme: 'postal', mode: 'system' })
+    expect(settingsValues({ defaultPostalCode: '81101', appearance: { theme: 'classic' } })).toMatchObject({ theme: 'classic', mode: 'system' })
   })
 })

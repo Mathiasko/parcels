@@ -1,5 +1,7 @@
+import { DEFAULT_APPEARANCE, MODES, THEME_IDS, type Mode } from '../core/appearance.js'
 import { NOTIFIERS, validateConfig, type Config, type ConfigDocument } from '../core/config.js'
 import type { SettingField } from '../db/activity-log.js'
+import { THEMES } from './themes/index.js'
 
 /**
  * The form, as `application/x-www-form-urlencoded` delivers it. `port` and `dbPath` are deliberately
@@ -12,6 +14,9 @@ export interface SettingsForm {
   mapPreview?: string
   /** Absent when the page could not list the calendars and so offered no choice: the stored one is kept. */
   pickupCalendar?: string
+  /** Absent from a form rendered before themes existed (a tab left open over an upgrade): the stored one is kept. */
+  theme?: string
+  mode?: string
   imapHost?: string
   imapPort?: string
   imapUser?: string
@@ -30,6 +35,10 @@ export interface SettingsValues {
   mapPreview: boolean
   /** The chosen calendar's name; `''` is the first writable calendar. */
   pickupCalendar: string
+  /** A theme id, as the file has it (or the default when it has none). */
+  theme: string
+  /** `system`, `light` or `dark`, likewise. */
+  mode: string
   /** Whether the file actually has a mail block, as opposed to the form merely showing defaults. */
   imapConfigured: boolean
   imapHost: string
@@ -51,6 +60,22 @@ const storedPass = (doc: ConfigDocument): string | undefined => {
   return typeof pass === 'string' && pass !== '' ? pass : undefined
 }
 
+/** What each mode is called on the page and in the errors; the order is the order the select lists them. */
+export const MODE_LABEL: Record<Mode, string> = { system: 'Same as the Mac', light: 'Light', dark: 'Dark' }
+
+/**
+ * The theme and mode the file effectively has: what it says, or the default for whatever it does not.
+ * This is also what changes are compared as, so a document that gains the explicit defaults has not
+ * changed its appearance.
+ */
+function storedAppearance(doc: ConfigDocument): { theme: string; mode: string } {
+  const block = isObject(doc.appearance) ? doc.appearance : undefined
+  return {
+    theme: text(block?.theme) || DEFAULT_APPEARANCE.theme,
+    mode: text(block?.mode) || DEFAULT_APPEARANCE.mode,
+  }
+}
+
 /**
  * Gmail, because that is what the setup instructions, the filter file and the App Password steps all
  * assume. Shown only when the file has no mail block at all, so a first-time reader fills in two
@@ -68,6 +93,7 @@ export function settingsValues(doc: ConfigDocument): SettingsValues {
     notifier: text(doc.notifier) || 'auto',
     mapPreview: doc.mapPreview !== false,
     pickupCalendar: text(doc.pickupCalendar).trim(),
+    ...storedAppearance(doc),
     imapConfigured: !fresh,
     imapHost: fresh ? GMAIL_DEFAULTS.host : text(imap?.host),
     imapPort: fresh ? GMAIL_DEFAULTS.port : text(imap?.port),
@@ -89,6 +115,8 @@ export function submittedSettings(f: SettingsForm, doc: ConfigDocument): Setting
     notifier: (f.notifier ?? '').trim() || 'auto',
     mapPreview: f.mapPreview !== 'false',
     pickupCalendar: f.pickupCalendar === undefined ? text(doc.pickupCalendar).trim() : f.pickupCalendar.trim(),
+    theme: f.theme ?? storedAppearance(doc).theme,
+    mode: f.mode ?? storedAppearance(doc).mode,
     imapHost: (f.imapHost ?? '').trim(),
     imapPort: (f.imapPort ?? '').trim(),
     imapUser: (f.imapUser ?? '').trim(),
@@ -131,6 +159,15 @@ export function applySettings(doc: ConfigDocument, f: SettingsForm): ApplyResult
   // there is reported when it is used. Absent from the form (no list to offer) keeps what is stored.
   const pickupCalendar = f.pickupCalendar === undefined ? text(doc.pickupCalendar).trim() : f.pickupCalendar.trim()
   if (Array.from(pickupCalendar).length > 255) return no('A calendar name is not longer than 255 characters.')
+
+  // Checked here, against the names the page shows, so the message says what the person saw in the
+  // list. Absent from the form keeps what is stored; the exact id is required (no trimming, no case folding).
+  if (f.theme !== undefined && !(THEME_IDS as readonly string[]).includes(f.theme)) {
+    return no(`The theme must be one of ${THEMES.map(t => t.name).join(', ')}.`)
+  }
+  if (f.mode !== undefined && !(MODES as readonly string[]).includes(f.mode)) {
+    return no(`The mode must be one of ${MODES.map(m => MODE_LABEL[m]).join(', ')}.`)
+  }
 
   const host = (f.imapHost ?? '').trim()
   const portText = (f.imapPort ?? '').trim()
@@ -177,6 +214,14 @@ export function applySettings(doc: ConfigDocument, f: SettingsForm): ApplyResult
   else next.pickupCalendar = pickupCalendar
   if (imap === undefined) delete next.imap
   else next.imap = imap
+  // Only the keys the form sent are written, into the stored block, so anything else inside it survives.
+  if (f.theme !== undefined || f.mode !== undefined) {
+    next.appearance = {
+      ...(isObject(doc.appearance) ? doc.appearance : {}),
+      ...(f.theme !== undefined && { theme: f.theme }),
+      ...(f.mode !== undefined && { mode: f.mode }),
+    }
+  }
 
   try {
     return { ok: true, doc: next, config: validateConfig(next, 'these settings') }
@@ -216,6 +261,11 @@ export function changedSettingFields(before: ConfigDocument, after: ConfigDocume
   if ((before.mapPreview !== false) !== (after.mapPreview !== false)) changed.push('mapPreview')
   // Effective value again: `""` and no key both mean the first writable calendar.
   if (text(before.pickupCalendar).trim() !== text(after.pickupCalendar).trim()) changed.push('pickupCalendar')
+  // Effective values again: an absent block and the explicit defaults are the same appearance.
+  const was = storedAppearance(before)
+  const now = storedAppearance(after)
+  if (was.theme !== now.theme) changed.push('appearance.theme')
+  if (was.mode !== now.mode) changed.push('appearance.mode')
 
   const a = imapBlock(before)
   const b = imapBlock(after)
