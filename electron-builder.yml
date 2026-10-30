@@ -45,8 +45,14 @@ npmRebuild: false
 # With RunAsNode on, ELECTRON_RUN_AS_NODE in the environment (some terminals and Electron-based tools
 # set it) turns the app's binary into plain Node, which exits at once. The server process is a
 # utilityProcess, which this fuse does not affect. after-pack.mjs flips the fuses before it signs.
+# The other three close ways of running other code inside the signed app: only the signed app.asar is
+# loaded (not an app/ folder put beside it), and NODE_OPTIONS and --inspect are ignored. The server
+# process takes neither (scripts/app/smoke.sh and the end-to-end update prove it still starts).
 electronFuses:
   runAsNode: false
+  onlyLoadAppFromAsar: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
 
 afterPack: ./scripts/app/after-pack.mjs
 
