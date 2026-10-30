@@ -17,3 +17,6 @@ test/fixtures/fake-mail/out/
 # persona simulator: screenshots from runs (the reports in results/*.md are kept)
 scripts/dev/persona-sim/results/*-shots/
 scripts/dev/persona-sim/dry-run/*.png
+
+# the Mac app's Move in parks the Terminal install's launchd jobs here (app/move-in.ts); kept for going back
+launchd-backup/
