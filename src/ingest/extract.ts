@@ -55,7 +55,9 @@ const SENDER_DOMAINS: ReadonlyArray<readonly [string, CarrierId]> = [
   ['dpd.sk', 'dpd'],
   ['sps-sro.sk', 'sps'], ['mysps.sk', 'sps'],
   ['posta.sk', 'posta'],
-  ['gls-group.eu', 'gls'], ['gls-group.com', 'gls'],
+  // GLS Slovakia writes its own notices from gls-slovakia.sk (the scrubbed real fixture is one), and
+  // only some from the group's domains.
+  ['gls-group.eu', 'gls'], ['gls-group.com', 'gls'], ['gls-slovakia.sk', 'gls'],
   // DHL writes from the local market's domain, and its Parcel and Express units have brand domains of
   // their own. Listed one by one rather than as a `dhl*.` pattern on purpose: the rule is "this exact
   // registrable domain, or a subdomain of it", and a pattern would also accept `dhl.<anything>`, which
@@ -127,7 +129,12 @@ const firstNumber = (carrier: CarrierId, haystack: string): string | undefined =
   return m ? normalizeNumber(m[0]) : undefined
 }
 
-const GLS_LABEL = /(?:parcel|package|tracking|track|number|zásielk\w*|zasielk\w*|balík\w*|balik\w*|číslo|cislo|paket\w*)[^\n\d]{0,30}$/i
+/**
+ * A "parcel number" style label right before a number: on the number's own line, or on the line above
+ * when the label ends in a colon. GLS prints `Číslo balíka:` in one table cell and the number in the
+ * next, so in the text rendering the number always starts the following line.
+ */
+const GLS_LABEL = /(?:parcel|package|tracking|track|number|zásielk\w*|zasielk\w*|balík\w*|balik\w*|číslo|cislo|paket\w*)(?:[^\n\d]{0,30}|[^\n\d]{0,30}:[ \t]*\r?\n[ \t>]*)$/i
 const PHONE_LABEL = /(?:tel\w*|phone|mobil\w*|call|fax|zavolajte|volajte|\+)[^\n\d]{0,15}$/i
 // 10 digits is also the length of a Slovak national-format mobile number (0900123456).
 const PHONE_PREFIX = /^(?:42[01]|00421|00420|09\d{8}$)/
@@ -169,7 +176,9 @@ function labelledNumber(carrier: keyof typeof STANDALONE, haystack: string): str
   const found = new Set<string>()
   for (const m of haystack.matchAll(STANDALONE[carrier])) {
     const before = haystack.slice(Math.max(0, m.index - 50), m.index)
-    const sentence = before.split(/[.!?\n\d]/).pop() ?? ''
+    // The label may sit on the line above (`Číslo objednávky:` / number), so it is the label's own
+    // line that the NOT_TRACKING words are looked for in, not the empty start of the number's line.
+    const sentence = before.replace(/:[ \t]*\r?\n[ \t>]*$/, ': ').split(/[.!?\n\d]/).pop() ?? ''
     if (!GLS_LABEL.test(before) || PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0]) || NOT_TRACKING.test(sentence)) continue
     found.add(normalizeNumber(m[0]))
   }
@@ -331,7 +340,10 @@ const clean = (s: string | undefined, max = MERCHANT_MAX): string | undefined =>
  * writes names bold as `*DPD* <no_reply@dpd.sk>`.
  */
 function forwardedHeader(text: string): { from?: string; name?: string } | undefined {
+  // Outlook writes no "Forwarded message" line, only a rule of underscores straight above the
+  // `From:` line; the rule counts only when that line follows it.
   const wrapper = /^[ \t>]*-{3,}\s*(?:Forwarded message|Preposlan\S+ spr\S+|P\S*eposlan\S+ zpr\S+|Original Message)\s*-{3,}[ \t]*$/im.exec(text)
+    ?? /^[ \t>]*_{10,}[ \t]*(?=\r?\n[ \t>]*(?:From|Od):)/im.exec(text)
   if (!wrapper) return undefined
   const block = text.slice(wrapper.index + wrapper[0].length).split(/\r?\n[ \t>]*\r?\n/, 2).slice(0, 2).join('\n')
   const line = /^[ \t>]*(?:From|Od):[ \t]*(.+)$/im.exec(block)?.[1]
@@ -348,6 +360,9 @@ const MERCHANT: Partial<Record<CarrierId, RegExp[]>> = {
   packeta: [/od odosielateľa\s+(.{1,400}?),?\s+(?:je pre vás|sme nemohli)/i, /odosielateľ\s+(.{1,400}?)\s+nám práve/i],
   dpd: [/Odosielateľ:\s*(.{1,400}?)\s+Číslo balíka/i],
   sps: [/cislo\s+\S+\s+od\s+(.{1,400}?)\s+je\s+pripravená/i],
+  // GLS prints `Odosielateľ:` and the shop in a cell of its own, followed by the next row's bullet
+  // image (alt text "modrá odrážka"), the "Detail zásielky" button or the pickup-point row.
+  gls: [/Odosielateľ:\s*(.{1,400}?)\s+(?:modrá odrážka|Detail zásielky|Odbern[ée] miesto)/i],
 }
 
 /**
