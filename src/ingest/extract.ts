@@ -8,6 +8,12 @@ export interface Extraction {
   carrier?: CarrierId
   /** Normalised (upper case, no spaces) tracking number. */
   number?: string
+  /**
+   * Further parcels of the same carrier the mail names beside `number`: a carrier's mail listing
+   * them (`Číslo balíka: 01505…305, 01505…306`), or an e-shop's split order with one distinctive
+   * number per parcel. Each becomes a parcel of its own; the message itself links to `number`'s.
+   */
+  moreNumbers?: string[]
   merchant?: string
   /**
    * The mail's own words, verbatim (its subject), for an email-only carrier's one event. Extracted
@@ -153,6 +159,29 @@ const isPlaceholder = (normalized: string): boolean => /^[A-Z]*(\d)\1*[A-Z]*$/.t
 const firstNumber = (carrier: CarrierId, haystack: string): string | undefined => {
   if (carrier === 'gls') return glsNumber(haystack)
   return (haystack.match(SENDER_NUMBER[carrier] ?? NUMBER[carrier]) ?? []).map(normalizeNumber).find(n => !isPlaceholder(n))
+}
+
+/** At most this many parcels from one mail; a mail naming more is a question, not a batch to create. */
+const MAX_NUMBERS = 5
+/** What may separate two numbers in one list: a comma, a semicolon, "a" / "and", and whitespace. */
+const LIST_GAP = /^\s*(?:[,;&]|a|and|aj)?\s*$/i
+
+/**
+ * The numbers a carrier's mail LISTS right after `first` (`01505…305, 01505…306`). Only a list counts:
+ * a carrier's mail can print other number-shaped strings (a reference, an order number), and a
+ * number standing anywhere else is not vouched for by the label in front of the first.
+ */
+function listedAfter(carrier: CarrierId, haystack: string, first: string): string[] {
+  const all = [...haystack.matchAll(SENDER_NUMBER[carrier] ?? NUMBER[carrier])]
+  const at = all.findIndex(m => normalizeNumber(m[0]) === first)
+  const out: string[] = []
+  for (let i = at + 1; at >= 0 && i < all.length; i++) {
+    const prev = all[i - 1]!
+    if (!LIST_GAP.test(haystack.slice(prev.index + prev[0].length, all[i]!.index))) break
+    const n = normalizeNumber(all[i]![0])
+    if (n !== first && !out.includes(n) && !isPlaceholder(n)) out.push(n)
+  }
+  return out
 }
 
 /**
@@ -490,8 +519,10 @@ function extractFrom(mail: ParsedMail, subject: string, text: string): Extractio
   if (carrier) {
     const number = firstNumber(carrier, haystack)
     if (!number) return { carrier, confidence: 'none', evidence }
+    const more = listedAfter(carrier, haystack, number).slice(0, MAX_NUMBERS - 1)
     return {
-      carrier, number, merchant: carrierMerchant(carrier, haystack), confidence: 'sender', evidence,
+      carrier, number, ...(more.length > 0 && { moreNumbers: more }),
+      merchant: carrierMerchant(carrier, haystack), confidence: 'sender', evidence,
       ...(isEmailOnlyCarrier(carrier) && { eventText: clean(subject, EVENT_TEXT_MAX) }),
     }
   }
@@ -502,13 +533,18 @@ function extractFrom(mail: ParsedMail, subject: string, text: string): Extractio
   // An e-shop's dispatch mail has no distinctive shape to go on, but it names the carrier and prints
   // a labelled number of that carrier's bare-digit shape. Both signals, or nothing.
   if (found.length === 0) found = namedBareNumbers(haystack)
-  if (found.length !== 1) return { confidence: 'none', ...(evidence && { evidence }) }
+  // Several distinctive numbers are a split order only when they are all ONE carrier's: each shape
+  // is unambiguous on its own, so tracking every one guesses nothing. Two carriers' numbers (or more
+  // than a split order plausibly has) stay a question.
+  const oneCarrier = found.every(f => f.c === found[0]!.c)
+  if (found.length === 0 || !oneCarrier || found.length > MAX_NUMBERS) return { confidence: 'none', ...(evidence && { evidence }) }
   const origin = wrapper ?? { from: envelope?.address, name: envelope?.name }
   // Asked only of a mail that would otherwise become a parcel: one that would not keeps the
   // evidence it has, which already puts it on /attention.
   if (claimsCarrier(origin)) return { confidence: 'none', evidence: 'lookalike-sender' }
   return {
-    carrier: found[0]!.c, number: found[0]!.n, confidence: 'shape', ...(evidence && { evidence }),
+    carrier: found[0]!.c, number: found[0]!.n, ...(found.length > 1 && { moreNumbers: found.slice(1).map(f => f.n) }),
+    confidence: 'shape', ...(evidence && { evidence }),
     merchant: clean(origin.name) ?? clean(origin.from?.split('@')[1]),
     ...(isEmailOnlyCarrier(found[0]!.c) && { eventText: clean(subject, EVENT_TEXT_MAX) }),
   }

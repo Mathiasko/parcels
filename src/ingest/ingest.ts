@@ -60,7 +60,9 @@ interface Item {
   extraction: Extraction
 }
 
-const keyOf = (e: Extraction) => `${e.carrier}:${e.number}`
+const keyOf = (carrier: Extraction['carrier'], number: string) => `${carrier}:${number}`
+/** Every parcel number the message names: its own, then the others it listed (see `moreNumbers`). */
+const numbersOf = (e: Extraction): string[] => e.number ? [e.number, ...e.moreNumbers ?? []] : []
 
 /**
  * Reads the mailbox label (read-only and incrementally: see `fetchMessages`), stores each new message
@@ -142,7 +144,10 @@ function place<T extends Item>(
   // that was updated 2 days ago is still live.
   const newest = new Map<string, number>()
   for (const it of items) {
-    if (it.extraction.number) newest.set(keyOf(it.extraction), Math.max(newest.get(keyOf(it.extraction)) ?? 0, it.receivedAt.getTime()))
+    for (const n of numbersOf(it.extraction)) {
+      const key = keyOf(it.extraction.carrier, n)
+      newest.set(key, Math.max(newest.get(key) ?? 0, it.receivedAt.getTime()))
+    }
   }
 
   for (const it of items) {
@@ -244,37 +249,46 @@ function placeOne(db: Database, it: Item, deps: ReprocessDeps, report: IngestRep
     return
   }
   const event = isEmailOnlyCarrier(carrier) ? mailEvent(it) : undefined
-  const existing = findParcel(db, carrier, number)
-  if (existing) {
-    // Archived on arrival because its first mail was old, and now a fresh one says it is moving after
-    // all. Ingest is the only thing that archives, so it is the one that has to take it back; left
-    // archived, the parcel is never polled and /add answers "already tracking" for it.
-    if (existing.archivedAt && deps.now.getTime() - it.receivedAt.getTime() <= ARCHIVE_AFTER_DAYS * DAY) {
-      reviveArchived(db, existing.id, deps.now)
+  // The message's own number first: that is the parcel the message is linked to. The others it
+  // listed (`moreNumbers`) are found or created the same way, but a message links to one parcel, so
+  // they only record it as their source.
+  numbersOf(it.extraction).forEach((n, i) => placeNumber(n, i === 0))
+
+  function placeNumber(n: string, linked: boolean): void {
+    const existing = findParcel(db, carrier!, n)
+    if (existing) {
+      // Archived on arrival because its first mail was old, and now a fresh one says it is moving after
+      // all. Ingest is the only thing that archives, so it is the one that has to take it back; left
+      // archived, the parcel is never polled and /add answers "already tracking" for it.
+      if (existing.archivedAt && deps.now.getTime() - it.receivedAt.getTime() <= ARCHIVE_AFTER_DAYS * DAY) {
+        reviveArchived(db, existing.id, deps.now)
+      }
+      // A later mail may name the sender when the first one did not.
+      if (merchant && !existing.merchant) db.prepare('UPDATE parcels SET merchant = ? WHERE id = ?').run(merchant, existing.id)
+      // This is how an email-only parcel moves: each later mail adds its own words. `appendEvents`
+      // dedupes, so re-reading the same mail (a reprocess, a resent copy) adds nothing.
+      if (event) appendEvents(db, existing.id, [event])
+      if (linked) {
+        link(existing.id, null)
+        report.linked++
+      }
+      return
     }
-    // A later mail may name the sender when the first one did not.
-    if (merchant && !existing.merchant) db.prepare('UPDATE parcels SET merchant = ? WHERE id = ?').run(merchant, existing.id)
-    // This is how an email-only parcel moves: each later mail adds its own words. `appendEvents`
-    // dedupes, so re-reading the same mail (a reprocess, a resent copy) adds nothing.
-    if (event) appendEvents(db, existing.id, [event])
-    link(existing.id, null)
-    report.linked++
-    return
+    const row = db.prepare('SELECT message_id FROM messages WHERE id = ?').get(it.id) as { message_id: string }
+    const old = deps.now.getTime() - newest.get(keyOf(carrier, n))! > ARCHIVE_AFTER_DAYS * DAY
+    const id = insertParcel(db, {
+      carrier: carrier!, trackingNumber: n, merchant, postalCode: deps.defaultPostalCode,
+      source: 'email', sourceMessageId: row.message_id,
+      // An archived-on-arrival parcel is first seen when its mail was, so history sorts by that.
+      // Its status stays 'unknown': status never comes from mail.
+      ...(old && { firstSeenAt: it.receivedAt }),
+    })
+    if (event) appendEvents(db, id, [event])
+    if (old) {
+      setArchived(db, id, deps.now)
+      report.archivedOld++
+    }
+    if (linked) link(id, old ? `parcel archived on arrival: mail older than ${ARCHIVE_AFTER_DAYS} days` : null)
+    report.created++
   }
-  const row = db.prepare('SELECT message_id FROM messages WHERE id = ?').get(it.id) as { message_id: string }
-  const old = deps.now.getTime() - newest.get(keyOf(it.extraction))! > ARCHIVE_AFTER_DAYS * DAY
-  const id = insertParcel(db, {
-    carrier, trackingNumber: number, merchant, postalCode: deps.defaultPostalCode,
-    source: 'email', sourceMessageId: row.message_id,
-    // An archived-on-arrival parcel is first seen when its mail was, so history sorts by that.
-    // Its status stays 'unknown': status never comes from mail.
-    ...(old && { firstSeenAt: it.receivedAt }),
-  })
-  if (event) appendEvents(db, id, [event])
-  if (old) {
-    setArchived(db, id, deps.now)
-    report.archivedOld++
-  }
-  link(id, old ? `parcel archived on arrival: mail older than ${ARCHIVE_AFTER_DAYS} days` : null)
-  report.created++
 }

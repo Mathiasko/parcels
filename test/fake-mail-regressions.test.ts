@@ -17,10 +17,10 @@ const corpus = (name: string) => readFileSync(new URL(`./fixtures/fake-mail/${na
 const real = (name: string) => readFileSync(new URL(`./fixtures/mail/${name}.eml`, import.meta.url))
 
 /** Ingests corpus mails (by name, a day apart, all recent) into a fresh database; returns the database. */
-async function ingest(...names: string[]) {
+async function ingest(...names: Array<string | Buffer>) {
   const db = memDb()
   const fake = fakeImap(names.map((name, i) => ({
-    uid: i + 1, source: corpus(name), messageId: `<${name}@fake-mail>`, subject: name, from: 'x@example.com',
+    uid: i + 1, source: typeof name === 'string' ? corpus(name) : name, messageId: `<${i}@fake-mail>`, subject: `mail ${i}`, from: 'x@example.com',
     date: new Date(NOW.getTime() - (names.length - i) * 86_400_000),
   })))
   const report = await ingestMessages(db, {
@@ -198,5 +198,59 @@ describe('F15: a very long mail is read at both ends, and one too long to read w
     const body = `${'Obchodné podmienky. '.repeat(20_000)}Zásielka Z 222 2222 210. ${'Článok. '.repeat(10_000)}`
     expect(await extract(eml('Shop <orders@shop.example>', 'Súhrn objednávky', body)))
       .toEqual({ confidence: 'none', evidence: 'too-long' })
+  })
+})
+
+describe('F4: a carrier mail listing two parcel numbers tracks both', () => {
+  test('DPD "Číslo balíka: 01505333333305, 01505333333306": the second is in moreNumbers', async () => {
+    expect(await extract(corpus('45-dpd-two-parcels-one-mail'))).toMatchObject({
+      carrier: 'dpd', number: '01505333333305', moreNumbers: ['01505333333306'], confidence: 'sender',
+    })
+  })
+
+  test('only numbers LISTED with the first count; a lone number elsewhere in the mail does not', async () => {
+    const e = await extract(eml('no_reply@dpd.sk', 'Zásielka', 'Číslo balíka: 01505333333305\r\nReferencia 01505333333399.'))
+    expect(e).toMatchObject({ carrier: 'dpd', number: '01505333333305' })
+    expect(e.moreNumbers).toBeUndefined()
+  })
+
+  test('ingest: two parcels, both named after the shop', async () => {
+    const { parcels, report } = await ingest('45-dpd-two-parcels-one-mail')
+    expect(parcels).toEqual([
+      { carrier: 'dpd', number: '01505333333305', merchant: 'Nábytok Domov # N-1200' },
+      { carrier: 'dpd', number: '01505333333306', merchant: 'Nábytok Domov # N-1200' },
+    ])
+    expect(report).toMatchObject({ created: 2, needsAttention: 0 })
+  })
+})
+
+describe('F11: an e-shop mail naming two parcels of one carrier tracks both', () => {
+  test('two distinctive Packeta numbers: the first is the number, the second in moreNumbers', async () => {
+    expect(await extract(corpus('25-eshop-two-packeta-parcels'))).toMatchObject({
+      carrier: 'packeta', number: 'Z2222222205', moreNumbers: ['Z2222222206'], confidence: 'shape', merchant: 'Mobilonline',
+    })
+  })
+
+  test('ingest: two Packeta parcels, both named after the shop', async () => {
+    const { parcels, report } = await ingest('25-eshop-two-packeta-parcels')
+    expect(parcels).toEqual([
+      { carrier: 'packeta', number: 'Z2222222205', merchant: 'Mobilonline' },
+      { carrier: 'packeta', number: 'Z2222222206', merchant: 'Mobilonline' },
+    ])
+    expect(report).toMatchObject({ created: 2, needsAttention: 0 })
+  })
+
+  test('a later mail about the second parcel links to it instead of making another', async () => {
+    const { parcels, report, db } = await ingest('25-eshop-two-packeta-parcels',
+      eml('Packeta Slovakia <noreply@packeta.sk>', 'Zásielka Z 222 2222 206', 'Vaša zásielka Z 222 2222 206 je na ceste.'))
+    expect(parcels).toHaveLength(2)
+    expect(report).toMatchObject({ created: 2, linked: 1 })
+    const second = db.prepare(`SELECT COUNT(*) n FROM messages m JOIN parcels p ON p.id = m.parcel_id WHERE p.tracking_number = 'Z2222222206'`).get()
+    expect(second).toEqual({ n: 1 })
+  })
+
+  test('numbers of two DIFFERENT carriers stay ambiguous: a question, not a guess', async () => {
+    expect(await extract(eml('Shop <orders@shop.example>', 'Odoslané', 'Z 222 2222 205 a RR123456785SK')))
+      .toMatchObject({ confidence: 'none' })
   })
 })

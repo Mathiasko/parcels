@@ -106,10 +106,11 @@ describe('evidence that a message is about a parcel at all', () => {
   })
 
   test('a distinctive tracking-number shape is enough, with no carrier named and no wording', async () => {
-    // Two Slovenska posta numbers in a note from a person: ambiguous, so NOTHING parses and the
+    // Two different carriers' numbers in a note from a person: ambiguous, so NOTHING parses and the
     // shape is the only signal there is. A single number would prove nothing here - it would become
-    // a parcel and never reach the evidence test at all.
-    const { db, deps } = setup([msg(1, 'friend@example.com', 'FYI', 'EB629066058SK a EB629066059SK')])
+    // a parcel and never reach the evidence test at all - and neither would two of ONE carrier, which
+    // are two parcels (fake-mail finding F11).
+    const { db, deps } = setup([msg(1, 'friend@example.com', 'FYI', 'EB629066058SK a Z 123 4567 890')])
     expect(await ingestMessages(db, deps)).toMatchObject({ created: 0, needsAttention: 1, ignored: 0 })
     expect(subjects(db)).toEqual(['FYI'])
   })
