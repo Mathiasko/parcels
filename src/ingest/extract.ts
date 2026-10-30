@@ -71,7 +71,7 @@ export type ParcelEvidence =
 const SENDER_DOMAINS: ReadonlyArray<readonly [string, CarrierId]> = [
   ['packeta.sk', 'packeta'], ['packeta.com', 'packeta'], ['zasilkovna.cz', 'packeta'],
   ['packeta.cz', 'packeta'], ['packeta.hu', 'packeta'], ['zasielkovna.sk', 'packeta'],
-  ['dpd.sk', 'dpd'], ['dpd.com', 'dpd'], ['dpd.cz', 'dpd'],
+  ['dpd.sk', 'dpd'], ['dpd.com', 'dpd'], ['dpd.cz', 'dpd'], ['dpdgroup.com', 'dpd'],
   ['sps-sro.sk', 'sps'], ['mysps.sk', 'sps'],
   ['posta.sk', 'posta'], ['slposta.sk', 'posta'],
   // GLS Slovakia writes its own notices from gls-slovakia.sk (the scrubbed real fixture is one), and

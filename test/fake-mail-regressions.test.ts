@@ -192,6 +192,7 @@ describe('a carrier writing from one of its own brand domains is not taken for a
     ['Zásilkovna <info@zasilkovna.cz>', PACKETA, 'packeta'],
     ['Slovenská pošta <noreply@slposta.sk>', 'Zásielka EB123456785SK je na ceste.', 'posta'],
     ['DPD <noreply@dpd.cz>', 'Číslo balíka: 01505333333305', 'dpd'],
+    ['DPD Slovensko <noreply@dpdgroup.com>', 'Číslo balíka: 01505333333305', 'dpd'],
   ])('%s is the carrier\'s own address', async (from, body, carrier) => {
     expect(await extract(eml(from, 'Zásielka', body))).toMatchObject({ carrier, confidence: 'sender' })
   })
