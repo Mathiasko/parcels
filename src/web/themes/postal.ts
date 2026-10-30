@@ -82,6 +82,15 @@ export const postal: Theme = {
   // data-mode, so there is no rule for a missing one.
   css: [
     `${ROOT} h1,${ROOT} .card-h h2,${ROOT} .pk-h h2,${ROOT} .pk-h .where{font-weight:400}`,
+    // Base CSS masks the timeline rail with solid paper behind the day headings and the glyphs. Over the
+    // grained page those would show as flat patches, so the page grain and the masks' grain are all
+    // viewport-fixed: one texture, the same alignment, and the masks vanish into the page. The masks take
+    // --texture, so the dark swap below reaches them. :not(.dotg) keeps the dot glyph without a background
+    // (this selector would otherwise outrank the base .er .gl.dotg{background:none}).
+    `${ROOT} body{background-attachment:fixed}`,
+    `${ROOT} .day>span,${ROOT} .er .gl:not(.dotg){background-image:var(--texture);background-attachment:fixed}`,
+    // Courier Prime has a smaller x-height than the system mono, so it reads small at the base .8125rem.
+    `${ROOT} .mono{font-size:.875rem}`,
     `${ROOT}[data-mode="dark"]{${DARK}}`,
     `@media(prefers-color-scheme:dark){${ROOT}[data-mode="system"]{${DARK}}}`,
   ].join('\n'),

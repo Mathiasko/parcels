@@ -159,13 +159,37 @@ describe('Postal', () => {
     }
   })
 
+  test('the timeline masks carry the page grain, fixed like the body, and the dot glyph stays bare', () => {
+    const own = postal.css ?? ''
+    expect(own).toContain(':root[data-theme="postal"] body{background-attachment:fixed}')
+    expect(own).toContain(':root[data-theme="postal"] .day>span,:root[data-theme="postal"] .er .gl:not(.dotg){background-image:var(--texture);background-attachment:fixed}')
+    // the masks keep their paper colour from the base, and nothing here gives .dotg a background
+    expect(own.replace(':not(.dotg)', '')).not.toContain('.dotg')
+    expect(own).not.toMatch(/\.er \.gl\{/)
+    expect(own).not.toMatch(/\.day>span\{[^}]*background(-color)?:/)
+    // they take --texture, so the dark swap (which only sets --texture) reaches them
+    expect(own).toContain('[data-mode="dark"]{--texture:')
+    // Classic's CSS has none of it
+    expect(classic.css ?? '').not.toMatch(/background-attachment|\.mono|\.day>span/)
+    expect(themeCss(classic)).not.toContain('background-attachment')
+  })
+
+  test('sets mono text a step larger, for Courier Prime\'s small x-height', () => {
+    expect(postal.css ?? '').toContain(':root[data-theme="postal"] .mono{font-size:.875rem}')
+    expect(postal.css ?? '').not.toMatch(/\.code\b/)
+    expect(themeCss(classic)).not.toContain('.875rem')
+    expect(STYLE).not.toContain('</')
+  })
+
   test('swaps in the dark grain and shadow for dark, and for system under prefers-color-scheme', () => {
     const own = postal.css ?? ''
     expect(own).toContain(':root[data-theme="postal"][data-mode="dark"]{--texture:url("data:image/svg+xml;utf8,%3Csvg ')
     expect(own).toContain('@media(prefers-color-scheme:dark){:root[data-theme="postal"][data-mode="system"]{--texture:url(')
     expect(own.match(/--shadow-card:0 1px 0 rgba\(0,0,0,\.4\),0 16px 30px -14px rgba\(0,0,0,\.7\)/g)).toHaveLength(2)
     expect(own).toContain('0 0 0 0 .95  0 0 0 0 .85  0 0 0 0 .7  0 0 0 .16 0')
-    expect(own).not.toMatch(/[<>]|#/)
+    // no "<" and no "#" (the ">" of a child combinator is fine); "</" would end the inline <style>
+    expect(own).not.toMatch(/<|#/)
+    expect(own).not.toContain('</')
   })
 })
 
