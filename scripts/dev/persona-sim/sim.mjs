@@ -93,6 +93,8 @@ async function start() {
       SIM_PERSONA: persona, SIM_DIR: dir, SIM_VITE_CACHE: join(dir, 'vite-cache'),
       // The dashboard's theme and mode, if pinned (theme-shots.sh); unset, the defaults.
       ...(process.env.SIM_THEME && { SIM_THEME: process.env.SIM_THEME }), ...(process.env.SIM_MODE && { SIM_MODE: process.env.SIM_MODE }),
+      // Screenshots are taken with reduced motion unless SIM_MOTION=1.
+      ...(process.env.SIM_MOTION && { SIM_MOTION: process.env.SIM_MOTION }),
     },
   })
   child.unref()

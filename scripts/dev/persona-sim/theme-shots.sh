@@ -8,6 +8,7 @@
 # /, /history, /attention, /health, /settings, /add, the first parcel the dashboard links, and the first-run
 # page, each at 1280 and 390 px, light and dark, into <out-dir>/<slug>-<width>[-dark].png. SIM_THEME and
 # SIM_MODE are passed to the simulator; a commit from before themes simply ignores them.
+# Shots are taken with reduced motion (Chrome's --force-prefers-reduced-motion); SIM_MOTION=1 lets the page move.
 set -euo pipefail
 
 OUT="${1:?usage: theme-shots.sh <out-dir>}"

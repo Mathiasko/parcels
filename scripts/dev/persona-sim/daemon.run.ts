@@ -426,6 +426,9 @@ test('persona simulator', async () => {
       // Anything but loopback goes to a dead proxy, and nothing resolves: Chrome cannot reach the network either.
       '--proxy-server=http://127.0.0.1:9', '--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE localhost , EXCLUDE 127.0.0.1',
       ...(dark ? ['--force-dark-mode', '--blink-settings=preferredColorScheme=0'] : ['--blink-settings=preferredColorScheme=1']),
+      // Reduced motion, so no shot catches a card mid-animation (a theme's motion lives in a no-preference
+      // block); SIM_MOTION=1 lets the page move.
+      ...(process.env.SIM_MOTION === '1' ? [] : ['--force-prefers-reduced-motion']),
       `--window-size=${winW},${height}`, `--screenshot=${file}`, url,
     ], { timeout: 90_000 })
     if (!existsSync(file)) throw new Error(`Chrome wrote no screenshot for ${url}`)
