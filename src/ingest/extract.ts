@@ -41,9 +41,12 @@ export interface Extraction {
  * - `tracking-shape`: a token of some carrier's tracking-number shape is in it.
  * - `shipping-subject`: the SUBJECT is about a shipment.
  * - `unreadable`: nothing could be read out of the message, so nothing can be concluded either.
+ * - `lookalike-sender`: the sender calls itself a carrier (its display name, or a label of its
+ *   domain) but does not write from that carrier's domain - see `claimsCarrier`.
  */
 export type ParcelEvidence =
   | 'carrier-sender' | 'carrier-named' | 'tracking-shape' | 'shipping-subject' | 'unreadable'
+  | 'lookalike-sender'
 
 /**
  * Registrable sender domains, measured from the live mailbox (packeta.sk, dpd.sk, sps-sro.sk,
@@ -222,6 +225,23 @@ const CARRIER_MENTION: readonly RegExp[] = [
   /(?<![\p{L}\d])slovensk\p{L}{0,12}[  ]+po[šs]t/iu,
   /(?<![\p{L}\d])(?:SPS|slovak parcel service)(?![\p{L}\d])/iu,
 ]
+
+/** A carrier brand as a label, or the start of one, of a domain: `packeta-sk.example.com`, `gls.example.net`. */
+const CARRIER_IN_DOMAIN = /(?:^|[.-])(?:packeta|z[aá]sielkovna|z[aá]silkovna|gls|dpd|dhl)(?=[.-])/i
+
+/**
+ * Whether a sender that is NOT a carrier presents itself as one: a carrier named in its display name
+ * ("Packeta" <noreply@packeta-sk.example.com>) or in its domain. Such a mail is never made a parcel,
+ * because a parcel titled "Packeta" on the dashboard is the carrier vouching for it - which is what a
+ * phishing mail ("uhraďte poplatok 1,99 €") wants. It waits on /attention instead, with a note saying
+ * why. A carrier's genuine mail from a domain not in `SENDER_DOMAINS` costs the same one click there,
+ * which is the trade `SENDER_DOMAINS` already makes. A shop that only names the carrier in its BODY
+ * ("Prepravca: Packeta") is not affected: only the sender's own name is read.
+ */
+function claimsCarrier(origin: { from?: string; name?: string }): boolean {
+  const host = origin.from?.slice(origin.from.lastIndexOf('@') + 1) ?? ''
+  return CARRIER_MENTION.some(re => re.test(origin.name ?? '')) || CARRIER_IN_DOMAIN.test(host)
+}
 
 /**
  * Shipping wording in a SUBJECT line. Subject only, and that is the whole point of it: an e-shop puts
@@ -427,6 +447,9 @@ export async function extract(raw: Buffer): Promise<Extraction> {
     if (found.length === 0) found = namedBareNumbers(haystack)
     if (found.length !== 1) return { confidence: 'none', ...(evidence && { evidence }) }
     const origin = wrapper ?? { from: envelope?.address, name: envelope?.name }
+    // Asked only of a mail that would otherwise become a parcel: one that would not keeps the
+    // evidence it has, which already puts it on /attention.
+    if (claimsCarrier(origin)) return { confidence: 'none', evidence: 'lookalike-sender' }
     return {
       carrier: found[0]!.c, number: found[0]!.n, confidence: 'shape', ...(evidence && { evidence }),
       merchant: clean(origin.name) ?? clean(origin.from?.split('@')[1]),

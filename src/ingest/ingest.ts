@@ -200,6 +200,7 @@ const SHOWN_BECAUSE: Record<ParcelEvidence, string> = {
   'tracking-shape': 'it contains something shaped like a tracking number',
   'shipping-subject': 'its subject is about a shipment',
   unreadable: 'it could not be read at all',
+  'lookalike-sender': 'its sender is named like a carrier but does not write from that carrier\'s address',
 }
 
 /**
@@ -226,7 +227,10 @@ function placeOne(db: Database, it: Item, deps: ReprocessDeps, report: IngestRep
       report.ignored++
       return
     }
-    note(`no tracking number found in this message (${SHOWN_BECAUSE[evidence]})`)
+    // A look-alike sender's number WAS found; it is the sender that was not trusted with it.
+    note(evidence === 'lookalike-sender'
+      ? `not tracked: ${SHOWN_BECAUSE[evidence]}`
+      : `no tracking number found in this message (${SHOWN_BECAUSE[evidence]})`)
     report.needsAttention++
     return
   }
