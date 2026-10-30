@@ -145,13 +145,14 @@ const DISTINCTIVE: Partial<Record<CarrierId, RegExp>> = {
  * confirmation says "GLS" for the chosen delivery method), which is why both signals are required.
  * Packeta, SPS and Slovenska posta need no name here: their number shapes are distinctive by themselves,
  * and so are DHL's lettered prefixes - only its `000…` form needs the name beside it. PPL needs its name
- * closer than the others, in the number's own sentence (`namedBareNumbers`).
+ * closer than the others, in the number's own sentence, and so does GLS on a number PPL is named
+ * beside (`namedBareNumbers`).
  */
 const CARRIER_NAME = {
   gls: /(?<![\p{L}\d])GLS(?![\p{L}\d])/iu,
   dpd: /(?<![\p{L}\d])DPD(?![\p{L}\d])/iu,
   dhl: /(?<![\p{L}\d])DHL(?![\p{L}\d])/iu,
-  // Only beside the number, not anywhere in the mail: see `namedNearby`.
+  // Only beside the number, not anywhere in the mail: see `namedBareNumbers`.
   ppl: /(?<![\p{L}\d])PPL(?![\p{L}\d])/iu,
 } as const
 
@@ -326,22 +327,47 @@ function labelledNumbers(carrier: keyof typeof STANDALONE, haystack: string, lab
 /** The carriers whose numbers are bare digits, so a label or a carrier name has to vouch for them. */
 const BARE_DIGIT_CARRIERS = ['gls', 'dpd', 'dhl', 'ppl'] as const
 
-/** How far before a number "PPL" may stand and still be in the number's sentence (Ruling R2). */
+/** How far before, or along its line after, a number a carrier's name may stand and still be in its sentence (Ruling R2). */
 const NEARBY = 160
+/**
+ * How many occurrences of one number are looked at for a name beside it. A mail prints its number a
+ * few times (subject, body, a tracking link); a crafted one prints it tens of thousands of times, and
+ * looking at each of those made one mail cost seconds.
+ */
+const NEARBY_TRIES = 10
 /** A blank line (whitespace and quote marks only): the end of a paragraph. */
 const BLANK_LINE = /\n[ \t\u00a0>]*\r?\n/g
 
 /**
  * Whether `name` stands in the same sentence as the number at `at`: between the number and the nearest
- * blank line before it, at most `NEARBY` characters back, or after the number on its own line.
- * `Dopravce: PPL` on the line above `Číslo zásilky: 40888888801` is; a footer that says "we ship with
- * PPL" (or links ppl.cz) paragraphs away is not.
+ * blank line before it, at most `NEARBY` characters back, or after the number on its own line, at most
+ * `NEARBY` characters on. `Dopravce: PPL` on the line above `Číslo zásilky: 40888888801` is; a footer
+ * that says "we ship with PPL" (or links ppl.cz) paragraphs away is not.
  */
-function namedNearby(name: RegExp, haystack: string, at: number, length: number): boolean {
+function namedAt(name: RegExp, haystack: string, at: number, length: number): boolean {
   const back = haystack.slice(Math.max(0, at - NEARBY), at)
   const paragraph = back.slice(Math.max(0, ...[...back.matchAll(BLANK_LINE)].map(m => m.index + m[0].length)))
-  const end = haystack.indexOf('\n', at + length)
-  return name.test(paragraph) || name.test(haystack.slice(at + length, end < 0 ? undefined : end))
+  const ahead = haystack.slice(at + length, at + length + NEARBY).split('\n', 1)[0] ?? ''
+  return name.test(paragraph) || name.test(ahead)
+}
+
+/**
+ * Which of the 11-digit `numbers` have `name` in their sentence (`namedAt`) at one of their first
+ * `NEARBY_TRIES` occurrences. One pass over the text, with a bounded window per occurrence looked at.
+ */
+function namedBeside(name: RegExp, haystack: string, numbers: readonly string[]): Set<string> {
+  const beside = new Set<string>()
+  if (numbers.length === 0 || !name.test(haystack)) return beside
+  const tries = new Map<string, number>()
+  for (const m of haystack.matchAll(STANDALONE.ppl)) {
+    const n = normalizeNumber(m[0])
+    const tried = tries.get(n) ?? 0
+    if (!numbers.includes(n) || beside.has(n) || tried >= NEARBY_TRIES) continue
+    tries.set(n, tried + 1)
+    if (namedAt(name, haystack, m.index, m[0].length)) beside.add(n)
+    if (numbers.every(x => beside.has(x) || (tries.get(x) ?? 0) >= NEARBY_TRIES)) break
+  }
+  return beside
 }
 
 /**
@@ -349,18 +375,24 @@ function namedNearby(name: RegExp, haystack: string, at: number, length: number)
  *
  * GLS, DPD and DHL may be named anywhere in the mail: their name is rare enough in a mail that prints
  * a labelled number of their shape. PPL may not. Its 11 digits are a GLS number too, so a Czech shop
- * whose footer lists the carriers it ships with ("GLS, PPL, Zásilkovna") would make every GLS parcel
- * of that shop a PPL one, or a question. So PPL counts only when it is named in the number's own
- * sentence (`namedNearby`) - and when GLS is ALSO named, both carriers claim the number, which is
- * the two-carriers question below rather than a guess.
+ * whose footer lists the carriers it ships with ("Dopravci: GLS, PPL, Zásilkovna") would make every
+ * GLS parcel of that shop a PPL one, or a question. So PPL counts only when it is named in the
+ * number's own sentence (`namedBeside`).
+ *
+ * The same footer names GLS too, and GLS named anywhere would still claim the number PPL is named
+ * beside, turning every PPL dispatch from such a shop into a question. So on a number PPL is named
+ * beside, GLS has to be named beside it as well; only then do both carriers claim it, which is the
+ * two-carriers question in `extractFrom` rather than a guess. GLS's claim on any other number is
+ * unchanged: named anywhere, so a GLS dispatch with that footer stays GLS.
  */
 function namedBareNumbers(haystack: string): { c: CarrierId; n: string }[] {
-  return BARE_DIGIT_CARRIERS
-    .filter(c => CARRIER_NAME[c].test(haystack))
-    .flatMap(c => labelledNumbers(c, haystack)
-      .filter(n => c !== 'ppl' || [...haystack.matchAll(STANDALONE.ppl)]
-        .some(m => normalizeNumber(m[0]) === n && namedNearby(CARRIER_NAME.ppl, haystack, m.index, m[0].length)))
-      .map(n => ({ c, n })))
+  const named = BARE_DIGIT_CARRIERS.filter(c => CARRIER_NAME[c].test(haystack))
+  const labelled = new Map(named.map(c => [c, labelledNumbers(c, haystack)] as const))
+  const ppl = namedBeside(CARRIER_NAME.ppl, haystack, labelled.get('ppl') ?? [])
+  const glsToo = namedBeside(CARRIER_NAME.gls, haystack, [...ppl])
+  return named.flatMap(c => (labelled.get(c) ?? [])
+    .filter(n => c === 'ppl' ? ppl.has(n) : c !== 'gls' || !ppl.has(n) || glsToo.has(n))
+    .map(n => ({ c, n })))
 }
 
 /**

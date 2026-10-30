@@ -435,8 +435,10 @@ Setup, in this order:
    are 11 bare digits, which is also a GLS number. So an 11-digit number is PPL's only when the mail
    comes from `ppl.cz`, or when a shop's mail names PPL **beside** the labelled number, in the same
    sentence (`Dopravce: PPL` on the line above `Číslo zásilky: …`). Never by its shape alone: a shop
-   mail that only lists PPL in its footer, or names no carrier at all, makes no PPL parcel, and one
-   that names both GLS and PPL beside the number goes to needs-attention for you to choose. A
+   mail that only lists PPL in its footer, or names no carrier at all, makes no PPL parcel. A footer
+   listing the shop's carriers (`Dopravci: GLS, PPL, Zásilkovna`) does not get in the way: with PPL
+   beside the number it is PPL's, with GLS beside it, or no carrier beside it, it is GLS's as before.
+   Only a mail naming both GLS and PPL beside the number goes to needs-attention for you to choose. A
    number you add by hand is never detected as PPL either; choose PPL on Add. **Set up before
    0.2.0?** Your Gmail filter predates the Czech rules, and Gmail never updates a filter it has
    imported: import `gmail-filter.xml` again from Settings, delete the old filter, and press **Done,
