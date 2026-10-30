@@ -919,3 +919,15 @@ Every form here is a real navigation (there is no script), so a press loads a pa
 - Left at the top, on purpose: anything whose answer is at the top - `Refresh`, `Mark as collected` and its Undo notice, `Save name` (the name is the `<h1>`), adding and deleting a parcel, `Save settings`.
 
 `[id]` gets `scroll-margin-top: 1rem`, so a section that is landed on is not flush against the window's edge.
+
+## 20. The app shell
+
+The Mac app adds no second interface. **The window is the dashboard**: the same pages, served by the same server, under the same rules as everything above, with no script and the same stylesheet. A person who has used the dashboard in a browser has already used the app. The app is native only where a browser cannot reach:
+
+- **The menu bar.** One template glyph that macOS tints for light and dark, with the number of parcels ready for pickup beside it, and a short menu: Open Parcels, Refresh now, Check for updates…, Start at login, Quit Parcels. When the server has stopped, the first line says so (`Parcels stopped – restarting…`) instead of offering a window that cannot load.
+- **Notifications.** macOS banners under Parcels's own name. A click opens the page the banner is about, in the window.
+- **The first-run pages.** Welcome and Move in come before there is a server to serve them, so the app serves them itself, as static pages in the dashboard's stylesheet with forms that post back to it. They follow the wording rules of the rest: plain sentences, what happens next, and a way out (`Not now (quit)`).
+- **A few native dialogs**, only where nothing else can speak: the offer to move to Applications, a failure that stops the app, and an update that could not be installed.
+
+Nothing is drawn natively that the dashboard already draws. The Health page's Update section is the app's updater; there is no separate update window. Settings has one app-only line, `Show in Finder`, because a page cannot open a folder.
+

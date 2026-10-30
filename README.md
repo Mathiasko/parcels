@@ -12,7 +12,136 @@ Carriers: Slovenská pošta, Packeta, GLS, SPS, DPD SK, and DHL — which is
 The full design and its rationale are in
 [`docs/superpowers/specs/2026-10-26-parcel-tracker-design.md`](docs/superpowers/specs/2026-10-26-parcel-tracker-design.md).
 
-## Install
+## Install the app
+
+Parcels also comes as a Mac app. It is the same tracker and the same dashboard, in a window of its
+own and with an icon in the menu bar, and it needs no Terminal, no Node and no launchd jobs. Use it
+instead of the [Terminal install](#install-from-terminal), not beside it.
+
+1. Open the latest release: <https://github.com/Mathiasko/parcels/releases/latest>.
+2. Download the `.dmg` for your Mac. To see which Mac you have, open the Apple menu → **About This
+   Mac**:
+   - **Chip** says *Apple M1*, *M2* or later: download `Parcels-<version>-arm64.dmg`;
+   - **Processor** says *Intel*: download `Parcels-<version>-x64.dmg`.
+3. Open the downloaded file, and drag **Parcels** onto the **Applications** folder beside it.
+4. Open **Parcels** from Applications. The first time, macOS says it cannot check Parcels for
+   malicious software, because Parcels is not signed by an Apple developer account. Click **Done**,
+   not Move to Trash. Then:
+   1. Open the Apple menu → **System Settings** → **Privacy & Security**.
+   2. Scroll down to **Security**. It says *"Parcels" was blocked to protect your Mac.* Click
+      **Open Anyway**, and type your Mac's password if it asks.
+   3. Click **Open Anyway** once more in the window that appears.
+
+   You do this once. Updates come from inside the app and do not ask again.
+5. If you open Parcels straight from the disk image or from Downloads, it offers to move itself to
+   Applications. Click **Move to Applications**: it needs to live there to update itself.
+
+What you see next depends on the Mac:
+
+- **No Terminal install on this Mac:** a Welcome page asks for your postcode, then opens Settings,
+  where **How to connect Gmail** walks you through the rest, click by click. They are the same steps
+  as [What no script can do for you](#what-no-script-can-do-for-you).
+- **A Terminal install on this Mac:** a Move in page offers to bring it in; see
+  [Moving from the Terminal install](#moving-from-the-terminal-install).
+
+Parcels then lives in the menu bar. Its menu has **Open Parcels**, **Refresh now**, **Check for
+updates…**, **Start at login** and **Quit Parcels**. It starts at login unless you turn that off
+there, and closing the window leaves it running. It polls on the same hours the Terminal install does.
+
+The app keeps its files in your Library, not in a project folder:
+
+| | |
+|---|---|
+| Settings | `~/Library/Application Support/Parcels/config.json` |
+| Parcels, mail and map tiles | `~/Library/Application Support/Parcels/data/` (the same layout as [Your data](#your-data)) |
+| Logs | `~/Library/Logs/Parcels/` (`main.log` for the app, `server.log` for the dashboard and polls) |
+
+Settings → Advanced → **Show in Finder** opens the Application Support folder.
+
+**Updating.** Parcels checks GitHub for a new version once a day and tells you when there is one.
+Open **Health** and press **Update now**. It downloads the new version and checks that it is signed by
+the same certificate as the one you have; then **Restart to update** closes Parcels and opens the new
+version, which takes a few seconds. If a check fails, Health says why and nothing is changed.
+
+## Moving from the Terminal install
+
+When the app opens on a Mac that already runs the Terminal install, it asks before it does anything.
+**Move in** does this, in order:
+
+1. It stops the two launchd jobs, `local.parcels.poller` and `local.parcels.web`, and waits until
+   launchd has let go of them.
+2. It copies your parcels into `~/Library/Application Support/Parcels/`: the database (through
+   SQLite, so nothing half-written is copied), `data/mail/`, `data/tiles/`, the DPD sign-in, and
+   `config.json` with your postcode and your Gmail settings. Nothing needs to be set up again.
+3. It checks the copy: the database must pass SQLite's integrity check, and the settings must load.
+4. Only then does it park the old jobs: it moves `local.parcels.web.plist` and
+   `local.parcels.poller.plist` out of `~/Library/LaunchAgents/` into a `launchd-backup/` folder in
+   your clone, so they do not start again at the next login.
+
+The clone itself is left as it is. Nothing in it is deleted or changed; it only gains the
+`launchd-backup/` folder. If any step fails, the app undoes what it did, starts the old jobs again,
+and the page says what went wrong. Your Terminal install then runs on as before.
+
+Once the app has run well for a while, you can delete the clone. Keep it if you might go back.
+
+**Not now (quit)** closes the app and changes nothing. The app and the Terminal install cannot run
+side by side: they would both want port 8787 and both read the same mailbox.
+
+## Going back to the Terminal install
+
+1. Click the Parcels icon in the menu bar, turn off **Start at login**, then click **Quit Parcels**.
+   To be sure it never starts again, move Parcels from Applications to the Trash.
+2. In Terminal, go to your clone and put the parked jobs back:
+
+   ```sh
+   cd ~/parcels
+   mv launchd-backup/local.parcels.poller.plist launchd-backup/local.parcels.web.plist ~/Library/LaunchAgents/
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.parcels.poller.plist
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.parcels.web.plist
+   ```
+
+   Instead of these four lines you can run `scripts/install-agents.sh` in the clone, which writes
+   both plists afresh, rebuilds and starts them. Use that if `launchd-backup/` holds more than one
+   copy of a plist (`local.parcels.web.2.plist` and so on), which happens after a second move in.
+3. Open <http://127.0.0.1:8787> to check the dashboard is back.
+
+Your data does not come back with it. The clone's `data/` is exactly as it was the day you moved in.
+Everything since then, and any settings you changed in the app, stay in
+`~/Library/Application Support/Parcels/` until you copy them back yourself or delete that folder.
+
+## Releasing (for the author)
+
+Once, on the Mac you release from:
+
+1. Run `scripts/app/make-signing-cert.sh`. It creates the code-signing identity "Parcels Signing" in
+   your login keychain, valid for ten years, and writes its certificate's SHA-256 to
+   `app/signing-cert.sha256`. Commit that file.
+2. Keep that identity. Every installed app refuses an update signed by any other certificate, so
+   losing it means everyone reinstalls by hand. Back it up from Keychain Access (export it as a
+   `.p12`).
+3. Log in to GitHub once with `gh auth login`.
+
+For each release:
+
+1. Bump `version` in `package.json` to three numbers, such as `0.2.0`, and commit it. The working
+   tree must be clean.
+2. Run `npm run release`, or `npm run release -- --notes-file notes.md` to write the release notes
+   yourself. Without a notes file, GitHub writes them from the commits. The notes' lines are what
+   everyone's Health page lists under "What is new".
+
+`npm run release` refuses a dirty tree, a version that already has a tag here or on GitHub, a
+keychain without "Parcels Signing", or a `gh` that is not logged in, all before it builds anything.
+Then it builds both Macs' apps from a clean `npm ci`, signs them, writes `SHA256SUMS`, and checks
+every file the way an installed app will: the signature and its certificate, the zips through the
+app's own update checks, and a short start of this Mac's app. It lists the five files and asks
+`Publish v<version> to GitHub? [y/N]`. Only a `y` tags the commit, pushes the tag and creates the
+release. Everyone's app finds it at its next daily check.
+
+A test build that updates from a feed on this Mac instead of GitHub is made with
+`-c.extraMetadata.parcelsDevReleases=true` and run with `PARCELS_RELEASES_URL`; see
+`app/dev-releases.ts`. The release refuses any app built that way.
+
+## Install from Terminal
 
 On a fresh Mac:
 
