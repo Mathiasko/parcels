@@ -549,15 +549,43 @@ test('with progress on, registered and in transit are announced', () => {
   expect(build(db, [], NOW, PROGRESS).map(n => n.title)).toEqual(['In transit — RA000000001SK'])
 })
 
-test('a quiet transition does not swallow a new pickup point in the same run', () => {
+test('a pickup point seen while in transit does not speak for a quiet transition, and is recorded as said', () => {
+  // DPD (`pudoId` on any scan) and Posta (`withOffice` events) name the pickup point long before it is
+  // ready: under the quiet default that must not turn the in-transit poll into an "In transit" banner.
   const db = memDb()
   const id = parcelIn(db, 'pre_transit')
   updateParcelState(db, id, { status: 'in_transit', pickup: ZBOX })
-  const out = build(db)
-  expect(out).toHaveLength(1)
-  expect(out[0]!.title).toBe('In transit — RA000000001SK')
-  expect(out[0]!.message).toContain('Z-BOX, Hlavna 12, Zilina')
   expect(build(db)).toEqual([])
+  expect(getParcel(db, id)).toMatchObject({ lastAnnouncedStatus: 'in_transit', pickupAnnounced: true })
+
+  // With progress on, the same parcel is announced, the pickup point in the message.
+  const on = memDb()
+  const id2 = parcelIn(on, 'pre_transit')
+  updateParcelState(on, id2, { status: 'in_transit', pickup: ZBOX })
+  const out = build(on, [], NOW, PROGRESS)
+  expect(out.map(n => n.title)).toEqual(['In transit — RA000000001SK'])
+  expect(out[0]!.message).toContain('Z-BOX, Hlavna 12, Zilina')
+  expect(build(on, [], NOW, PROGRESS)).toEqual([])
+})
+
+test('a pickup point first seen on a delivered parcel the user marked does not leak a Delivered banner', () => {
+  const db = memDb()
+  const id = parcelIn(db, 'out_for_delivery')
+  expect(markCollected(db, id).ok).toBe(true)
+  // As if the delivered status was never stamped as said, and the carrier then names a pickup point.
+  markAnnounced(db, id, 'out_for_delivery', false)
+  updateParcelState(db, id, { status: 'delivered', pickup: ZBOX })
+  expect(getParcel(db, id)!.pickupAnnounced).toBe(false)
+  expect(build(db)).toEqual([])
+  expect(getParcel(db, id)).toMatchObject({ lastAnnouncedStatus: 'delivered', pickupAnnounced: true })
+})
+
+test('a newly registered parcel is quiet by default', () => {
+  const db = memDb()
+  const id = parcelIn(db, 'unknown')
+  updateParcelState(db, id, { status: 'pre_transit' })
+  expect(build(db)).toEqual([])
+  expect(getParcel(db, id)!.lastAnnouncedStatus).toBe('pre_transit')
 })
 
 test('delivered is announced by default and is quiet, but recorded, with delivered off', () => {

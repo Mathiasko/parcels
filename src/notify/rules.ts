@@ -68,9 +68,12 @@ function waitingDay(p: Parcel, now: Date): string {
  * `in_transit` while `progress` is off, and one to `delivered` while `delivered` is off or once the
  * user has marked the parcel themselves (a `user_marks` row: they already said they have it). A silent
  * transition is still recorded with `markAnnounced`, so switching a switch on later releases no
- * backlog of stale banners. It only stops the transition being a reason to speak: the same parcel's
- * other reasons in the same run (a failed attempt, a new pickup point, the deadline, the reminder) are
- * announced exactly as before, with the headline they would have had anyway.
+ * backlog of stale banners. A pickup point first seen with a silenced status is recorded as said with
+ * it and does not speak on its own, because DPD and Posta name the pickup point while the parcel is still
+ * in transit (that would make every such parcel an "In transit" banner, or a "Delivered" one past a user
+ * mark), and the ready-for-pickup banner carries it anyway. Every other status, and every other
+ * reason (a failed attempt, a new pickup point of a status that speaks, the deadline, the reminder), is
+ * announced exactly as before.
  *
  * Parcel updates beyond four collapse into one summary. Carrier alarms are infrastructure failures,
  * not parcel updates: they are never folded into that summary, so they can never be truncated out of it.
@@ -113,7 +116,9 @@ export function buildNotifications(
       // Only while the parcel is *currently* failed, so a long-ago attempt in a freshly added parcel's
       // backfilled history is not mistaken for a live one.
       const failedAttempt = p.status === 'failed_attempt' && (transitioned || mine.some(e => e.status === 'failed_attempt'))
-      const newPickup = p.pickup !== undefined && !p.pickupAnnounced && p.status !== 'unknown'
+      // Not for a silenced status: the pickup point is recorded as said with it (below), and the
+      // ready-for-pickup banner names it anyway.
+      const newPickup = p.pickup !== undefined && !p.pickupAnnounced && p.status !== 'unknown' && !silenced
       const deadlineDue = p.status === 'ready_for_pickup' && p.retainedTill !== undefined
         && p.retainedTill > now && p.retainedTill.getTime() - now.getTime() <= DEADLINE_WINDOW_MS
         && reminded.get(id) === undefined
