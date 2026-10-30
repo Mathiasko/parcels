@@ -85,6 +85,9 @@ const SENDER_DOMAINS: ReadonlyArray<readonly [string, CarrierId]> = [
   ['dhl.com', 'dhl'], ['dhl.de', 'dhl'], ['dhl.sk', 'dhl'], ['dhl.cz', 'dhl'],
   ['dhlparcel.com', 'dhl'], ['dhlparcel.sk', 'dhl'], ['dhlparcel.cz', 'dhl'], ['dhlparcel.nl', 'dhl'],
   ['dhlexpress.com', 'dhl'],
+  // PPL writes from ppl.cz. Its 11-digit numbers are also GLS's shape, so this sender is one of the only
+  // two things that make 11 digits PPL's (the other is a shop naming PPL beside the number).
+  ['ppl.cz', 'ppl'],
 ]
 
 export function carrierForAddress(address: string): CarrierId | undefined {
@@ -126,7 +129,8 @@ const SENDER_NUMBER: Partial<Record<CarrierId, RegExp>> = {
  * Shapes distinctive enough to trust without a sender hint, and the pattern that may be trusted for
  * each. Bare digits (dpd, gls) are not, and neither is DHL's `000…` form, which is why dhl appears
  * here with only its lettered prefixes: `JJD…`, `JVGL…` and `3S…` cannot be anything else, while a
- * long run of digits in a stranger's mail could be an order number or a reference.
+ * long run of digits in a stranger's mail could be an order number or a reference. PPL is absent for
+ * the same reason, and more so: its 11 digits are a GLS number too, so no shape can ever say PPL.
  */
 const DISTINCTIVE: Partial<Record<CarrierId, RegExp>> = {
   posta: NUMBER.posta,
@@ -140,12 +144,15 @@ const DISTINCTIVE: Partial<Record<CarrierId, RegExp>> = {
  * together with a labelled number of that carrier's shape: a name alone proves nothing (an order
  * confirmation says "GLS" for the chosen delivery method), which is why both signals are required.
  * Packeta, SPS and Slovenska posta need no name here: their number shapes are distinctive by themselves,
- * and so are DHL's lettered prefixes - only its `000…` form needs the name beside it.
+ * and so are DHL's lettered prefixes - only its `000…` form needs the name beside it. PPL needs its name
+ * closer than the others, in the number's own sentence (`namedBareNumbers`).
  */
 const CARRIER_NAME = {
   gls: /(?<![\p{L}\d])GLS(?![\p{L}\d])/iu,
   dpd: /(?<![\p{L}\d])DPD(?![\p{L}\d])/iu,
   dhl: /(?<![\p{L}\d])DHL(?![\p{L}\d])/iu,
+  // Only beside the number, not anywhere in the mail: see `namedNearby`.
+  ppl: /(?<![\p{L}\d])PPL(?![\p{L}\d])/iu,
 } as const
 
 const MERCHANT_MAX = 80
@@ -169,6 +176,8 @@ const isPlaceholder = (normalized: string): boolean => /^[A-Z]*(\d)\1*[A-Z]*$/.t
 
 const firstNumber = (carrier: CarrierId, haystack: string): string | undefined => {
   if (carrier === 'gls') return glsNumber(haystack)
+  // From ppl.cz, ranked like GLS (labelled first, phone-looking last), but only 11 standalone digits.
+  if (carrier === 'ppl') return rankedNumber(haystack, STANDALONE.ppl)
   return (haystack.match(SENDER_NUMBER[carrier] ?? NUMBER[carrier]) ?? []).map(normalizeNumber).find(n => !isPlaceholder(n))
 }
 
@@ -251,7 +260,15 @@ const PHONE_PREFIX = /^(?:42[01]|00421|00420|09\d{8}$)/
  * order, so within a rank the earlier one wins.
  */
 function glsNumber(haystack: string): string | undefined {
-  const candidates = [...haystack.matchAll(NUMBER.gls)].filter(m => !isPlaceholder(m[0])).map(m => {
+  return rankedNumber(haystack, NUMBER.gls)
+}
+
+/**
+ * `glsNumber`'s ranking over the candidates of any bare-digit `shape`. PPL's mail needs it as much as
+ * GLS's: a courier's phone, a reference or an order number may come before the parcel number.
+ */
+function rankedNumber(haystack: string, shape: RegExp): string | undefined {
+  const candidates = [...haystack.matchAll(shape)].filter(m => !isPlaceholder(m[0])).map(m => {
     const before = haystack.slice(Math.max(0, m.index - 50), m.index)
     const phone = PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0])
     return { number: m[0], rank: (GLS_LABEL.test(before) || NUMBERED_LABEL.test(before)) && !phone ? 0 : phone ? 2 : 1 }
@@ -265,6 +282,7 @@ const STANDALONE = {
   gls: /(?<![\p{L}\d])\d{10,12}(?![\p{L}\d])/gu,
   dpd: /(?<![\p{L}\d])\d{14}(?![\p{L}\d])/gu,
   dhl: /(?<![\p{L}\d])000\d{13,25}(?![\p{L}\d])/gu,
+  ppl: /(?<![\p{L}\d])\d{11}(?![\p{L}\d])/gu,
 } as const
 
 /**
@@ -306,19 +324,50 @@ function labelledNumbers(carrier: keyof typeof STANDALONE, haystack: string, lab
 }
 
 /** The carriers whose numbers are bare digits, so a label or a carrier name has to vouch for them. */
-const BARE_DIGIT_CARRIERS = ['gls', 'dpd', 'dhl'] as const
+const BARE_DIGIT_CARRIERS = ['gls', 'dpd', 'dhl', 'ppl'] as const
 
-/** Carriers the text names that also have a labelled number of their bare-digit shape beside it. */
-function namedBareNumbers(haystack: string): { c: CarrierId; n: string }[] {
-  return BARE_DIGIT_CARRIERS
-    .filter(c => CARRIER_NAME[c].test(haystack))
-    .flatMap(c => labelledNumbers(c, haystack).map(n => ({ c, n })))
+/** How far before a number "PPL" may stand and still be in the number's sentence (Ruling R2). */
+const NEARBY = 160
+/** A blank line (whitespace and quote marks only): the end of a paragraph. */
+const BLANK_LINE = /\n[ \t\u00a0>]*\r?\n/g
+
+/**
+ * Whether `name` stands in the same sentence as the number at `at`: between the number and the nearest
+ * blank line before it, at most `NEARBY` characters back, or after the number on its own line.
+ * `Dopravce: PPL` on the line above `Číslo zásilky: 40888888801` is; a footer that says "we ship with
+ * PPL" (or links ppl.cz) paragraphs away is not.
+ */
+function namedNearby(name: RegExp, haystack: string, at: number, length: number): boolean {
+  const back = haystack.slice(Math.max(0, at - NEARBY), at)
+  const paragraph = back.slice(Math.max(0, ...[...back.matchAll(BLANK_LINE)].map(m => m.index + m[0].length)))
+  const end = haystack.indexOf('\n', at + length)
+  return name.test(paragraph) || name.test(haystack.slice(at + length, end < 0 ? undefined : end))
 }
 
 /**
- * Every way a carrier can be NAMED in prose, and which carrier each names. The three whose numbers are
+ * Carriers the text names that also have a labelled number of their bare-digit shape beside it.
+ *
+ * GLS, DPD and DHL may be named anywhere in the mail: their name is rare enough in a mail that prints
+ * a labelled number of their shape. PPL may not. Its 11 digits are a GLS number too, so a Czech shop
+ * whose footer lists the carriers it ships with ("GLS, PPL, Zásilkovna") would make every GLS parcel
+ * of that shop a PPL one, or a question. So PPL counts only when it is named in the number's own
+ * sentence (`namedNearby`) - and when GLS is ALSO named, both carriers claim the number, which is
+ * the two-carriers question below rather than a guess.
+ */
+function namedBareNumbers(haystack: string): { c: CarrierId; n: string }[] {
+  return BARE_DIGIT_CARRIERS
+    .filter(c => CARRIER_NAME[c].test(haystack))
+    .flatMap(c => labelledNumbers(c, haystack)
+      .filter(n => c !== 'ppl' || [...haystack.matchAll(STANDALONE.ppl)]
+        .some(m => normalizeNumber(m[0]) === n && namedNearby(CARRIER_NAME.ppl, haystack, m.index, m[0].length)))
+      .map(n => ({ c, n })))
+}
+
+/**
+ * Every way a carrier can be NAMED in prose, and which carrier each names. The four whose numbers are
  * bare digits come straight from `CARRIER_NAME` - one definition of "this mail says GLS", shared with
- * the e-shop parsing rule above, so the two can never drift apart. The rest are added only for the
+ * the e-shop parsing rule above, so the two can never drift apart. (PPL named anywhere is evidence,
+ * and a look-alike's claim; only parsing asks for it beside the number.) The rest are added only for the
  * evidence test and the look-alike rule, because parsing never needed them: their number shapes speak
  * for themselves.
  *
@@ -340,7 +389,7 @@ const CARRIER_MENTIONS: ReadonlyArray<readonly [RegExp, CarrierId]> = [
 const CARRIER_MENTION: readonly RegExp[] = CARRIER_MENTIONS.map(([re]) => re)
 
 /** A carrier brand as a label, or the start of one, of a domain: `packeta-sk.example.com`, `gls.example.net`. */
-const CARRIER_IN_DOMAIN = /(?:^|[.-])(packeta|z[aá]sielkovna|z[aá]silkovna|gls|dpd|dhl)(?=[.-])/i
+const CARRIER_IN_DOMAIN = /(?:^|[.-])(packeta|z[aá]sielkovna|z[aá]silkovna|gls|dpd|dhl|ppl)(?=[.-])/i
 
 /**
  * A domain whose registrable name IS a carrier's brand: `packeta.cz`, `mail.dhl.nl`. Carriers write
@@ -350,9 +399,9 @@ const CARRIER_IN_DOMAIN = /(?:^|[.-])(packeta|z[aá]sielkovna|z[aá]silkovna|gls
  * GLS's national companies write from `gls-<country>.<tld>` (`gls-czech.cz`, `gls-hungary.com`), and
  * some markets sit under a second-level suffix (`dhl.co.uk`, `dhl.com.au`); both are the brand too.
  */
-const BRAND_DOMAIN = /(?:^|\.)(?:packeta|z[aá]sielkovna|z[aá]silkovna|gls|gls-[a-z]+|dpd|dhl)\.(?:co\.|com\.)?[a-z]{2,}$/i
+const BRAND_DOMAIN = /(?:^|\.)(?:packeta|z[aá]sielkovna|z[aá]silkovna|gls|gls-[a-z]+|dpd|dhl|ppl)\.(?:co\.|com\.)?[a-z]{2,}$/i
 
-const BRAND_CARRIER: Record<string, CarrierId> = { gls: 'gls', dpd: 'dpd', dhl: 'dhl' }
+const BRAND_CARRIER: Record<string, CarrierId> = { gls: 'gls', dpd: 'dpd', dhl: 'dhl', ppl: 'ppl' }
 
 /**
  * The carrier a sender that is NOT a known carrier address presents itself as, or undefined: a carrier
@@ -448,7 +497,9 @@ function parcelEvidence(subject: string, haystack: string): ParcelEvidence | und
   // `.match` rather than `.test`: these are global regexes, and `.test` would advance their lastIndex
   // and make the next call on the same pattern start half-way through a different message.
   if (Object.values(DISTINCTIVE).some(re => haystack.match(re) !== null)) return 'tracking-shape'
-  if (BARE_DIGIT_CARRIERS.some(c => labelledNumbers(c, haystack, PARCEL_LABEL).length > 0)) return 'tracking-shape'
+  // Not PPL: its 11 digits are inside GLS's 10-12, so asking it too could only differ where GLS's test
+  // refused two labelled numbers as ambiguous, and that is no evidence this rule ever counted.
+  if (BARE_DIGIT_CARRIERS.some(c => c !== 'ppl' && labelledNumbers(c, haystack, PARCEL_LABEL).length > 0)) return 'tracking-shape'
   if (SHIPPING_SUBJECT.test(subject)) return 'shipping-subject'
   return undefined
 }
