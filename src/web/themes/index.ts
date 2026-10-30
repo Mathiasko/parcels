@@ -4,9 +4,10 @@
  */
 import { DEFAULT_APPEARANCE, type ThemeId } from '../../core/appearance.js'
 import { classic } from './classic.js'
+import { postal } from './postal.js'
 import { COLOR_TOKENS, SHAPE_TOKENS, type Theme, type ThemeFont } from './types.js'
 
-export const THEMES: readonly Theme[] = [classic]
+export const THEMES: readonly Theme[] = [postal, classic]
 
 export const DEFAULT_THEME: ThemeId = DEFAULT_APPEARANCE.theme
 

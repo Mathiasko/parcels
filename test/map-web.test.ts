@@ -231,7 +231,8 @@ describe('the page makes no third-party request', () => {
 
   test('the only outside hostnames in the markup are the maps link and the OpenStreetMap credit', async () => {
     const body = await bodyWithMap()
-    const hosts = new Set([...body.matchAll(/https?:\/\/([^/"'\s)]+)/g)].map(m => m[1]!))
+    // An XML namespace is an identifier, not a request: Postal's grain is an inline SVG data URL with one.
+    const hosts = new Set([...body.replaceAll("xmlns='http://www.w3.org/2000/svg'", '').matchAll(/https?:\/\/([^/"'\s)]+)/g)].map(m => m[1]!))
     expect([...hosts].sort()).toEqual(['maps.apple.com', 'www.openstreetmap.org'])
     expect(body).not.toContain('tile.openstreetmap.org')
     expect(body).not.toContain('nominatim')

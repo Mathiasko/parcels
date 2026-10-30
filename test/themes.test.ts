@@ -2,6 +2,10 @@ import { describe, expect, test } from 'vitest'
 import { COLOR_TOKENS, SHAPE_TOKENS, type Theme } from '../src/web/themes/types.js'
 import { DEFAULT_THEME, THEMES, themeById, themeCss } from '../src/web/themes/index.js'
 import { classic } from '../src/web/themes/classic.js'
+import { postal } from '../src/web/themes/postal.js'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { DEFAULT_APPEARANCE, THEME_IDS } from '../src/core/appearance.js'
 import { BASE_CSS, STYLE } from '../src/web/views/style.js'
 import { contrast } from './theme-contrast.js'
 
@@ -83,6 +87,85 @@ describe('Classic', () => {
     expect(css).toContain('--font-mono:ui-monospace,"SF Mono",Menlo,monospace')
     expect(css).toContain('--radius-card:12px')
     expect(css).not.toContain('@font-face')
+  })
+})
+
+describe('the registry', () => {
+  test('lists Postal then Classic, matching THEME_IDS, with Postal the default', () => {
+    expect(THEMES.map(t => t.id)).toEqual(['postal', 'classic'])
+    expect(new Set(THEMES.map(t => t.id))).toEqual(new Set(THEME_IDS))
+    expect(DEFAULT_THEME).toBe('postal')
+    expect(DEFAULT_APPEARANCE.theme).toBe('postal')
+    expect(themeById('postal')).toBe(postal)
+  })
+
+  test('every font file of every theme exists in assets/fonts as a .woff2, and Classic has none', () => {
+    expect(classic.fonts).toEqual([])
+    for (const t of THEMES) {
+      for (const f of t.fonts) {
+        expect(f.file.endsWith('.woff2'), f.file).toBe(true)
+        expect(existsSync(join(__dirname, '..', 'assets', 'fonts', f.file)), f.file).toBe(true)
+      }
+    }
+  })
+})
+
+describe('Postal', () => {
+  const css = themeCss(postal)
+
+  test('holds the brief\'s colours', () => {
+    const light = 'paper:#f3ead7 surface:#fbf6ea hover:#f1e7d2 rule:#e6dcc6 rule-s:#d9cbb0 edge:#857559 ink:#1d2433 ink-2:#5a4f3f ink-3:#6a5d48 signal:#f6c21c signal-ink:#7a5600 on-signal:#1d2433 signal-wash:#f9e7a8 warn:#b3261e on-warn:#fbf6ea warn-wash:#f7e0d6 ok:#23468c ok-wash:#e2e6f0 btn-hover:#2f3a52'
+    const dark = 'paper:#211c18 surface:#2c2620 hover:#362f27 rule:#3a332b rule-s:#4b4237 edge:#8f826e ink:#f1e8d6 ink-2:#c3b6a0 ink-3:#ab9d87 signal:#f7c948 signal-ink:#f7c948 on-signal:#241a00 signal-wash:#3b3118 warn:#ff8a7a on-warn:#2a0d08 warn-wash:#3f241f ok:#9db8ff ok-wash:#222a3d btn-hover:#ffffff'
+    expect(COLOR_TOKENS.map(tok => `${tok}:${postal.colors[tok].light}`).join(' ')).toBe(light)
+    expect(COLOR_TOKENS.map(tok => `${tok}:${postal.colors[tok].dark}`).join(' ')).toBe(dark)
+  })
+
+  test('has its shape tokens and a percent-encoded grain', () => {
+    expect(postal.tokens['font-display']).toBe('"DM Serif Display",Georgia,serif')
+    expect(postal.tokens['font-body']).toBe('"Libre Franklin","Helvetica Neue",sans-serif')
+    expect(postal.tokens['font-mono']).toBe('"Courier Prime","Courier New",monospace')
+    expect(postal.tokens['radius-card']).toBe('6px')
+    expect(postal.tokens['radius-badge']).toBe('3px')
+    expect(postal.tokens['radius-btn']).toBe('4px')
+    expect(postal.tokens['shadow-card']).toBe('0 1px 0 rgba(90,70,30,.08),0 14px 26px -16px rgba(80,55,15,.45)')
+    expect(postal.tokens.texture).toMatch(/^url\("data:image\/svg\+xml;utf8,%3Csvg /)
+    expect(postal.tokens.texture).toContain('feTurbulence')
+    expect(postal.tokens.texture).not.toMatch(/[<>#]/)
+    expect(postal.tokens.texture).toContain('filter=\'url(%23n)\'')
+  })
+
+  test('loads ten fonts: DM Serif Display 400 roman and italic, Libre Franklin, Courier Prime 400 and 700, latin and latin-ext', () => {
+    expect(postal.fonts).toHaveLength(10)
+    const keys = postal.fonts.map(f => `${f.family}|${f.style}|${f.weight}`)
+    for (const k of ['DM Serif Display|normal|400', 'DM Serif Display|italic|400', 'Libre Franklin|normal|400 800', 'Courier Prime|normal|400', 'Courier Prime|normal|700']) {
+      expect(keys.filter(x => x === k), k).toHaveLength(2)
+    }
+    expect(css).toContain('@font-face{font-family:"Libre Franklin";src:url(/fonts/libre-franklin-latin-wght-normal.woff2) format("woff2");font-style:normal;font-weight:400 800;font-display:swap;unicode-range:U+0000-00FF,U+0131,')
+    expect(css).toContain('unicode-range:U+0100-02BA,U+02BD-02C5,')
+  })
+
+  test('scopes every rule to data-theme="postal", and sets display weight to 400', () => {
+    expect(STYLE).toContain(':root[data-theme="postal"]{')
+    const own = stripComments(postal.css ?? '')
+    expect(own).toContain('h1')
+    for (const sel of ['h1', '.card-h h2', '.pk-h h2', '.pk-h .where']) {
+      expect(own).toContain(`:root[data-theme="postal"] ${sel}`)
+    }
+    expect(own).toMatch(/font-weight:400/)
+    // every selector (text before a "{") starts with the scope
+    const media = own.replace(/@media\([^)]*\)\{/g, '')
+    for (const m of media.matchAll(/(?:^|\})([^{}]+)\{/g)) {
+      for (const sel of m[1].split(',')) expect(sel.trim().startsWith(':root[data-theme="postal"]'), sel).toBe(true)
+    }
+  })
+
+  test('swaps in the dark grain and shadow for dark, and for system under prefers-color-scheme', () => {
+    const own = postal.css ?? ''
+    expect(own).toContain(':root[data-theme="postal"][data-mode="dark"]{--texture:url("data:image/svg+xml;utf8,%3Csvg ')
+    expect(own).toContain('@media(prefers-color-scheme:dark){:root[data-theme="postal"][data-mode="system"]{--texture:url(')
+    expect(own.match(/--shadow-card:0 1px 0 rgba\(0,0,0,\.4\),0 16px 30px -14px rgba\(0,0,0,\.7\)/g)).toHaveLength(2)
+    expect(own).toContain('0 0 0 0 .95  0 0 0 0 .85  0 0 0 0 .7  0 0 0 .16 0')
+    expect(own).not.toMatch(/[<>]|#/)
   })
 })
 
