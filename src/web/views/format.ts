@@ -117,8 +117,8 @@ export function statusIndicator(status: CanonicalStatus): Html {
   const r = REGISTER[status]
   const word = STATUS_TITLE[status]
   return r.kind === 'plain'
-    ? html`<span class="st t-${r.tone}">${glyph(status)}${word}</span>`
-    : html`<span class="b ${r.kind} t-${r.tone}">${glyph(status)}${word}</span>`
+    ? html`<span class="st t-${r.tone}" data-status="${status}">${glyph(status)}${word}</span>`
+    : html`<span class="b ${r.kind} t-${r.tone}" data-status="${status}">${glyph(status)}${word}</span>`
 }
 
 
@@ -128,10 +128,10 @@ export function statusIndicator(status: CanonicalStatus): Html {
  * the same fact. `Collected` for a pickup, `Received` for anything else.
  */
 export function userMarkIndicator(kind: 'collected' | 'received'): Html {
-  return html`<span class="st t-ok">${glyph('delivered')}${kind === 'collected' ? 'Collected' : 'Received'}</span>`
+  return html`<span class="st t-ok" data-status="${kind}">${glyph('delivered')}${kind === 'collected' ? 'Collected' : 'Received'}</span>`
 }
 
 /** The 4px dot and a muted word, for "No updates yet" and "Archived". No hue: the absence of a mark. */
 export function quietIndicator(word: string): Html {
-  return html`<span class="st t-3 quiet">${glyph('unknown')}${word}</span>`
+  return html`<span class="st t-3 quiet" data-status="unknown">${glyph('unknown')}${word}</span>`
 }

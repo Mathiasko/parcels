@@ -394,7 +394,7 @@ function card(c: Card, ctx: PageCtx): Html {
   const note = ready ? noDeadlineNote(c.members) : ''
   const maps = ready ? c.members.map(m => mapsUrl(m.parcel)).find(u => u !== undefined) : undefined
   const facts = pickupFacts(note, maps)
-  return html`<article class="card">
+  return html`<article class="card" data-status="${c.placed ? 'ready_for_pickup' : c.members[0]!.parcel.status}">
 <div class="card-h${dueNow ? raw(' due-now') : ''}">${cardHead(c)}${cardChip(c)}</div>
 <ul class="card-l">${c.members.map(m => cardEntry(c, m, ctx))}</ul>${facts ? html`<p class="card-f meta">${facts}</p>` : ''}
 </article>`

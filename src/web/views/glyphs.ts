@@ -22,12 +22,39 @@ const SYMBOLS: Record<GlyphName, string> = {
   unknown: '<circle cx="8" cy="8" r="2.25" fill="currentColor"/>',
 }
 
-export const SPRITE: Html = raw(`<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false"><defs>${
+
+/**
+ * The Postal alternates (`gp-`), from the mood board's stamp, chevron, voided-ring, envelope and postmark
+ * shapes. They keep the board's 24x24 drawing: a `<use>` scales the symbol's viewBox into the 16px svg, so
+ * they need no redraw. The five statuses the board has no shape for reuse their Classic drawing. The
+ * stamp's perforation mask lives in the sprite's `<defs>` under an id of its own.
+ */
+const POSTAL_MASK = '<mask id="gp-m-stamp" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect x="0" y="0" width="24" height="24" fill="#fff"/><g fill="#000">'
+  + [3.5, 8.5, 12, 15.5, 20.5].map(x => `<circle cx="${x}" cy="3.5" r="1.25"/><circle cx="${x}" cy="20.5" r="1.25"/>`).join('')
+  + [8.5, 12, 15.5].map(y => `<circle cx="3.5" cy="${y}" r="1.25"/><circle cx="20.5" cy="${y}" r="1.25"/>`).join('')
+  + '</g><rect x="6.6" y="6.6" width="10.8" height="10.8" fill="none" stroke="#000" stroke-width="1.3"/></mask>'
+const POSTAL: Partial<Record<GlyphName, string>> = {
+  ready_for_pickup: '<rect x="3.5" y="3.5" width="17" height="17" fill="currentColor" mask="url(#gp-m-stamp)"/>',
+  out_for_delivery: '<path d="M3.5 5.5 10 12l-6.5 6.5M12 5.5l6.5 6.5L12 18.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="miter"/>',
+  failed_attempt: '<circle cx="12" cy="12" r="7.6" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M4 4l16 16M20 4 4 20" stroke="currentColor" stroke-width="2.4" stroke-linecap="square"/>',
+  in_transit: '<rect x="3" y="6" width="18" height="12.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 7l8.5 6 8.5-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
+  delivered: '<circle cx="9" cy="12" r="6.3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="12" r="1.8" fill="currentColor"/><path d="M13 8.2q2.5-2 5 0t5 0M14.6 12q2-1.6 4.2 0t4.2 0M13 15.8q2.5-2 5 0t5 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+}
+
+export const SPRITE: Html = raw(`<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false"><defs>${POSTAL_MASK}${
   (Object.keys(SYMBOLS) as GlyphName[]).map(n => `<symbol id="g-${n}" viewBox="0 0 16 16">${SYMBOLS[n]}</symbol>`).join('')
+}${
+  (Object.keys(SYMBOLS) as GlyphName[]).map(n => {
+    const p = POSTAL[n]
+    return `<symbol id="gp-${n}" viewBox="${p === undefined ? '0 0 16 16' : '0 0 24 24'}">${p ?? SYMBOLS[n]}</symbol>`
+  }).join('')
 }</defs></svg>`)
 
-/** A status can come from the database; a value outside the closed set falls back to the neutral dot. */
+/**
+ * A status can come from the database; a value outside the closed set falls back to the neutral dot.
+ * Two `<use>`s: Classic shows `.gc`, and the base CSS hides `.gp`; a theme swaps them (CSS cannot change a `<use href>`).
+ */
 export function glyph(name: GlyphName): Html {
   const id = name in SYMBOLS ? name : 'unknown'
-  return html`<svg class="g" width="16" height="16" aria-hidden="true"><use href="#g-${id}"/></svg>`
+  return html`<svg class="g" width="16" height="16" aria-hidden="true"><use class="gc" href="#g-${id}"/><use class="gp" href="#gp-${id}"/></svg>`
 }

@@ -349,7 +349,7 @@ describe('history and the medians', () => {
     markCollected(db, home, WEB)
     const body = (await server(db).inject({ method: 'GET', url: '/history' })).body
     const rowOf = (name: string) => body.split('<tr>').find(r => r.includes(`>${name}</a>`))!
-    expect(rowOf('Topánky')).toMatch(/<span class="st t-ok"><svg[^>]*>.*?<\/svg>Collected<\/span>/)
+    expect(rowOf('Topánky')).toMatch(/<span class="st t-ok" data-status="collected"><svg[^>]*>.*?<\/svg>Collected<\/span>/)
     expect(rowOf('Shop van')).toMatch(/<\/svg>Received<\/span>/)
     expect(rowOf('RA000000001SK')).toMatch(/<\/svg>Delivered<\/span>/)
     expect(body).toContain('3 finished parcels: 1 delivered, 1 collected, 1 received.')
@@ -434,7 +434,7 @@ describe('POST /parcel/:id/collected and /uncollected', () => {
     const res = await post(db, `/parcel/${id}/collected`)
     expect(res.headers.location).toBe(`/parcel/${id}`)
     const body = await get(db, `/parcel/${id}`)
-    expect(body).toContain(`<div class="status"><span class="st t-ok">`)
+    expect(body).toContain(`<div class="status"><span class="st t-ok" data-status="collected">`)
     expect(body).toMatch(/<\/svg>Collected<\/span><span class="meta">— marked by you ·<\/span>/)
     expect(body).toContain(undoButton(id))
     // The timeline row is the mark's own sentence, with no "Delivered" word claiming the carrier said so.

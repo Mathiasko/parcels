@@ -17,6 +17,7 @@ export const BASE_CSS = `
 body{margin:0;background:var(--paper);background-image:var(--texture);color:var(--ink);font:400 .9375rem/1.4667 var(--font-body)}
 .sprite{position:absolute}
 .g{flex:none;display:block}
+.gp{display:none}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--edge);text-decoration-thickness:1px;text-underline-offset:3px}
 a:hover{text-decoration-color:var(--ink)}

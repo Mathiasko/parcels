@@ -704,7 +704,7 @@ describe('archived parcels from old mail', () => {
     const row = (name: string) => body.slice(body.indexOf(name)).split('</tr>')[0]!
     expect(row('OldShopA')).not.toMatch(/Delivered|Returned/)
     // The Outcome cell is never blank: archived mail says so, in the quietest register there is.
-    expect(row('OldShopA')).toMatch(/<span class="st t-3 quiet">[\s\S]*Archived<\/span>/)
+    expect(row('OldShopA')).toMatch(/<span class="st t-3 quiet" data-status="unknown">[\s\S]*Archived<\/span>/)
     expect(row('Delivered one')).toContain('Delivered')
   })
 
