@@ -1,6 +1,6 @@
-import { test, expect } from 'vitest'
+import { test, expect, describe } from 'vitest'
 import { fileURLToPath } from 'node:url'
-import { loadConfig, loadRuntimeConfig } from '../src/core/config.js'
+import { loadConfig, loadRuntimeConfig, validateConfig, DEFAULT_NOTIFICATIONS } from '../src/core/config.js'
 
 const fixturePath = (name: string) =>
   fileURLToPath(new URL(`./fixtures/config/${name}`, import.meta.url))
@@ -28,4 +28,37 @@ test('loadConfig rejects a mapPreview that is not a boolean', () => {
 test('loadRuntimeConfig resolves a relative dbPath against the config file, not the cwd', () => {
   const c = loadRuntimeConfig(fixturePath('minimal.json'))
   expect(c.dbPath).toBe(fileURLToPath(new URL('./fixtures/config/data/parcels.db', import.meta.url)))
+})
+
+describe('the notifications block', () => {
+  const base = { defaultPostalCode: '81101' }
+
+  test('absent means the defaults: progress off, the daily reminder and delivered on', () => {
+    expect(DEFAULT_NOTIFICATIONS).toEqual({ progress: false, dailyReminder: true, delivered: true })
+    expect(validateConfig(base).notifications).toEqual({ progress: false, dailyReminder: true, delivered: true })
+  })
+
+  test('a partial block keeps its keys and fills the rest from the defaults', () => {
+    expect(validateConfig({ ...base, notifications: { progress: true } }).notifications)
+      .toEqual({ progress: true, dailyReminder: true, delivered: true })
+  })
+
+  test('the returned block is a copy, so a caller cannot change the defaults', () => {
+    const n = validateConfig(base).notifications
+    n.progress = true
+    expect(DEFAULT_NOTIFICATIONS.progress).toBe(false)
+  })
+
+  test('a switch that is not a boolean is rejected by name', () => {
+    expect(() => validateConfig({ ...base, notifications: { delivered: 'no' } })).toThrow(/"notifications.delivered" must be true or false/)
+  })
+
+  test('a key that is not a switch is rejected by name', () => {
+    expect(() => validateConfig({ ...base, notifications: { sound: true } })).toThrow(/"notifications.sound" is not a setting/)
+  })
+
+  test('a block that is not an object is rejected', () => {
+    expect(() => validateConfig({ ...base, notifications: [] })).toThrow(/"notifications" must be an object/)
+    expect(() => validateConfig({ ...base, notifications: 1 })).toThrow(/"notifications" must be an object/)
+  })
 })

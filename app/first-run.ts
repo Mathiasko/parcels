@@ -1,7 +1,7 @@
 import * as nodeFs from 'node:fs'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, isAbsolute, join } from 'node:path'
-import { writeConfigDocument, type ConfigDocument } from '../src/core/config.js'
+import { DEFAULT_NOTIFICATIONS, writeConfigDocument, type ConfigDocument } from '../src/core/config.js'
 import { escapeHtml } from '../src/web/views/html.js'
 
 /**
@@ -82,6 +82,7 @@ export const WELCOME_DOCUMENT: Readonly<ConfigDocument> = {
   port: 8787,
   notifier: 'auto',
   mapPreview: true,
+  notifications: { ...DEFAULT_NOTIFICATIONS },
   pickupCalendar: '',
 }
 

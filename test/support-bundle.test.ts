@@ -15,7 +15,7 @@ import { appendEvents } from '../src/db/events.js'
 import { finishRun, startRun } from '../src/db/poll-runs.js'
 import { insertParcel, updateParcelState } from '../src/db/parcels.js'
 import { escapeHtml } from '../src/web/views/html.js'
-import type { Config } from '../src/core/config.js'
+import { DEFAULT_NOTIFICATIONS, type Config } from '../src/core/config.js'
 import type { Database } from '../src/db/index.js'
 import { memDb, NOW } from './poll-helpers.js'
 
@@ -57,7 +57,7 @@ const NUMBERS = {
 
 const config: Config = {
   dbPath: ':memory:', port: 8787, defaultPostalCode: SECRETS.defaultPostcode,
-  notifier: 'auto', mapPreview: true,
+  notifier: 'auto', mapPreview: true, notifications: DEFAULT_NOTIFICATIONS,
   imap: { host: 'imap.gmail.com', port: 993, user: SECRETS.email, pass: SECRETS.appPassword, mailbox: 'parcels' },
 }
 
