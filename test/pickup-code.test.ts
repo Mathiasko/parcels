@@ -120,6 +120,15 @@ describe('pickup PINs for every carrier', () => {
     expect(extractPickupCode('PIN: 0905123456 (telefón kuriéra).\nPIN kód 123456')).toBe('123456')
     // Within one label: the next `PIN:` match is tried.
     expect(extractPickupCode('PIN: 0905123456 (telefón kuriéra).\nPIN: 123456')).toBe('123456')
+    // A phone-shaped candidate is refused the same way, and the next label is tried.
+    expect(extractPickupCode('PIN kód nájdete v SMS, linka: 0905123456\nPIN: 123456')).toBe('123456')
+  })
+
+  test('a short PIN that merely starts like a dialling code is still a PIN', () => {
+    // 420/421 open a Czech/Slovak number written internationally, but such a number is 12 digits,
+    // longer than any PIN: a six-digit code that starts the same way is a code.
+    expect(extractPickupCode('PIN: 420113')).toBe('420113')
+    expect(extractPickupCode('PIN kód 421907')).toBe('421907')
   })
 
   test.each([
@@ -131,6 +140,8 @@ describe('pickup PINs for every carrier', () => {
     ['a 3-digit run', 'PIN: 123'],
     ['an 11-digit run', 'PIN: 12345678901'],
     ['the DPD line that mentions the PIN but prints none', 'Vašu zásielku môže prevziať aj osoba, ktorej poskytnete PIN kód.'],
+    // Label 2's "words up to a colon" reach a phone that no veto word names.
+    ['a phone the `PIN kód ...:` bridge reaches', 'PIN kód nájdete v SMS, linka: 0905123456'],
   ])('%s is not a code', (_what, text) => {
     expect(extractPickupCode(text)).toBeUndefined()
   })

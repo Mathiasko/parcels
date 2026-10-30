@@ -5,6 +5,7 @@
   "notifier": "auto",
   "mapPreview": true,
   "notifications": { "progress": false, "dailyReminder": true, "delivered": true },
+  "filterVersion": 2,
   "pickupCalendar": "",
   "imap": {
     "host": "imap.gmail.com",

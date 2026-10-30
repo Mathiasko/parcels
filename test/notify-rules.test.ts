@@ -453,6 +453,17 @@ test('a parcel that arrived before 08:00 gets no reminder at 08:00 the same day'
   expect(build(db, [], bts('2026-11-04T08:05')).map(n => n.title)).toEqual(['Still waiting since Tue — RA000000001SK'])
 })
 
+test('an arrival stamped in the future (the carrier clock ahead) counts as the ready day', () => {
+  const db = memDb()
+  // Announced at 23:58 on Tuesday with a carrier timestamp of 00:05 on Wednesday: the arrival is
+  // "tomorrow", and the 08:00 slot already passed today must not call it "still waiting".
+  parcelIn(db, 'ready_for_pickup', { pickup: ZBOX, lastChangedAt: bts('2026-11-04T00:05') })
+  expect(build(db, [], bts('2026-11-03T23:58'))).toEqual([])
+  // Wednesday is the day it arrived on by its own stamp: still the ready day. Thursday reminds.
+  expect(build(db, [], bts('2026-11-04T08:05'))).toEqual([])
+  expect(build(db, [], bts('2026-11-05T08:05')).map(n => n.title)).toEqual(['Still waiting since Wed — RA000000001SK'])
+})
+
 test('a parcel waiting a week or more is said to wait since its date, not its weekday', () => {
   const db = memDb()
   parcelIn(db, 'ready_for_pickup', { pickup: ZBOX, lastChangedAt: bts('2026-10-27T14:00') })

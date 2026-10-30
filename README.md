@@ -345,6 +345,7 @@ at the start of every run, so a change reaches mail ingest and the carriers at t
 | `notifier` | `auto` (default), `terminal-notifier` or `osascript`. `auto` tries terminal-notifier and falls back to osascript. |
 | `mapPreview` | `true` (default) or `false`. The pickup-point map. `false` stops all geocoding and tile fetching and removes the map from the page. See [Pickup point maps](#pickup-point-maps). |
 | `notifications` | Which parcel updates send a banner: `{ "progress": false, "dailyReminder": true, "delivered": true }` by default (transit updates quiet, the 08:00 reminder and *Delivered* on). Set with the three switches on Settings; a missing key takes its default. See [Notifications](#notifications). |
+| `filterVersion` | The version of the Gmail filter you last imported. No key means `1`, the filter from before 0.2.0, and while Gmail is connected a number below `2` puts a notice on Settings asking you to import the filter again. Set to `2` when you download the filter from Settings or press **Done, I imported it again**; a fresh setup writes `2`. |
 | `pickupCalendar` | The Calendar.app calendar [Add to Calendar](#add-to-calendar) puts pickups into, by name. `""` (the default) or no key: the first calendar you can write to. |
 | `imap` | Optional. Without it, no mail is read and parcels are added by hand. See below. |
 
@@ -722,9 +723,10 @@ A banner is for something you can act on. By default:
 
 - **These send a banner:** *Out for delivery*, *Ready for pickup* (with where, and the collect-by
   date if the carrier gave one), a failed delivery attempt, a delivery problem, *Returning to sender*
-  and *Returned to sender*, a pickup point named for the first time, the warning 48 hours before a
-  pickup deadline, and [one reminder a day](#reminders-while-a-parcel-is-waiting) while a parcel waits
-  for you. So do the alarms about the app itself: a carrier's tracking broken or stale, mail ingest
+  and *Returned to sender*, a pickup point named for the first time (not while the parcel's status is
+  one kept quiet, below; the *Ready for pickup* banner names it when it comes), the warning 48 hours
+  before a pickup deadline, and [one reminder a day](#reminders-while-a-parcel-is-waiting) while a
+  parcel waits for you. So do the alarms about the app itself: a carrier's tracking broken or stale, mail ingest
   failing, the poller having been away, and an update being available.
 - **Registered and in transit are quiet.** They are on the dashboard, on the parcel page and in the
   activity log as always; they just do not interrupt you.
@@ -1155,9 +1157,10 @@ Mail from these carriers carries one, and is read:
 - **SPS** balíkovo: the verification code ("Verifikačný kód");
 - **PPL** ParcelShop and Parcelbox: the PIN.
 
-A number is taken only when a label stands right before it. A line that also mentions a phone number
-or an order number is refused, and so is anything with fewer than 4 or more than 10 digits, so a
-tracking number, an order number or a phone number is never mistaken for a code.
+A number is taken only when a label stands right before it. One whose sentence also mentions a phone
+number or an order number is refused, as is one shaped like a mobile number (`0905 123 456`), and so
+is anything with fewer than 4 or more than 10 digits, so a tracking number, an order number or a
+phone number is never mistaken for a code.
 
 **How the card words it** depends on the kind of pickup point the carrier named, because the same
 digits are used in two different ways:

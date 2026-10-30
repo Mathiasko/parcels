@@ -763,7 +763,8 @@ function carrierMerchant(carrier: CarrierId, haystack: string): string | undefin
  * A match is refused when the sentence it stands in names an order, an invoice or a phone
  * (`NOT_TRACKING`, the same vocabulary the tracking number is judged by): "PIN: 0905123456 (telefón
  * kuriéra)" is a phone, "Objednávka č. 123456, PIN kód 4711 nájdete v objednávke" is a shop's. Then
- * the label's next match is tried, then the next label.
+ * the label's next match is tried, then the next label. So is a match whose digits are shaped like a
+ * phone (`PHONE_PREFIX`: 0905 123 456), even when no word in its sentence says so.
  *
  * Returned as a string because real codes carry leading zeros (004467, 007018); a number would drop
  * them silently and send the reader to the locker with a code one digit short.
@@ -777,6 +778,14 @@ const PICKUP_CODES: readonly RegExp[] = [
 
 /** What ends the sentence a code's label stands in, for the `NOT_TRACKING` veto. */
 const PIN_SENTENCE_END = /[.!?\n]/
+/**
+ * How far the veto's sentence reaches on either side of the label and the code, at most. The veto is
+ * about words NEAR the code ("tel.", "objednávka"); a real sentence around a PIN is well inside this.
+ * Unbounded, a mail flattened to one line with no full stop made each candidate's sentence the whole
+ * rest of the text, and a 400 KB body repeating a vetoed `PIN: 1234 tel` took over a minute, during a
+ * poll the web server runs on Refresh.
+ */
+const PIN_SENTENCE_REACH = 300
 
 export function extractPickupCode(text: string): string | undefined {
   // Collapse whitespace first. The digits sit one per table cell, so in the plain-text rendering they
@@ -793,6 +802,11 @@ export function extractPickupCode(text: string): string | undefined {
     for (const m of flat.matchAll(pattern)) {
       const digits = m[1]!.replace(/\D/g, '')
       if (digits.length < 4 || digits.length > 10) continue
+      // A phone needs no veto word to be refused: label 2's words up to a colon can bridge to one
+      // ("PIN kód nájdete v SMS, linka: 0905123456"). Only from nine digits on, the length of a
+      // national-format number: `PHONE_PREFIX` also opens on 420/421, and a six-digit code that
+      // starts that way is a code (an international number is 12 digits, past any PIN).
+      if (digits.length >= 9 && PHONE_PREFIX.test(digits)) continue
       // The sentence ends after the code's LAST DIGIT, not after the match: the digit group also
       // swallows the space after the code, and in the flat text that space may stand for a line
       // break, which would pull the next line (a "tel." footer, an order line) into the veto.
@@ -806,14 +820,17 @@ export function extractPickupCode(text: string): string | undefined {
 
 /**
  * The sentence from `start` to `end` of `text` stands in: back to the previous sentence end or line
- * break, on to the next one. Only this is vetoed, never the whole line - a mail whose html is
- * flattened can arrive as one long line, and a "tel." in its footer says nothing about the PIN.
+ * break, on to the next one, but never more than `PIN_SENTENCE_REACH` characters either way. Only this
+ * is vetoed, never the whole line - a mail whose html is flattened can arrive as one long line, and a
+ * "tel." in its footer says nothing about the PIN.
  */
 function sentenceAround(text: string, start: number, end: number): string {
+  const floor = Math.max(0, start - PIN_SENTENCE_REACH)
   let from = start
-  while (from > 0 && !PIN_SENTENCE_END.test(text[from - 1]!)) from--
-  const after = text.slice(end).search(PIN_SENTENCE_END)
-  return text.slice(from, after < 0 ? text.length : end + after)
+  while (from > floor && !PIN_SENTENCE_END.test(text[from - 1]!)) from--
+  const ahead = text.slice(end, end + PIN_SENTENCE_REACH)
+  const after = ahead.search(PIN_SENTENCE_END)
+  return text.slice(from, end + (after < 0 ? ahead.length : after))
 }
 
 /**

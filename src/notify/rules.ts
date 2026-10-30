@@ -53,8 +53,8 @@ const calendarDaysSince = (then: Date, now: Date): number => {
  * Bratislava), `Still waiting since 3 Nov` from a week on, where a bare weekday would be ambiguous.
  * Counted from `lastChangedAt`, the newest carrier event - for a parcel sitting at a pickup point that
  * is its arrival there, and it is what the dashboard's "Since ..." shows. A day the reader can picture
- * replaced "· day 3", which made them count. Without a known arrival (or a nonsensical one, today or in
- * the future, which the ready-day rule keeps from reaching here anyway) it says no more than "for you".
+ * replaced "· day 3", which made them count. Without a known arrival it says no more than "for you"; an
+ * arrival today or in the future never reaches here, the ready-day rule holds the reminder back then.
  */
 function waitingSince(p: Parcel, now: Date): string {
   if (!p.lastChangedAt) return 'Still waiting for you'
@@ -140,9 +140,10 @@ export function buildNotifications(
       // A parcel left waiting is mentioned again once a day, but not on the day it arrived: the ready
       // banner said it then (a parcel ready at 06:30 would otherwise be "still waiting" at 08:00). Only the
       // newest passed slot can fire, so a machine that was asleep all morning produces one reminder on
-      // waking, not a burst of missed ones.
+      // waking, not a burst of missed ones. An arrival stamped in the future (the carrier's clock ahead of
+      // this Mac's, across midnight) is the ready day too, so it is never "still waiting" before it arrived.
       const waiting = p.status === 'ready_for_pickup'
-      const readyDay = p.lastChangedAt !== undefined && calendarDaysSince(p.lastChangedAt, now) === 0
+      const readyDay = p.lastChangedAt !== undefined && calendarDaysSince(p.lastChangedAt, now) <= 0
       const nudgeDue = waiting && prefs.dailyReminder && !readyDay && dueSlot !== undefined
         && nudged.get(id, dueSlot) === undefined
       // Every slot already passed today is marked, not just the one that fired, and whether or not one

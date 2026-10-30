@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { simpleParser } from 'mailparser'
-import { carrierForAddress, extract, htmlToText, pickupFromMail } from '../src/ingest/extract.js'
+import { carrierForAddress, extract, extractPickupCode, htmlToText, pickupFromMail } from '../src/ingest/extract.js'
 import {
   ARCHIVE_AFTER_DAYS, ingestMessages, reprocessMessages, type IngestDeps,
 } from '../src/ingest/ingest.js'
@@ -209,6 +209,16 @@ describe('extract: hostile mail finishes quickly', () => {
     const subject = `=?utf-8?B?${Buffer.from(text).toString('base64')}?=`
     const { ms } = await timed(eml('a@evil.example', subject, 'hi'))
     expect(ms).toBeLessThan(1000)
+  })
+
+  test('a vetoed pickup PIN repeated on one line with no sentence end', () => {
+    // `runPickupCodes` reads every pickup mail during a poll, and the PIN veto judges the sentence each
+    // candidate stands in. With no full stop and no line break in a mail flattened to one line, that
+    // "sentence" was the whole remaining text, re-read for every one of ~28k candidates: 67 s.
+    const body = 'PIN: 1234 tel '.repeat(28_000)
+    const started = performance.now()
+    expect(extractPickupCode(body)).toBeUndefined()
+    expect(performance.now() - started).toBeLessThan(1000)
   })
 
   test('the bounds keep the words they were written for', async () => {

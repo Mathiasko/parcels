@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest'
 import {
   decideFirstRun, fillPage, plistWorkingDirectory, writeWelcomeConfig,
 } from '../../app/first-run.js'
-import { loadConfig } from '../../src/core/config.js'
+import { CURRENT_FILTER_VERSION, loadConfig } from '../../src/core/config.js'
 
 const mode = (path: string) => statSync(path).mode & 0o777
 const tmp = () => mkdtempSync(join(tmpdir(), 'parcels-first-run-'))
@@ -166,6 +166,8 @@ describe('writeWelcomeConfig', () => {
     delete example.imap
     expect(JSON.parse(readFileSync(h.config, 'utf8'))).toEqual({ ...example, defaultPostalCode: '81101' })
     expect(loadConfig(h.config).defaultPostalCode).toBe('81101')
+    // A fresh install imports today's filter, so it is never asked to "import the filter again".
+    expect(loadConfig(h.config).filterVersion).toBe(CURRENT_FILTER_VERSION)
   })
 
   test('anything but five digits throws and writes nothing', () => {
