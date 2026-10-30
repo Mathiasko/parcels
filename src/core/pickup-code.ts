@@ -139,7 +139,10 @@ function pickupGap(parcel: Parcel): PickupGap {
  *      talking about that same street. Two streets that do not match are two places, and the mail's
  *      postcode would then belong to the other one.
  */
-function fillPickup(carrier: PickupPoint | undefined, mail: MailPickupPoint): PickupPoint | undefined {
+function fillPickup(carrier: PickupPoint | undefined, printed: MailPickupPoint): PickupPoint | undefined {
+  // The mail prints `999 01` and the carriers send `99901`; stored one way, so a parcel's point does
+  // not change spelling with its source.
+  const mail = { ...printed, postalCode: printed.postalCode.replace(/\s/g, '') }
   if (!carrier) {
     return {
       kind: mail.kind,

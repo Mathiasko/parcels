@@ -5,6 +5,8 @@ import { describe, expect, test } from 'vitest'
 import { extract, mailText, pickupFromMail } from '../src/ingest/extract.js'
 import { ingestMessages } from '../src/ingest/ingest.js'
 import { allAdapters } from '../src/carriers/registry.js'
+import { runPickupCodes } from '../src/core/pickup-code.js'
+import { getParcel, insertParcel, updateParcelState } from '../src/db/parcels.js'
 import { fakeImap } from './imap-fake.js'
 import { NOW, memDb } from './poll-helpers.js'
 
@@ -271,5 +273,17 @@ describe('F19: Packeta\'s Czech and English mail name the shop, and the Czech on
 
   test('...but not the FUTURE tense ("kde bude"), a box the parcel has not reached', () => {
     expect(pickupFromMail('Místo, kde bude vaše zásilka uložena\nZ-BOX Testovice, Hlavní 12\nHlavní 12 999 11 Testovice\n')).toBeUndefined()
+  })
+})
+
+describe('F23: a postcode read from mail is stored the way the carriers send theirs', () => {
+  test('Packeta\'s "Hlavná 5 999 01 Testovo" fills the parcel\'s point with postcode 99901', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'packeta', trackingNumber: 'Z2222222201', source: 'manual' })
+    updateParcelState(db, id, { status: 'ready_for_pickup', statusRaw: 'raw' })
+    db.prepare('INSERT INTO messages (message_id, received_at, from_addr, subject, raw_path, parsed_ok, parcel_id) VALUES (?, ?, ?, ?, ?, 1, ?)')
+      .run('<26@fake-mail>', NOW.toISOString(), 'noreply@packeta.sk', 'Zásielka je pripravená', '/mail/26.eml', id)
+    await runPickupCodes({ db, now: NOW, readMail: () => corpus('26-packeta-ready-zbox-code-leading-zero') })
+    expect(getParcel(db, id)?.pickup).toMatchObject({ street: 'Hlavná 5', city: 'Testovo', postalCode: '99901' })
   })
 })
