@@ -375,6 +375,48 @@ describe('extract: no sender hint', () => {
       expect(await extract(eml(shop, 'Odoslané cez DPD', line))).toMatchObject({ confidence: 'none' })
     })
 
+    // A numbered list is a list of parcels only when every label says PARCEL and the number follows the
+    // label directly. "Number", "číslo" and a product "package" also number product, catalogue,
+    // customer and receipt lines, and before ordinals were read those were refused as ambiguous.
+    test.each([
+      ['a numbered product list', 'Potvrdenie objednávky – doprava GLS', 'Product number 1: 1234567890\r\nProduct number 2: 2345678901\r\nProduct number 3: 3456789012'],
+      ['a numbered catalogue list', 'Potvrdenie objednávky – doprava GLS', 'Katalógové číslo 1: 1234567890\r\nKatalógové číslo 2: 2345678901'],
+      ['a numbered customer number list', 'Odoslané cez GLS', 'Zákaznícke číslo 1: 1234567890\r\nZákaznícke číslo 2: 2234567890'],
+      ['a numbered receipt list', 'Payment receipt (GLS delivery)', 'Receipt number 1: 1234567890\r\nReceipt number 2: 2234567890'],
+      ['one numbered customer number', 'Odoslané cez GLS', 'Customer number 1: 1234567890'],
+      ['numbered items with item numbers', 'Order confirmation, shipping by DPD', 'Item 1 - Shimano chain, item number 1: 12345678901234\r\nItem 2 - Brake pads, item number 2: 22345678901234'],
+      ['numbered product packages with an EAN', 'Order confirmation, shipping by GLS', 'Package 1: Starter kit, EAN 123456789012\r\nPackage 2: Pro kit, EAN 223456789012'],
+      ['a numbered "Paket" (a product pack) list', 'Objednávka prijatá, doprava GLS', 'Paket 1: 123456789012\r\nPaket 2: 223456789012'],
+      ['a numbered gift box with a product code', 'Objednávka prijatá',
+        'Doprava: GLS kuriér\r\nPoložky:\r\nBalík 1: darčekové balenie, kód 123456789012\r\nBalík 2: darčekové balenie, kód 223456789012'],
+      // The ordinal must not hide a phone label either; "Tel." ends in a full stop.
+      ['a numbered phone number', 'Odoslané cez GLS', 'Tel. číslo 1: 0212345678'],
+      ['a numbered phone number after the courier', 'Odoslané cez GLS', 'Kuriér – Tel. číslo 1: 0212345678'],
+      ['a numbered contact number', 'Odoslané cez GLS', 'Kontaktné číslo 1: 0212345678'],
+      ['a numbered hotline', 'Odoslané cez GLS', 'Tel.: hotline number 1: 0850123456'],
+      ['a parcel line with a phone label', 'Odoslané cez GLS', 'Tel. pre zásielku 1: 0212345678'],
+      // A number printed in groups joined by -, . or – is not an ordinal and its tail.
+      ['a hyphen-grouped number', 'Odoslané cez GLS', 'Parcel 12-3456789012'],
+      ['a dot-grouped number', 'Odoslané cez GLS', 'Číslo zásielky 12.3456789012'],
+      ['an en-dash-grouped number', 'Odoslané cez GLS', 'Číslo zásielky 12–3456789012'],
+      ['a hyphen-grouped DPD number', 'Odoslané cez DPD', 'Tracking 01-50566666666020'],
+    ])('a numbered label that is not a parcel\'s gives nothing: %s -> none', async (_, subject, body) => {
+      expect(await extract(eml(shop, subject, body))).toMatchObject({ confidence: 'none' })
+    })
+
+    test('"Tracking number 1:" and "Číslo zásielky 1:" number parcels too', async () => {
+      const e = await extract(eml(shop, 'Odoslané cez DPD', 'Tracking number 1: 01505666666605\r\nČíslo zásielky 2: 01505666666606'))
+      expect(e).toMatchObject({ carrier: 'dpd', number: '01505666666605', moreNumbers: ['01505666666606'], confidence: 'shape' })
+    })
+
+    // The subject names the first parcel with a plain label and the body numbers both. Before numbered
+    // labels were read the subject's number was the one parcel; it must not be lost to the mix of labels.
+    test('a number labelled both plainly and in the numbered list is listed', async () => {
+      const e = await extract(eml('Shop <a@shop.example>', 'Your DPD parcel 01505666666605 is on its way',
+        'Parcel 1: 01505666666605\r\nParcel 2: 01505666666606'))
+      expect(e).toMatchObject({ carrier: 'dpd', number: '01505666666605', moreNumbers: ['01505666666606'], confidence: 'shape' })
+    })
+
     test('"GLS" inside another word is not the carrier', async () => {
       // "OGLS" is not GLS, so the carrier-name signal does not fire; the labelled number does.
       expect(await extract(eml(shop, 'Odoslané', 'Angels and OGLS. Číslo balíka: 1234567890')))

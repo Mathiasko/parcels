@@ -206,27 +206,35 @@ function listedAfter(carrier: CarrierId, haystack: string, first: string): strin
  * when the label ends in a colon. GLS prints `Číslo balíka:` in one table cell and the number in the
  * next, so in the text rendering the number always starts the following line.
  */
-const GLS_WORDS = String.raw`parcel|package|tracking|track|number|zásielk\w*|zasielk\w*|balík\w*|balik\w*|číslo|cislo|paket\w*`
-/**
- * A parcel's place in a list, right after its label word: `Parcel 1:`, `Balík č. 1:`, `Parcel #1:`,
- * `Parcel no. 2 -`. One or two digits, and only when the label's own punctuation follows them, so the
- * leading group of a number printed in groups (`Parcel 12 3456789012`) is never read as one.
- */
-const ORDINAL = String.raw`[ \t]*(?:č\.|#|no\.)?[ \t]*\d{1,2}(?=[ \t]*[:.)\-–])`
-/** Whatever may follow the label word before the number: a few words on its line, or a colon and a line break. */
-const LABEL_TAIL = String.raw`(?:[^\n\d]{0,30}|[^\n\d]{0,30}:[ \t]*\r?\n[ \t>]*)$`
-const GLS_LABEL = new RegExp(`(?:${GLS_WORDS})(?:${ORDINAL})?${LABEL_TAIL}`, 'i')
-/** `GLS_LABEL` with the ordinal required: a label that numbers its parcel, so the mail is listing several. */
-const NUMBERED_LABEL = new RegExp(`(?:${GLS_WORDS})${ORDINAL}${LABEL_TAIL}`, 'i')
-/** A label word with its ordinal, to drop the ordinal from a label before its words are judged. */
-const ORDINAL_IN_LABEL = new RegExp(`(${GLS_WORDS})${ORDINAL}`, 'gi')
+const GLS_LABEL = /(?:parcel|package|tracking|track|number|zásielk\w*|zasielk\w*|balík\w*|balik\w*|číslo|cislo|paket\w*)(?:[^\n\d]{0,30}|[^\n\d]{0,30}:[ \t]*\r?\n[ \t>]*)$/i
 /**
  * `GLS_LABEL` without the bare "number" words (`číslo`, `number`): a label that says PARCEL. For the
  * evidence test with no carrier named, where `Katalógové číslo produktu 123456789012` in a newsletter
  * must not read as a parcel number - beside a named carrier, a bare `Sledovacie číslo:` still does.
  */
-const PARCEL_LABEL = new RegExp(
-  String.raw`(?:parcel|package|tracking|track|zásielk\w*|zasielk\w*|z[áa]silk\w*|balík\w*|balik\w*|paket\w*|sledovac\w*)(?:${ORDINAL})?${LABEL_TAIL}`, 'i')
+const PARCEL_LABEL = /(?:parcel|package|tracking|track|zásielk\w*|zasielk\w*|z[áa]silk\w*|balík\w*|balik\w*|paket\w*|sledovac\w*)(?:[^\n\d]{0,30}|[^\n\d]{0,30}:[ \t]*\r?\n[ \t>]*)$/i
+/**
+ * A parcel's place in a list: `1:`, `č. 1:`, `#1:`, `no. 2 -`. One or two digits and the label's own
+ * punctuation, so neither the leading group of a number printed in groups (`Parcel 12 3456789012`,
+ * `Parcel 12-3456789012`) nor a three-digit "ordinal" is read as one.
+ */
+const ORDINAL = String.raw`[ \t]*(?:č\.|#|no\.)?[ \t]*\d{1,2}[ \t]*[:.)\-–]`
+/**
+ * A label that numbers its PARCEL, so the mail is listing several: `Parcel 1:`, `Balík č. 1:`,
+ * `Tracking number 1:`, `Číslo zásielky 2:`. Only a word that says parcel may carry the ordinal, never a
+ * bare `number` / `číslo` (product, catalogue, customer and receipt numbers are numbered too) nor
+ * `package` / `paket` (a product pack). The number follows the ordinal at once, after a space or on
+ * the next line: `Balík 1: darčekové balenie, kód 123456789012` numbers a gift box, not a parcel.
+ */
+const NUMBERED_LABEL = new RegExp(String.raw`(?:parcel|tracking|zásielk\w*|zasielk\w*|z[áa]silk\w*|balík\w*|balik\w*|sledovac\w*)`
+  + String.raw`(?:[ \t]+(?:number|číslo|cislo))?${ORDINAL}(?:[ \t]+|[ \t]*\r?\n[ \t>]*)$`, 'i')
+/** A label's ordinal at the end of the text before its number, to drop it before the label's words are judged. */
+const ORDINAL_AT_END = new RegExp(String.raw`${ORDINAL}[ \t]*(?:\r?\n[ \t>]*)?$`, 'i')
+/**
+ * Where the sentence a label stands in begins: after a full stop, `!`, `?`, a line break or a digit. Not
+ * after the full stop of `Tel.`, `č.` or `No.`, which would cut the very word that says what the number is.
+ */
+const SENTENCE_BREAK = /(?<!(?<!\p{L})(?:tel|fax|mob|č|no|nr))\.|[!?\n\d]/iu
 const PHONE_LABEL = /(?:tel\w*|phone|mobil\w*|call|fax|zavolajte|volajte|\+)[^\n\d]{0,15}$/i
 // 10 digits is also the length of a Slovak national-format mobile number (0900123456).
 const PHONE_PREFIX = /^(?:42[01]|00421|00420|09\d{8}$)/
@@ -241,7 +249,7 @@ function glsNumber(haystack: string): string | undefined {
   const candidates = [...haystack.matchAll(NUMBER.gls)].filter(m => !isPlaceholder(m[0])).map(m => {
     const before = haystack.slice(Math.max(0, m.index - 50), m.index)
     const phone = PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0])
-    return { number: m[0], rank: GLS_LABEL.test(before) && !phone ? 0 : phone ? 2 : 1 }
+    return { number: m[0], rank: (GLS_LABEL.test(before) || NUMBERED_LABEL.test(before)) && !phone ? 0 : phone ? 2 : 1 }
   })
   const best = candidates.sort((a, b) => a.rank - b.rank)[0]   // stable: ties keep text order
   return best && normalizeNumber(best.number)
@@ -254,31 +262,38 @@ const STANDALONE = {
   dhl: /(?<![\p{L}\d])000\d{13,25}(?![\p{L}\d])/gu,
 } as const
 
-/** Words that mark a number as something other than a tracking number (the shop's own, an invoice, a phone). */
-const NOT_TRACKING = /objedn|order|fakt[uú]r|invoice|variabil|referenc|tel\b|telef|phone|mobil|ičo|dič|iban/i
+/**
+ * Words that mark a number as something other than a tracking number: the shop's own (an order, a
+ * product, an item, a catalogue or customer number, an EAN or a product code), an invoice, a receipt,
+ * an account, a phone.
+ */
+const NOT_TRACKING = /objedn|order|fakt[uú]r|invoice|variabil|referenc|tel\b|telef|phone|mobil|ičo|dič|iban|\bean\b|k[óo]d\b|produkt[uo]?\b|product\b|\bitem\b|katal|z[áa]kazn|customer|receipt|[úu]č(?:et|t)/i
 
 /**
  * The tracking number a non-carrier mail prints for a bare-digit carrier (gls, dpd), or undefined.
  * Stricter than `firstNumber`, because here nothing but the text vouches for the carrier: the number
  * must be introduced by a "parcel number" style label (never by an order/phone/invoice one), must not
  * be cut out of a longer alphanumeric token (a URL id, a message id), and must not look like a phone.
- * Two different such numbers are ambiguous, which is refused rather than guessed - unless every one
- * of them has a numbered label (`Parcel 1:` / `Parcel 2:`): then the mail is listing its parcels, and
- * all of them are returned in text order, at most `MAX_NUMBERS`.
+ * Two different such numbers are ambiguous, which is refused rather than guessed - unless each one
+ * has a numbered label somewhere (`Parcel 1:` / `Parcel 2:`, `NUMBERED_LABEL`): then the mail is
+ * listing its parcels, and all of them are returned in text order, at most `MAX_NUMBERS`.
  */
 function labelledNumbers(carrier: keyof typeof STANDALONE, haystack: string, label = GLS_LABEL): string[] {
-  // Each number, and whether every label that introduced it was a numbered one.
+  // Each number, and whether any label that introduced it was a numbered one.
   const found = new Map<string, boolean>()
   for (const m of haystack.matchAll(STANDALONE[carrier])) {
     const before = haystack.slice(Math.max(0, m.index - 50), m.index)
+    const numbered = NUMBERED_LABEL.test(before)
     // The label may sit on the line above (`Číslo objednávky:` / number), so it is the label's own
     // line that the NOT_TRACKING words are looked for in, not the empty start of the number's line.
     // The sentence starts after the last digit, so a label's own ordinal is dropped first: otherwise
-    // the "1" of `Order number 1:` would cut "Order" off and let an order number through.
-    const sentence = before.replace(/:[ \t]*\r?\n[ \t>]*$/, ': ').replace(ORDINAL_IN_LABEL, '$1').split(/[.!?\n\d]/).pop() ?? ''
-    if (!label.test(before) || PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0]) || NOT_TRACKING.test(sentence) || isPlaceholder(m[0])) continue
+    // the "1" of `Order number 1:` would cut "Order" off and let an order number through, and the "1"
+    // of `Tel. číslo 1:` would hide the phone label.
+    const own = before.replace(ORDINAL_AT_END, ': ').replace(/:[ \t]*\r?\n[ \t>]*$/, ': ')
+    const sentence = own.split(SENTENCE_BREAK).pop() ?? ''
+    if (!(numbered || label.test(before)) || PHONE_LABEL.test(own) || PHONE_PREFIX.test(m[0]) || NOT_TRACKING.test(sentence) || isPlaceholder(m[0])) continue
     const n = normalizeNumber(m[0])
-    found.set(n, (found.get(n) ?? true) && NUMBERED_LABEL.test(before))
+    found.set(n, (found.get(n) ?? false) || numbered)
   }
   if (found.size <= 1) return [...found.keys()]
   return found.size <= MAX_NUMBERS && [...found.values()].every(Boolean) ? [...found.keys()] : []
