@@ -1,7 +1,8 @@
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, test } from 'vitest'
+import { Settings } from 'luxon'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { buildServer, type WebDeps } from '../src/web/server.js'
 import type { Database } from '../src/db/index.js'
 import type { ImapProbeLike } from '../src/ingest/imap-probe.js'
@@ -213,6 +214,13 @@ describe('the settings page speaks to the person setting up Gmail', () => {
 })
 
 describe('saving runs the connection test', () => {
+  // `nextSlot` works in the machine's zone (the poller fires at the Mac's local times) while the page
+  // renders in Europe/Bratislava; the expected times below are for a Mac in Bratislava, so the zone
+  // luxon treats as "the system's" is pinned here instead of depending on where the tests run.
+  const zone = Settings.defaultZone
+  beforeAll(() => { Settings.defaultZone = 'Europe/Bratislava' })
+  afterAll(() => { Settings.defaultZone = zone })
+
   test('a save that changed the mail settings is tested at once, and the answer is on the page it lands on', async () => {
     const h = harness({}, fakeImap([], { exists: 7 }))
     const res = await h.post('/settings', fields({ imapMailbox: 'zasielky' }))
@@ -251,12 +259,12 @@ describe('saving runs the connection test', () => {
     expect(again).not.toContain('Your parcels appear at the next check')
   })
 
-  test('an empty label after a save says the time too', async () => {
+  test('an empty label after a save does not promise parcels', async () => {
     const h = harness({}, fakeImap([], { exists: 0 }), { now: () => new Date('2026-10-26T14:20:00+01:00') })
     const res = await h.post('/settings', fields({ imapMailbox: 'zasielky' }))
     const page = (await h.get(String(res.headers.location))).body
     expect(page).toContain('Connected, nothing to read')
-    expect(page).toContain('Your parcels appear at the next check (15:00) — or press Refresh now.')
+    expect(page).not.toContain('Your parcels appear at the next check')
   })
 
   test('a save that touched no mail setting does not dial the mail server', async () => {

@@ -154,10 +154,11 @@ const nextCheckLine = (n: { at: Date; now: Date } | undefined): Html => {
  * because every one of these failures is otherwise silent: a wrong password shows up three polls
  * later on /health, and a label that is not ticked "Show in IMAP" is indistinguishable from no mail.
  *
- * Right after a save, both `ok` answers (connected, and connected but the label is empty) also say when
- * the next check is, in the same words as the dashboard's schedule: nobody who has just finished ten
- * minutes of setup should be left wondering whether to wait or to press something. The time is today's
- * or "tomorrow", never a date, because the next slot is never further away than that.
+ * Right after a save, the "Connected" answer (the label has mail) also says when the next check is, in
+ * the same words as the dashboard's schedule: nobody who has just finished ten minutes of setup should
+ * be left wondering whether to wait or to press something. The empty-label answer does not: it says
+ * nothing is there to become a parcel yet, and a promise of parcels would contradict it. The time is
+ * today's or "tomorrow", never a date, because the next slot is never further away than that.
  */
 function testResult(r: ImapProbeResult, next?: { at: Date; now: Date }): Html {
   switch (r.kind) {
@@ -169,13 +170,10 @@ function testResult(r: ImapProbeResult, next?: { at: Date; now: Date }): Html {
       return r.messages === 0
         ? notice('neutral', html`<p class="st t-3">${glyph('pre_transit')}Connected, nothing to read</p>
 <p><strong>${r.user}</strong> — the label <strong>${r.mailbox}</strong> exists, and it is empty.</p>
-${nextCheckLine(next)}
 <p class="meta">The connection, the password and the label are all fine, so this is not a fault: a Gmail filter that matches nothing looks exactly like this. Check that the filter's action is <strong>Apply the label: ${r.mailbox}</strong>, and that <strong>Apply new filters to existing email</strong> was ticked when you imported it (<strong>Also apply filter to matching conversations</strong>, on a filter made by hand), which is what fills the label with mail you already have.</p>`, true)
         : notice('neutral', html`<p class="st t-ok">${glyph('delivered')}Connected</p>
 <p><strong>${r.user}</strong> — the label <strong>${r.mailbox}</strong> has <strong>${r.messages}</strong> ${r.messages === 1 ? 'message' : 'messages'}.</p>
-${next
-  ? html`<p class="meta">Signed in, the label is visible, and its emails can be read. Everything is in place.</p>${nextCheckLine(next)}`
-  : html`<p class="meta">Signed in, the label is visible, and its emails can be read. Everything is in place: new shipping emails become parcels at the next hourly check.</p>`}`, true)
+<p class="meta">Signed in, the label is visible, and its emails can be read. Everything is in place${next ? '.' : ': new shipping emails become parcels at the next hourly check.'}</p>${nextCheckLine(next)}`, true)
 
     case 'auth':
       return notice('warn', html`<p><strong>Authentication failed for ${r.user}.</strong></p>
