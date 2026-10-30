@@ -8,7 +8,8 @@
 # The app runs with HOME set to a new temporary folder that holds a minimal config on a free port, and
 # with PARCELS_SMOKE=1, which makes main.ts skip the login item, the offer to move to Applications and
 # the window. Everything it writes (config, database, logs, Chromium's state) lands in that folder.
-# The script then:
+# Before it starts the app, it checks the bundle's Contents/Resources: the certificate hash, the Gmail
+# filter, and the stamp icon (icon.icns, the bytes of build/icon.icns, named in Info.plist). The script then:
 #   1. waits up to 30 s for http://127.0.0.1:<port>/health to answer;
 #   2. checks that the port is held by one of the app's own child processes (the server runs as a
 #      utility process whose command line does not name app-server.js, so it is found by its port);
@@ -66,6 +67,13 @@ resources="$app/Contents/Resources"
 cmp -s "$resources/signing-cert.sha256" "$ROOT/app/signing-cert.sha256" \
   || fail "$resources/signing-cert.sha256 is missing or differs from app/signing-cert.sha256; the app would refuse every update"
 [ -f "$resources/gmail-filter.xml" ] || fail "$resources/gmail-filter.xml is missing"
+# The stamp icon: electron-builder copies mac.icon to icon.icns and names it in Info.plist, in place of
+# Electron's electron.icns.
+cmp -s "$resources/icon.icns" "$ROOT/build/icon.icns" \
+  || fail "$resources/icon.icns is missing or differs from build/icon.icns; the app would show Electron's icon"
+[ "$(/usr/bin/plutil -extract CFBundleIconFile raw -o - "$app/Contents/Info.plist" 2>/dev/null)" = icon.icns ] \
+  || fail "$app/Contents/Info.plist does not name icon.icns as CFBundleIconFile"
+echo "smoke: the stamp icon is Contents/Resources/icon.icns, as committed in build/icon.icns"
 
 # --- the real Library, before ---------------------------------------------------------------------
 # From the user database, not $HOME: the point is the real one whatever this shell's HOME says.

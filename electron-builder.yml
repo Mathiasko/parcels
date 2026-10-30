@@ -65,6 +65,11 @@ mac:
       arch: [arm64, x64]
     - target: dmg
       arch: [arm64, x64]
+  # The Postal stamp on a blue tile, made by scripts/app/make-app-icon.mjs and committed. electron-builder
+  # copies it to Contents/Resources/icon.icns (CFBundleIconFile), in place of Electron's electron.icns;
+  # smoke.sh and build-release.sh check it is there and is this file. build/ is the default
+  # buildResources folder, and only the icon is read from it: files: does not carry it into app.asar.
+  icon: build/icon.icns
   # Signed by after-pack.mjs, not here: electron-builder will not sign with an untrusted identity.
   identity: null
   hardenedRuntime: false

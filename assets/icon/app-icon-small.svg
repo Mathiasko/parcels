@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Parcels' app icon at 16 and 32 px, where app-icon.svg's thirty perforations and drawn parcel
+       turn to mush. The same stamp on the same blue tile and macOS grid, drawn for few pixels: upright
+       (the tilt only blurs every edge), every edge on the 16 px pixel grid (64 units; so on the 32 px
+       grid too), a 1 px cream border with a few big bites, the parcel reduced to a box with its tape,
+       and a thicker postmark ring. scripts/app/make-app-icon.mjs picks this file for those sizes. -->
+  <defs>
+    <filter id="tile-shadow" x="-10%" y="-10%" width="120%" height="125%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="11" flood-color="#000" flood-opacity=".32"/>
+    </filter>
+    <!-- Bites centred on the stamp's edge, on 16 px pixel centres and placed symmetrically: two along
+         the top and bottom, four down each side. -->
+    <mask id="m-icon-small" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <g fill="#000">
+        <circle cx="416" cy="192" r="40"/><circle cx="608" cy="192" r="40"/>
+        <circle cx="416" cy="832" r="40"/><circle cx="608" cy="832" r="40"/>
+        <circle cx="256" cy="288" r="40"/><circle cx="256" cy="416" r="40"/><circle cx="256" cy="608" r="40"/><circle cx="256" cy="736" r="40"/>
+        <circle cx="768" cy="288" r="40"/><circle cx="768" cy="416" r="40"/><circle cx="768" cy="608" r="40"/><circle cx="768" cy="736" r="40"/>
+      </g>
+    </mask>
+  </defs>
+
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#23468c" filter="url(#tile-shadow)"/>
+
+  <!-- The stamp: 8 x 10 px at 16 px. -->
+  <rect x="256" y="192" width="512" height="640" fill="#fbf6ea" mask="url(#m-icon-small)"/>
+  <rect x="320" y="256" width="384" height="512" fill="#f6c21c"/>
+  <!-- The parcel, as a box with a lighter lid and its tape. -->
+  <rect x="384" y="384" width="256" height="192" fill="#c78a3c"/>
+  <rect x="384" y="384" width="256" height="64" fill="#e0a95a"/>
+  <rect x="480" y="384" width="64" height="192" fill="#1d2433"/>
+
+  <!-- The postmark: a thicker ring, and its wave. -->
+  <g fill="none" stroke="#b3261e" stroke-width="52" stroke-linecap="round">
+    <circle cx="704" cy="688" r="152"/>
+    <path d="M576 866q60-32 120 0t120 0" stroke-width="44"/>
+  </g>
+</svg>

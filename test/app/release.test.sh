@@ -202,12 +202,15 @@ check "  with the notes file"                         called yes "--notes-file $
 check "  tagging only after the build"                bash -c "grep -n 'build-release\|git tag' '$TMP/yes.calls' | head -1 | grep -q build-release"
 
 # --- build-release.sh's check_app, on its own ---------------------------------------------------------
-# The function is lifted out of build-release.sh as it is and run against two fake bundles: one whose
+# The function is lifted out of build-release.sh as it is and run against fake bundles: one whose
 # package.json is a release build's, one whose names `parcelsDevReleases` (a test build, ruling R16).
 # codesign is a stub that "extracts" a leaf whose hash is the one wanted, and the fuse check (the one
 # `node -e`) is answered by a stub too, so the test-build check is what decides. check-fonts.mjs is a
 # stub as well (its own test, test/app/check-fonts.test.ts, reads real asars): it fails for the bundle
-# named "nofonts", so the test shows check_app refuses an app without the theme fonts.
+# named "nofonts", so the test shows check_app refuses an app without the theme fonts. Every bundle
+# carries the committed build/icon.icns as Contents/Resources/icon.icns, named in its Info.plist, as
+# electron-builder's would, except "noicon" (Electron's electron.icns only), "othericon" (an icon.icns
+# that is not the committed one) and "noplist" (the icon, but Info.plist still names electron.icns).
 CA="$TMP/check-app"
 mkdir -p "$CA/bin"
 echo "a leaf certificate" > "$CA/leaf"
@@ -226,9 +229,26 @@ case "\$1" in */check-fonts.mjs) case "\$2" in */nofonts/*) echo "app.asar is mi
 exec "$REAL_NODE" "\$@"
 STUB
 chmod +x "$CA/bin/codesign" "$CA/node"
-for kind in release test nofonts; do mkdir -p "$CA/$kind/Parcels.app/Contents/Resources/app"; done
-echo '{"name":"parcels","version":"0.9.0"}' > "$CA/release/Parcels.app/Contents/Resources/app/package.json"
-cp "$CA/release/Parcels.app/Contents/Resources/app/package.json" "$CA/nofonts/Parcels.app/Contents/Resources/app/package.json"
+info_plist() { # info_plist <bundle> <CFBundleIconFile>
+  cat > "$1/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>CFBundleExecutable</key><string>Parcels</string><key>CFBundleIconFile</key><string>$2</string></dict></plist>
+PLIST
+}
+for kind in release test nofonts noicon othericon noplist; do
+  b="$CA/$kind/Parcels.app"
+  mkdir -p "$b/Contents/Resources/app"
+  echo '{"name":"parcels","version":"0.9.0"}' > "$b/Contents/Resources/app/package.json"
+  case "$kind" in
+    noicon) cp "$ROOT/node_modules/electron/dist/Electron.app/Contents/Resources/electron.icns" "$b/Contents/Resources/electron.icns"
+            info_plist "$b" electron.icns ;;
+    othericon) cp "$ROOT/node_modules/electron/dist/Electron.app/Contents/Resources/electron.icns" "$b/Contents/Resources/icon.icns"
+               info_plist "$b" icon.icns ;;
+    noplist) cp "$ROOT/build/icon.icns" "$b/Contents/Resources/icon.icns"; info_plist "$b" electron.icns ;;
+    *) cp "$ROOT/build/icon.icns" "$b/Contents/Resources/icon.icns"; info_plist "$b" icon.icns ;;
+  esac
+done
 echo '{"name":"parcels","version":"0.9.0","parcelsDevReleases":true}' > "$CA/test/Parcels.app/Contents/Resources/app/package.json"
 sed -n '/^check_app() {/,/^}/p' "$ROOT/scripts/app/build-release.sh" > "$CA/check_app.sh"
 run_check_app() { # run_check_app <bundle>
@@ -244,5 +264,14 @@ check "  saying it is a test build"              grep -q 'this is a test build, 
 out="$(run_check_app "$CA/nofonts/Parcels.app" 2>&1)"; rc=$?
 check "check_app refuses an app without the fonts" test "$rc" -ne 0
 check "  saying the fonts are not in app.asar"   grep -q 'the theme fonts are not in its app.asar' <<<"$out"
+out="$(run_check_app "$CA/noicon/Parcels.app" 2>&1)"; rc=$?
+check "check_app refuses an app with Electron's icon" test "$rc" -ne 0
+check "  saying icon.icns is not build/icon.icns" grep -q 'Contents/Resources/icon.icns is missing or is not build/icon.icns' <<<"$out"
+out="$(run_check_app "$CA/othericon/Parcels.app" 2>&1)"; rc=$?
+check "check_app refuses an icon.icns that is not the committed one" test "$rc" -ne 0
+check "  saying so"                               grep -q 'Contents/Resources/icon.icns is missing or is not build/icon.icns' <<<"$out"
+out="$(run_check_app "$CA/noplist/Parcels.app" 2>&1)"; rc=$?
+check "check_app refuses an Info.plist that names another icon" test "$rc" -ne 0
+check "  saying CFBundleIconFile is not icon.icns" grep -q 'does not name icon.icns as CFBundleIconFile' <<<"$out"
 
 exit "$fail"
