@@ -5,7 +5,7 @@
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildEml, encodeWords, s10 } from './mime.mjs'
-import { dhl, dpd, gls, htmlShell, packeta, posta, shopDispatch, spaced, sps } from './templates.mjs'
+import { dhl, dpd, gls, htmlShell, packeta, posta, ppl, shopDispatch, spaced, sps, zasilkovna } from './templates.mjs'
 
 const OUT = 'test/fixtures/fake-mail'
 mkdirSync(OUT, { recursive: true })
@@ -29,6 +29,13 @@ const GLS_BOX = { name: 'GLS BOX Testovo - Lidl (Nová 8)', street: 'Nová 8', z
 const POSTA_OFFICE = { name: 'Pošta Testovo 1', street: 'Poštová 1', zip: '999 01', city: 'Testovo' }
 const BALIKOBOX = { name: 'BalíkoBOX Testovo – OD Prior', street: 'Hlavná 3', zip: '999 01', city: 'Testovo' }
 
+const PPL = n => `408888888${String(n).padStart(2, '0')}`  // 11 digits (also GLS's shape)
+const PPL_SHOP = { name: 'PPL Parcelshop Testovice', street: 'Hlavní 1', zip: '999 11', city: 'Testovice' }
+
+const ZBOX_CZ = { name: 'Z-BOX Testovice, Nádražní 3 (Penny)', street: 'Nádražní 3', zip: '999 11', city: 'Testovice' }
+
+const PPL_FROM = 'PPL CZ <noreply@ppl.cz>'
+const ZASILKOVNA_FROM = 'Zásilkovna <noreply@zasilkovna.cz>'
 const PACKETA_FROM = 'Packeta Slovakia <noreply@packeta.sk>'
 const DPD_FROM = '"DPD" <no_reply@dpd.sk>'
 const GLS_FROM = 'noreply@gls-slovakia.sk'
@@ -166,7 +173,7 @@ add('20-gls-ready-glsbox-pin.eml', {
   from: GLS_FROM, date: '2026-10-18 11:00',
   subject: `Balík ${GLS(1)} je pripravený k vyzdvihnutiu`, messageId: mid('2026-10-18 11:00', `${GLS(1)}-ready`, 'gls-slovakia.sk'),
   html: gls({ kind: 'ready', number: GLS(1), sender: 'Hračkáreň Kocúrik', pin: '402211', deadline: '25. 10. 2026', point: GLS_BOX }),
-}, { exercises: 'P7 2/4: GLS BOX ready, PIN, "Odberné miesto:" block (carrier answer has no pickup -> mail fills it)', expect: { parcel: `gls:${GLS(1)}` } })
+}, { exercises: 'P7 2/4: GLS BOX ready, PIN, "Odberné miesto:" block (carrier answer has no pickup -> mail fills it)', expect: { parcel: `gls:${GLS(1)}`, code: '402211' } })
 
 pk('21-packeta-accepted-cod-pickup-point.eml', '2026-10-18 13:00', 'Zásielka bola prijatá do prepravy',
   { kind: 'accepted', number: Z(2), sender: 'Móda Lucia', place: PP_MISKA, cod: '34,90 €' },
@@ -209,7 +216,7 @@ add('28-sps-balikovo-cp1250-base64.eml', {
   subject: `Zasielka v odbernom mieste balikovo: ${SPS1}`, messageId: mid('2026-10-20 15:00', SPS1, 'sps-sro.sk'),
   charset: 'windows-1250', encoding: 'base64',
   ...sps(`vaša zásielka cislo ${SPS1} od elektrosvet.example.sk je pripravená na vyzdvihnutie v odbernom mieste BALÍKOVO Testovo (OC Fiktív) - Trafika U Ľuba, Hlavná 7, Testovo (https://www.sps-sro.sk/) do 23.10.2026 18:00. Verifikačný kód: 551902.`),
-}, { exercises: 'SPS ready at balíkovo, windows-1250 base64, verification code 551902', expect: { parcel: `sps:${SPS1}` } })
+}, { exercises: 'SPS ready at balíkovo, windows-1250 base64, verification code 551902', expect: { parcel: `sps:${SPS1}`, code: '551902' } })
 
 add('29-gmail-forwarded-dpd.eml', {
   from: 'Peter Testový <peter.testovy@example.com>', date: '2026-10-21 08:30',
@@ -290,13 +297,13 @@ add('43-dpd-pickup-station-ready-pin.eml', {
   from: DPD_FROM, date: '2026-10-24 09:00',
   subject: 'Informácia o uložení zásielky v samoobslužnom boxe Pickup Station', messageId: mid('2026-10-24 09:00', `${DPD(2)}-ps`, 'dpd.sk'),
   html: dpd({ kind: 'station', number: DPD(2), sender: 'Najlepšie hračky, hry a potreby pre deti, záhradu, dielňu a domácnosť – oficiálny e-shop s.r.o. # OBJ-2026-000045871', station: DPD_STATION, pin: '120477', deadline: '27.10.2026' }), htmlEncoding: 'base64',
-}, { exercises: 'P5 2/4: DPD Pickup Station ready, PIN 120477, address block', expect: { parcel: `dpd:${DPD(2)}` } })
+}, { exercises: 'P5 2/4: DPD Pickup Station ready, PIN 120477, address block', expect: { parcel: `dpd:${DPD(2)}`, code: '120477' } })
 
 add('44-posta-balikobox-pin.eml', {
   from: POSTA_FROM, date: '2026-10-24 10:00', subject: `Zásielka ${EB(2)} je uložená v BalíkoBOXe`,
   messageId: mid('2026-10-24 10:00', EB(2), 'posta.sk'),
   ...posta({ lead: 'Vaša zásielka bola uložená v BalíkoBOXe. Vyzdvihnite si ju do 3 dní.', number: EB(2), office: BALIKOBOX, deadline: '27.10.2026 23:59', pin: '631285' }),
-}, { exercises: 'Slovenská pošta BalíkoBOX with PIN; deadline that will PASS before the end of the run', expect: { parcel: `posta:${EB(2)}` } })
+}, { exercises: 'Slovenská pošta BalíkoBOX with PIN; deadline that will PASS before the end of the run', expect: { parcel: `posta:${EB(2)}`, code: '631285' } })
 
 add('45-dpd-two-parcels-one-mail.eml', {
   from: DPD_FROM, date: '2026-10-24 12:00',
@@ -490,6 +497,50 @@ const twenty = mails.find(m => m.file.startsWith('20-'))
 add('77-gls-ready-duplicate-same-message-id.eml', twenty.spec,
   { exercises: 'exact duplicate of mail 20 (same Message-ID) arriving later at a new UID', expect: { parcel: `gls:${GLS(1)}`, duplicateOf: '20' }, arrival: '2026-10-25 11:05', copyOf: twenty.file })
 
+// CZ Zásilkovna lifecycle (Z(15)): accepted -> ready in a Z-BOX (code 305118) -> picked up; Z(16) is a second parcel that
+// is never collected and goes back to the sender (a returned parcel was never "picked up", so it needs its own number).
+const zk = (file, date, subject, args, meta, extra = {}) => add(file, {
+  from: ZASILKOVNA_FROM, date, subject, messageId: mid(date, `${args.number}-${args.kind}`, 'zasilkovna.cz'), ...zasilkovna(args), ...extra,
+}, meta)
+
+zk('78-zasilkovna-cz-accepted.eml', '2026-10-24 10:00', 'Zásilka byla podána',
+  { kind: 'accepted', number: Z(15), sender: 'Papírnictví Vzorové', place: ZBOX_CZ },
+  { exercises: 'CZ Zásilkovna 1/3: accepted ("byla podána"), FUTURE-tense box block ("kde bude")', expect: { parcel: `packeta:${Z(15)}` } })
+zk('79-zasilkovna-cz-ready-zbox-code.eml', '2026-10-26 14:00', 'Zásilka je připravena k vyzvednutí',
+  { kind: 'ready', number: Z(15), sender: 'Papírnictví Vzorové', place: ZBOX_CZ, code: '305118', deadline: '29.10.2026' },
+  { exercises: 'CZ Zásilkovna 2/3: ready in a Z-BOX; "Kód pro otevření schránky" (305118), present-tense "Místo, kde je..." block, ISO-8859-2 QP', expect: { parcel: `packeta:${Z(15)}`, code: '305118' } },
+  { charset: 'iso-8859-2', encoding: 'quoted-printable', subjectCharset: 'iso-8859-2', subjectEnc: 'Q' })
+zk('80-zasilkovna-cz-pickedup.eml', '2026-10-28 16:00', 'Zásilka byla vyzvednuta',
+  { kind: 'pickedup', number: Z(15), sender: 'Papírnictví Vzorové' },
+  { exercises: 'CZ Zásilkovna 3/3: picked up ("vyzvednuta")', expect: { parcel: `packeta:${Z(15)}` } })
+zk('81-zasilkovna-cz-returning.eml', '2026-10-29 09:00', 'Zásilku vracíme odesílateli',
+  { kind: 'returning', number: Z(16), sender: 'Cyklo Fiktivní s.r.o.' },
+  { exercises: 'CZ Zásilkovna, a second parcel not collected in time: "vracíme odesílateli"', expect: { parcel: `packeta:${Z(16)}` } })
+
+// PPL (PPL(1) 40888888801: accepted -> ready at a ParcelShop with a PIN -> collected in the world; PPL(2) is a shop
+// dispatch that names PPL beside a labelled number; PPL(3) is a stranger's mail with a labelled 11-digit number and
+// no carrier named). The number's shape is also GLS's, so only a ppl.cz sender or PPL named beside it makes it PPL.
+add('82-ppl-accepted.eml', {
+  from: PPL_FROM, date: '2026-10-27 10:00', subject: `Zásilka ${PPL(1)} je na cestě`,
+  messageId: mid('2026-10-27 10:00', `${PPL(1)}-acc`, 'ppl.cz'),
+  ...ppl({ kind: 'accepted', number: PPL(1), sender: 'Hobby Dům Vzorový' }),
+}, { exercises: 'PPL 1/2: from ppl.cz, 11 bare digits under "Číslo zásilky:" (GLS\'s shape, PPL by sender)', expect: { parcel: `ppl:${PPL(1)}` } })
+add('83-ppl-ready-parcelshop-pin.eml', {
+  from: PPL_FROM, date: '2026-10-28 14:00', subject: 'Zásilka je připravena k vyzvednutí v PPL Parcelshop',
+  messageId: mid('2026-10-28 14:00', `${PPL(1)}-rdy`, 'ppl.cz'),
+  ...ppl({ kind: 'ready', number: PPL(1), sender: 'Hobby Dům Vzorový', place: PPL_SHOP, pin: '402211', deadline: '04.11.2026' }),
+}, { exercises: 'PPL 2/2: ready at a ParcelShop; "PIN pro vyzvednutí:" (402211), pickup block under the Zásilkovna-style "Místo, kde je vaše zásilka uložena" label', expect: { parcel: `ppl:${PPL(1)}`, code: '402211' } })
+add('84-eshop-cz-dispatch-names-ppl.eml', {
+  from: 'Cyklo Fiktivní <objednavky@cyklofiktivni.example.cz>', date: '2026-10-29 11:00',
+  subject: 'Objednávka č. 2026102904 byla odeslána', messageId: mid('2026-10-29 11:00', 'ship-2026102904', 'cyklofiktivni.example.cz'),
+  text: `Dobrý den,\n\nvaše objednávka č. 2026102904 byla právě odeslána.\nDopravce: PPL\nČíslo zásilky: ${PPL(2)}\n\nObsah zásilky:\n - Sada řetězových článků\n\nDěkujeme za nákup!\nTým Cyklo Fiktivní\n`,
+}, { exercises: 'Czech e-shop dispatch: "Dopravce: PPL" on the line above a labelled 11-digit number -> PPL by the shop naming it beside the number', expect: { parcel: `ppl:${PPL(2)}` } })
+add('85-eshop-cz-11-digit-no-carrier.eml', {
+  from: 'Dílna Vzorová <info@dilnavzorova.example.cz>', date: '2026-10-29 17:00',
+  subject: 'Potvrzení objednávky č. 2026102911', messageId: mid('2026-10-29 17:00', 'conf-2026102911', 'dilnavzorova.example.cz'),
+  text: `Dobrý den,\n\nděkujeme za vaši objednávku č. 2026102911. Zboží vám pošleme kurýrem.\nČíslo zásilky: ${PPL(3)}\n\nDílna Vzorová s.r.o.\n`,
+}, { exercises: 'a stranger\'s mail with a labelled 11-digit number and no carrier named: never a PPL parcel (11 digits alone is no evidence); the extractor sends it to /attention ("something shaped like a tracking number") rather than guessing GLS or PPL', expect: { attention: true } })
+
 // ---- write ----
 const corpus = []
 const built = new Map()
@@ -504,7 +555,7 @@ const exp = e => e.parcels ? `parcels ${e.parcels.join(' + ')}` : e.parcel ? `pa
 writeFileSync(join(OUT, 'MANIFEST.md'), `# Fake parcel-mail corpus
 
 ${corpus.length} synthetic messages: every name, address, phone, order and tracking number is invented. Numbers
-have each carrier's real shape so they parse (Packeta \`Z22222222NN\`, DPD \`015053333333NN\`, GLS \`904444444NN\`,
+have each carrier's real shape so they parse (Packeta \`Z22222222NN\`, DPD \`015053333333NN\`, GLS \`904444444NN\`, PPL \`408888888NN\`,
 SPS \`SK0FAKE26TEST0000N\` / \`7035555555555501\`, Slovenská pošta \`EB666666NN?SK\` with a correct S10 check digit
 unless stated, DHL \`JJD0007…\`, \`JVGL07…\`, \`0007…\`). Non-carrier senders use example.com / example.sk; carrier
 domains appear only in From headers. Generated by \`scripts/dev/fake-mail/generate-corpus.mjs\`; templates follow
@@ -519,7 +570,7 @@ Lifecycles: **P1** Packeta Z-BOX (13 → 15 → 26 → 32 → 36), **P2** Packet
 (14 → 16 → 17), **P5** DPD Pickup Station (19 → 43 → 50 → 60), **P6** DPD failed attempt (23 → 24 → 27),
 **P7** GLS BOX (18 → 20 → 61 → 69, + duplicate 77), **P8** GLS zero-padded (10 → 12 → 66), **SPS** (11 → 28 → 48),
 **SPS 703** (46 → 73), **SPS revive** (04 → 63), **posta** (37 → 64 → 68), **DHL Express** (35 → 38 → 51),
-**CZ Zásilkovna** (31 → 62), **shared Z-BOX** (40/67 → 74/75).
+**CZ Zásilkovna** (31 → 62; 78 → 79 → 80, and 81 returning), **shared Z-BOX** (40/67 → 74/75).
 
 | File | Date | Exercises | Expected |
 |---|---|---|---|

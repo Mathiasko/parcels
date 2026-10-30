@@ -23,6 +23,7 @@ export interface WParcel {
 
 const CARRIER_ZONE: Record<CarrierId, string> = {
   packeta: 'Europe/Prague', dpd: ZONE, gls: ZONE, sps: ZONE, posta: ZONE, dhl: 'UTC',
+  ppl: 'Europe/Prague',
 }
 /** Carriers whose real adapters can only code the NEWEST event (prose-only timelines). */
 const PROSE_ONLY = new Set<CarrierId>(['packeta', 'gls', 'sps'])

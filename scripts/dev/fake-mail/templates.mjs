@@ -56,6 +56,47 @@ ${block ? `<p><strong>Miesto, kde ${kind === 'accepted' ? 'bude' : 'je'} vaša z
 }
 
 // ------------------------------------------------------------------------------------------------
+// Zásilkovna (zasilkovna.cz): the Czech Packeta mail, text only, modelled on corpus mail 31 (ready, with
+// the Z-BOX code one digit per line) and mail 62 (picked up). Same lifecycle as `packeta()`: the accepted
+// mail prints its box block in the FUTURE tense ("kde bude"), the ready mail in the present ("kde je").
+// ------------------------------------------------------------------------------------------------
+export function zasilkovna({ kind, number, sender, place, code, deadline }) {
+  const z = spaced(number)
+  const zbox = /z-box/i.test(place?.name ?? '')
+  const intro = {
+    accepted: `odesílatel ${sender} nám právě předal vaši zásilku, která vám bude doručena ${zbox ? 'do Z-BOXu' : 'na výdejní místo'}. Zásilka byla podána a přijata k přepravě.`,
+    ready: `vaše zásilka od odesílatele ${sender} je pro vás připravena k vyzvednutí ${zbox ? 'v Z-BOXu' : 'na výdejním místě'}.`,
+    pickedup: `vaše zásilka ${z} od odesílatele ${sender} byla úspěšně vyzvednuta. Děkujeme, že jste si vybrali Zásilkovnu.`,
+    returning: `vaše zásilka od odesílatele ${sender} nebyla vyzvednuta v úložní době, a proto ji vracíme odesílateli. Pokud jste ji platili dobírkou, nic neplatíte.`,
+  }[kind]
+  const block = place && (kind === 'accepted' || kind === 'ready')
+    ? `Místo, kde ${kind === 'accepted' ? 'bude' : 'je'} vaše zásilka uložena\n${place.name}\n${place.street} ${place.zip} ${place.city}\n${deadline && kind === 'ready' ? `Vyzvedněte nejpozději do ${deadline} 23:59.\n` : ''}\n`
+    : ''
+  const codeBlock = code && kind === 'ready' ? `Kód pro otevření schránky\n${[...code].join('\n')}\n\n` : ''
+  const text = `Zásilka ${z}\n\nDobrý den,\n${intro}\n\n${codeBlock}${block}Číslo zásilky ${z}\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n`
+  return { text }
+}
+
+// ------------------------------------------------------------------------------------------------
+// PPL CZ (ppl.cz): text only, Czech. No real PPL mail has been seen (src/carriers/ppl.ts says so), so this
+// is the shape the mail ingest is written for, not a copy of a real one: the number under "Číslo zásilky:",
+// and the ParcelShop block under the same "Místo, kde je vaše zásilka uložena" label `pickupFromMail`
+// already reads for Zásilkovna (no PPL-only label was added), with the PIN under "PIN pro vyzvednutí:".
+// ------------------------------------------------------------------------------------------------
+export function ppl({ kind, number, sender, place, pin, deadline }) {
+  const intro = {
+    accepted: `vaši zásilku od odesílatele ${sender} jsme převzali od odesílatele a je na cestě k vám. Doručíme ji na výdejní místo PPL Parcelshop.`,
+    ready: `vaše zásilka od odesílatele ${sender} je pro vás připravena k vyzvednutí na výdejním místě PPL Parcelshop.`,
+  }[kind]
+  const block = place && kind === 'ready'
+    ? `Místo, kde je vaše zásilka uložena\n${place.name}\n${place.street} ${place.zip} ${place.city}\n${deadline ? `Vyzvedněte nejpozději do ${deadline}.\n` : ''}\n`
+    : ''
+  const pinLine = pin && kind === 'ready' ? `PIN pro vyzvednutí: ${pin}\n\n` : ''
+  const text = `PPL CZ\n\nDobrý den,\n${intro}\n\n${pinLine}${block}Číslo zásilky: ${number}\nSledovat zásilku: https://www.ppl.cz/vyhledat-zasilku?shipmentId=${number}\n\nTento e-mail byl vygenerován automaticky, neodpovídejte na něj.\nPPL CZ s.r.o.\n`
+  return { text }
+}
+
+// ------------------------------------------------------------------------------------------------
 // DPD Slovakia (dpd.sk): html only, base64, the way the real Pickup Station mails arrive.
 // ------------------------------------------------------------------------------------------------
 export function dpd({ kind, number, sender, window, pin, deadline, station, numbers, courier, extra = '' }) {

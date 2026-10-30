@@ -3,12 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { simpleParser } from 'mailparser'
-import { carrierForAddress, extract, htmlToText, pickupFromMail } from '../src/ingest/extract.js'
+import { carrierForAddress, extract, extractPickupCode, htmlToText, pickupFromMail } from '../src/ingest/extract.js'
 import {
   ARCHIVE_AFTER_DAYS, ingestMessages, reprocessMessages, type IngestDeps,
 } from '../src/ingest/ingest.js'
 import { runPoll, summarize } from '../src/core/poll.js'
-import { allAdapters } from '../src/carriers/registry.js'
+import { allAdapters, detectCarrier } from '../src/carriers/registry.js'
 import { deleteParcel, findParcel, listActive } from '../src/db/parcels.js'
 import { dismissMessage } from '../src/db/messages.js'
 import { listUnparsedMessages } from '../src/web/queries.js'
@@ -32,6 +32,7 @@ describe('carrierForAddress (registrable domain of the sender)', () => {
     ['noreply@packeta.sk', 'packeta'], ['noreply@packeta.com', 'packeta'], ['x@zasilkovna.cz', 'packeta'],
     ['no_reply@dpd.sk', 'dpd'], ['serv@sps-sro.sk', 'sps'], ['x@mysps.sk', 'sps'],
     ['info@posta.sk', 'posta'], ['x@gls-group.eu', 'gls'], ['x@gls-group.com', 'gls'],
+    ['x@ppl.cz', 'ppl'], ['x@mail.ppl.cz', 'ppl'], ['x@ppl.cz.evil.example', undefined],
     ['bounce@mg.packeta.sk', 'packeta'],        // any subdomain resolves
     ['NoReply@PACKETA.SK', 'packeta'],          // case-insensitive
     ['x@evilpacketa.sk', undefined],            // a suffix is not a subdomain
@@ -208,6 +209,16 @@ describe('extract: hostile mail finishes quickly', () => {
     const subject = `=?utf-8?B?${Buffer.from(text).toString('base64')}?=`
     const { ms } = await timed(eml('a@evil.example', subject, 'hi'))
     expect(ms).toBeLessThan(1000)
+  })
+
+  test('a vetoed pickup PIN repeated on one line with no sentence end', () => {
+    // `runPickupCodes` reads every pickup mail during a poll, and the PIN veto judges the sentence each
+    // candidate stands in. With no full stop and no line break in a mail flattened to one line, that
+    // "sentence" was the whole remaining text, re-read for every one of ~28k candidates: 67 s.
+    const body = 'PIN: 1234 tel '.repeat(28_000)
+    const started = performance.now()
+    expect(extractPickupCode(body)).toBeUndefined()
+    expect(performance.now() - started).toBeLessThan(1000)
   })
 
   test('the bounds keep the words they were written for', async () => {
@@ -447,6 +458,159 @@ describe('extract: no sender hint', () => {
   test('garbage that is not a mail never throws', async () => {
     expect((await extract(Buffer.from([0, 255, 1, 2, 3]))).confidence).toBe('none')
     expect((await extract(Buffer.alloc(0))).confidence).toBe('none')
+  })
+})
+
+/**
+ * PPL's numbers are 11 bare digits, which is also a GLS number (10-12). So a mail's 11 digits are PPL
+ * only when PPL itself sent the mail, or when a shop names PPL beside the labelled number ("in the same
+ * sentence": back to the paragraph start, at most 160 characters, or later on the number's own line).
+ * Never by shape alone, and GLS mail keeps its 11-digit numbers.
+ */
+describe('extract: PPL, whose 11 digits are also a GLS number', () => {
+  const shop = 'Obchod <info@obchod.example.cz>'
+
+  test('from ppl.cz: the sender says PPL, and a courier phone printed first does not win', async () => {
+    const e = await extract(eml('PPL CZ <noreply@ppl.cz>', 'Vaše zásilka je na cestě',
+      'Kurýr: +420 777 123 456\r\nČíslo zásilky: 40888888801\r\nDoručení zítra.'))
+    expect(e).toMatchObject({ carrier: 'ppl', number: '40888888801', confidence: 'sender', evidence: 'carrier-sender' })
+  })
+
+  test('from ppl.cz: an unspaced +420 phone (12 digits) is not a PPL number', async () => {
+    const e = await extract(eml('noreply@ppl.cz', 'Zásilka', 'Volejte +420777123456. Číslo zásilky: 40888888802'))
+    expect(e).toMatchObject({ carrier: 'ppl', number: '40888888802', confidence: 'sender' })
+  })
+
+  test('from ppl.cz: only 11 digits are a PPL number, so a 10- or 12-digit reference gives none', async () => {
+    expect(await extract(eml('noreply@ppl.cz', 'Zásilka', 'Reference 1234567890 a 123456789012')))
+      .toEqual({ carrier: 'ppl', confidence: 'none', evidence: 'carrier-sender' })
+  })
+
+  test('from ppl.cz: an unlabelled 11-digit reference printed first loses to the labelled number', async () => {
+    const e = await extract(eml('noreply@ppl.cz', 'Zásilka', 'Reference 12345678901\r\nČíslo zásilky: 40888888801'))
+    expect(e).toMatchObject({ carrier: 'ppl', number: '40888888801', confidence: 'sender' })
+  })
+
+  test('from ppl.cz: a listed second number comes too', async () => {
+    const e = await extract(eml('noreply@ppl.cz', 'Zásilky', 'Čísla zásilek: 40888888803, 40888888804'))
+    expect(e).toMatchObject({ carrier: 'ppl', number: '40888888803', moreNumbers: ['40888888804'], confidence: 'sender' })
+  })
+
+  test('a shop that names no carrier: the 11 digits are not PPL (no parcel)', async () => {
+    const e = await extract(eml(shop, 'Objednávka odeslána', 'Číslo zásilky: 40888888801'))
+    expect(e).toMatchObject({ confidence: 'none' })
+    expect(e.carrier).toBeUndefined()
+    expect(e.number).toBeUndefined()
+  })
+
+  test('a shop naming PPL on the line above the labelled number -> PPL, titled by the shop', async () => {
+    const e = await extract(eml(shop, 'Objednávka odeslána', 'Dopravce: PPL\r\nČíslo zásilky: 40888888801'))
+    expect(e).toMatchObject({ carrier: 'ppl', number: '40888888801', confidence: 'shape', evidence: 'carrier-named', merchant: 'Obchod' })
+  })
+
+  test('a shop naming PPL later on the number\'s own line -> PPL', async () => {
+    const e = await extract(eml(shop, 'Objednávka odeslána', 'Číslo zásilky: 40888888801 (doručí PPL)\r\nDěkujeme.'))
+    expect(e).toMatchObject({ carrier: 'ppl', number: '40888888801', confidence: 'shape' })
+  })
+
+  test('PPL only in a footer three paragraphs below the number -> not PPL', async () => {
+    const e = await extract(eml(shop, 'Objednávka odeslána',
+      'Dobrý den,\r\n\r\nvaše objednávka byla odeslána.\r\nČíslo zásilky: 40888888801\r\n\r\nDěkujeme za nákup.\r\n\r\nVáš Obchod\r\n\r\nDoručujeme s PPL.'))
+    expect(e).toEqual({ confidence: 'none', evidence: 'carrier-named' })
+  })
+
+  test('PPL in the paragraph above, past a blank line -> not PPL', async () => {
+    const e = await extract(eml(shop, 'Objednávka odeslána', 'Doručujeme s PPL.\r\n\r\nČíslo zásilky: 40888888801'))
+    expect(e).toEqual({ confidence: 'none', evidence: 'carrier-named' })
+  })
+
+  test('PPL more than 160 characters before the number, even in one paragraph -> not PPL', async () => {
+    const filler = 'Zboží jsme pečlivě zabalili a předali k doručení, sledovat jej můžete podle čísla níže, které vám '
+      + 'pošleme také v samostatné zprávě, jakmile bude zásilka připravena k vyzvednutí na výdejním místě'
+    expect(filler.length).toBeGreaterThan(160)
+    const e = await extract(eml(shop, 'Objednávka odeslána', `Dopravce PPL. ${filler}\r\nČíslo zásilky: 40888888801`))
+    expect(e).toEqual({ confidence: 'none', evidence: 'carrier-named' })
+  })
+
+  test('"PPL" inside another word is not the carrier', async () => {
+    expect(await extract(eml(shop, 'Objednávka odeslána', 'Kód PPLX.\r\nČíslo zásilky: 40888888801')))
+      .toEqual({ confidence: 'none', evidence: 'tracking-shape' })
+  })
+
+  test('ppl.cz in a footer link, far from the number -> not PPL (only the sender rule reads ppl.cz)', async () => {
+    const e = await extract(eml(shop, 'Objednávka odeslána',
+      'Číslo zásilky: 40888888801\r\n\r\nDěkujeme za nákup.\r\n\r\nVáš Obchod\r\n\r\nSledování: https://www.ppl.cz/vyhledat-zasilku'))
+    expect(e).toEqual({ confidence: 'none', evidence: 'carrier-named' })
+  })
+
+  test('a GLS mail\'s 11 digits stay GLS', async () => {
+    expect(await extract(eml('GLS Slovakia <noreply@gls-slovakia.sk>', 'Váš balík', 'Číslo balíka: 90444444401')))
+      .toMatchObject({ carrier: 'gls', number: '90444444401', confidence: 'sender' })
+  })
+
+  test('a shop naming GLS beside a labelled 11-digit number -> GLS, even with PPL in a far footer', async () => {
+    expect(await extract(eml(shop, 'Objednávka odoslaná', 'Prepravca: GLS\r\nČíslo zásielky: 90444444402')))
+      .toEqual({ carrier: 'gls', number: '90444444402', merchant: 'Obchod', confidence: 'shape', evidence: 'carrier-named' })
+    expect(await extract(eml(shop, 'Objednávka odoslaná', 'Prepravca: GLS\r\nČíslo zásielky: 90444444402\r\n\r\nĎakujeme.\r\n\r\nDopravcovia: PPL, DPD')))
+      .toMatchObject({ carrier: 'gls', number: '90444444402', confidence: 'shape' })
+  })
+
+  // The footer a Czech shop prints under every mail. GLS named anywhere would claim every 11-digit
+  // number, so beside a number PPL is named at, GLS has to be named beside it too.
+  const footer = '\r\n\r\nDěkujeme.\r\n\r\nDopravci: GLS, PPL, Zásilkovna'
+
+  test('PPL beside the number and GLS only in the carriers footer -> PPL', async () => {
+    expect(await extract(eml(shop, 'Objednávka odeslána', `Dopravce: PPL\r\nČíslo zásilky: 40888888801${footer}`)))
+      .toEqual({ carrier: 'ppl', number: '40888888801', merchant: 'Obchod', confidence: 'shape', evidence: 'carrier-named' })
+  })
+
+  test('GLS beside the number and PPL only in the carriers footer -> GLS', async () => {
+    expect(await extract(eml(shop, 'Objednávka odeslána', `Dopravce: GLS\r\nČíslo zásilky: 90444444403${footer}`)))
+      .toEqual({ carrier: 'gls', number: '90444444403', merchant: 'Obchod', confidence: 'shape', evidence: 'carrier-named' })
+  })
+
+  test('no carrier beside the number and the carriers footer -> GLS, as before (GLS is named anywhere)', async () => {
+    expect(await extract(eml(shop, 'Objednávka odeslána', `Číslo zásilky: 90444444404${footer}`)))
+      .toMatchObject({ carrier: 'gls', number: '90444444404', confidence: 'shape' })
+  })
+
+  test('PPL named beside the number: the look-forward ends 160 characters along the line', async () => {
+    const e = await extract(eml(shop, 'Objednávka odeslána', `Číslo zásilky: 40888888801 ${'x'.repeat(170)} PPL`))
+    expect(e).toEqual({ confidence: 'none', evidence: 'carrier-named' })
+  })
+
+  // Every occurrence is looked at only until one has PPL beside it, so the worst case is PPL named
+  // nowhere near: before the window was bounded, each of 33,000 occurrences scanned the rest of the line.
+  test('hostile: the same labelled number repeated across one 400 KB line, PPL not beside it, finishes quickly', async () => {
+    const body = `Doručujeme s PPL.\r\n\r\nČíslo zásilky: ${'40888888801 '.repeat(33_000)}`
+    const started = performance.now()
+    const e = await extract(eml(shop, 'Objednávka odeslána', body))
+    const ms = performance.now() - started
+    expect(e).toEqual({ confidence: 'none', evidence: 'carrier-named' })
+    expect(ms).toBeLessThan(500)
+  })
+
+  // Both rules accept the number, and nothing in the mail says which carrier has it: a question.
+  test('a shop naming GLS and PPL beside one 11-digit number -> none, on /attention', async () => {
+    expect(await extract(eml(shop, 'Objednávka odeslána', 'Dopravce: PPL (dříve GLS)\r\nČíslo zásilky: 40888888801')))
+      .toEqual({ confidence: 'none', evidence: 'carrier-named' })
+  })
+
+  test('Detect on 11 digits stays GLS', () => {
+    expect(detectCarrier('40888888801')).toEqual(['gls'])
+  })
+
+  test.each([
+    ['PPL in the display name', 'PPL <noreply@ppl-cz.example.com>'],
+    ['ppl as a label of the domain', 'Info <noreply@ppl-cz.example.com>'],
+  ])('a look-alike PPL sender (%s) makes no parcel', async (_, from) => {
+    expect(await extract(eml(from, 'Zásilka', 'Dopravce: PPL\r\nČíslo zásilky: 40888888801')))
+      .toEqual({ confidence: 'none', evidence: 'lookalike-sender', claimed: { carrier: 'ppl', host: 'ppl-cz.example.com' } })
+  })
+
+  test('a PPL brand domain (ppl.de) is not a look-alike', async () => {
+    expect(await extract(eml('PPL <noreply@ppl.de>', 'Zásilka', 'Dopravce: PPL\r\nČíslo zásilky: 40888888801')))
+      .toMatchObject({ carrier: 'ppl', number: '40888888801', confidence: 'shape' })
   })
 })
 

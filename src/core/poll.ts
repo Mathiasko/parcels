@@ -1,6 +1,6 @@
 import { dirname } from 'node:path'
 import type { Database } from '../db/index.js'
-import type { Config } from './config.js'
+import type { Config, NotificationPrefs } from './config.js'
 import type {
   Carrier, CarrierAdapter, CarrierId, FetchResult, HttpClient, NewEvent,
 } from './types.js'
@@ -199,7 +199,7 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   // Before the notifications, so the banner that first announces a pickup point the carrier never
   // located can already say where it is. Local file reads only; it costs the run nothing external.
   report.codes = await pickupCodes(deps)
-  if (deps.notifier) await notify(deps.notifier, db, report, now, deps.config.port)
+  if (deps.notifier) await notify(deps.notifier, db, report, now, deps.config.port, deps.config.notifications)
   // Last, and after the notifications: this is the only step that deliberately sleeps (both services
   // it uses are free and rate-limited), and nothing else in the run depends on it.
   report.map = await mapPreview(deps)
@@ -318,10 +318,10 @@ function ingestOutcome(report: IngestReport): { ok: true } | { ok: false; error:
  * stored are still unannounced and the next run with a notifier picks them up. It must never turn a completed poll into a failed run.
  */
 async function notify(
-  notifier: Notifier, db: Database, report: PollReport, now: Date, port: number,
+  notifier: Notifier, db: Database, report: PollReport, now: Date, port: number, prefs: NotificationPrefs,
 ): Promise<void> {
   try {
-    for (const n of buildNotifications(db, report.newEvents, now, port)) {
+    for (const n of buildNotifications(db, report.newEvents, now, port, prefs)) {
       try { await notifier.send(n) } catch (err) { console.error(`notify: delivery failed: ${describe(err)}`) }
     }
   } catch (err) {

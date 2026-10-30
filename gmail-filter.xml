@@ -23,15 +23,18 @@
   sometimes the only one. Gmail ignores diacritics (odoslana matches odoslaná) but does not stem, so
   the word forms are listed one by one.
 
-  Edit it before or after importing: add the domains of the shops you actually order from. There is
-  deliberately no "never send to spam" action - mail claiming a parcel is waiting is one of the most
-  common phishing templates in this region, and exempting a broad query like this from the spam
+  Edit it before or after importing: add the domains of the shops you actually order from.
+  If you SELL online, put the whole query in parentheses and add -from:yourshop.sk (your own shop's
+  domain) after it, so the dispatch copies your shop sends your customers are not tracked as your
+  parcels.
+  There is deliberately no "never send to spam" action - mail claiming a parcel is waiting is one of
+  the most common phishing templates in this region, and exempting a broad query like this from the spam
   filter would be a poor trade. Mail this labels that is not a parcel costs one click on /attention.
 -->
 <feed xmlns='http://www.w3.org/2005/Atom' xmlns:apps='http://schemas.google.com/apps/2006'>
   <title>Mail Filters</title>
-  <id>tag:mail.google.com,2008:filters:parcels-1</id>
-  <updated>2026-10-27T00:00:00Z</updated>
+  <id>tag:mail.google.com,2008:filters:parcels-2</id>
+  <updated>2026-10-30T00:00:00Z</updated>
   <author>
     <name>parcels</name>
     <email>parcels@localhost</email>
@@ -39,10 +42,10 @@
   <entry>
     <category term='filter'></category>
     <title>Mail Filter</title>
-    <id>tag:mail.google.com,2008:filter:parcels-1</id>
-    <updated>2026-10-27T00:00:00Z</updated>
+    <id>tag:mail.google.com,2008:filter:parcels-2</id>
+    <updated>2026-10-30T00:00:00Z</updated>
     <content></content>
-    <apps:property name='hasTheWord' value='from:(packeta.sk OR packeta.com OR posta.sk OR slposta.sk OR gls-group.eu OR gls-slovakia.sk OR sps-sro.sk OR dpd.sk OR dhlparcel.com OR dhlparcel.sk OR dhlexpress.com OR allegromail.com OR allegro.sk) OR (from:(alza.sk OR mtbiker.sk OR aliexpress.com OR zalando.sk OR supersklep.sk OR gymbeam.sk OR lidl-shop.sk OR delivery.hm.com OR skinners.cz OR dhl.com OR dhl.sk OR dhl.de OR dhl.cz) AND subject:(zasielka OR zasielku OR zasielky OR zasielke OR balik OR baliku OR balika OR balicek OR odoslana OR odoslane OR odoslany OR odeslana OR odeslano OR expedovana OR expedovane OR vyzdvihnutie OR vyzdvihnutiu OR "odberne miesto" OR "odbernom mieste" OR "podacie cislo" OR dorazi OR doruceny OR shipped OR dispatched OR "out for delivery" OR "tracking number" OR "track your order" OR "ready for pickup" OR "shipping confirmation" OR odoslania OR odoslanie OR dorucena OR dorucene OR dokoncili OR "na ceste" OR expedujeme OR expedovali OR shipment OR package OR collected OR "on the way" OR delivered)) OR subject:(zasielka OR zasielku OR zasielky OR zasielke OR balik OR baliku OR balika OR balicek OR odoslana OR odoslane OR odoslany OR odeslana OR odeslano OR expedovana OR expedovane OR vyzdvihnutie OR vyzdvihnutiu OR "odberne miesto" OR "odbernom mieste" OR "podacie cislo" OR dorazi OR doruceny OR shipped OR dispatched OR "out for delivery" OR "tracking number" OR "track your order" OR "ready for pickup" OR "shipping confirmation")'/>
+    <apps:property name='hasTheWord' value='from:(packeta.sk OR packeta.com OR posta.sk OR slposta.sk OR gls-group.eu OR gls-slovakia.sk OR sps-sro.sk OR dpd.sk OR dhlparcel.com OR dhlparcel.sk OR dhlexpress.com OR allegromail.com OR allegro.sk OR zasilkovna.cz OR ppl.cz) OR (from:(alza.sk OR mtbiker.sk OR aliexpress.com OR zalando.sk OR supersklep.sk OR gymbeam.sk OR lidl-shop.sk OR delivery.hm.com OR skinners.cz OR dhl.com OR dhl.sk OR dhl.de OR dhl.cz) AND subject:(zasielka OR zasielku OR zasielky OR zasielke OR balik OR baliku OR balika OR balicek OR odoslana OR odoslane OR odoslany OR odeslana OR odeslano OR expedovana OR expedovane OR vyzdvihnutie OR vyzdvihnutiu OR "odberne miesto" OR "odbernom mieste" OR "podacie cislo" OR dorazi OR doruceny OR shipped OR dispatched OR "out for delivery" OR "tracking number" OR "track your order" OR "ready for pickup" OR "shipping confirmation" OR odoslania OR odoslanie OR dorucena OR dorucene OR dokoncili OR "na ceste" OR expedujeme OR expedovali OR shipment OR package OR collected OR "on the way" OR delivered OR zasilka OR zasilku OR zasilky OR pripravena OR vyzvednuti OR "k vyzvednuti" OR "vydejni misto" OR "vydejnim miste" OR dorucime)) OR subject:(zasielka OR zasielku OR zasielky OR zasielke OR balik OR baliku OR balika OR balicek OR odoslana OR odoslane OR odoslany OR odeslana OR odeslano OR expedovana OR expedovane OR vyzdvihnutie OR vyzdvihnutiu OR "odberne miesto" OR "odbernom mieste" OR "podacie cislo" OR dorazi OR doruceny OR shipped OR dispatched OR "out for delivery" OR "tracking number" OR "track your order" OR "ready for pickup" OR "shipping confirmation" OR zasilka OR zasilku OR zasilky OR pripravena OR vyzvednuti OR "k vyzvednuti" OR "vydejni misto" OR "vydejnim miste" OR dorucime)'/>
     <apps:property name='label' value='parcels'/>
     <apps:property name='sizeOperator' value='s_sl'/>
     <apps:property name='sizeUnit' value='s_smb'/>

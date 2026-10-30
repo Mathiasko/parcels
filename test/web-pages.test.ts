@@ -195,6 +195,18 @@ describe('web pages', () => {
     expect(row('gls')).toContain('never')
   })
 
+  test('PPL is offered by both carrier pickers and has its own row on /health', async () => {
+    const db = memDb()
+    for (const url of ['/add', '/history']) {
+      expect((await get(db, url)).body).toContain('<option value="ppl">PPL</option>')
+    }
+    const body = (await get(db, '/health')).body
+    const row = body.slice(body.indexOf('data-carrier="ppl"')).split('</tr>')[0]!
+    expect(body).toContain('data-carrier="ppl"')
+    expect(row).toContain('<td>PPL</td>')
+    expect(row).toContain('never')   // polled like the others, just not yet asked
+  })
+
   test('GET /health marks a carrier with a gated error as needing attention', async () => {
     const db = memDb()
     recordHealth(db, 'gls', 'gated', 'endpoint closed')
@@ -1333,7 +1345,7 @@ describe('GET /: one card design, whatever the state or the carrier', () => {
     recordPickupCode(db, id, '004467', 1, NOW)
     const [only] = cards((await get(db, '/')).body)
     expect(only).toMatch(/Collect by[^<]*2 Nov/)
-    expect(only).toContain('Open the box with')
+    expect(only).toContain('Show this PIN at the counter:')   // a post office counter: the PIN is shown, not typed
     expect(only).toContain('004467')
   })
 

@@ -5,7 +5,8 @@ Gmail label, polls the Slovak and Czech carriers for status, and tells you with 
 notification when something is out for delivery or waiting at a pickup point. A local web
 page is the read surface. Nothing runs off this machine and nothing is forwarded anywhere.
 
-Carriers: Slovenská pošta, Packeta, GLS, SPS, DPD SK, and DHL — which is
+Carriers: Slovenská pošta, Packeta, GLS, SPS, DPD SK, PPL (Czech; polled, but
+[not yet checked against a real parcel](#confirmations-still-owed-spec-section-15)), and DHL — which is
 [tracked from its mail alone](#dhl-and-other-email-only-carriers) rather than polled.
 (123Kuriér is excluded: the company is defunct.)
 
@@ -39,8 +40,20 @@ instead of the [Terminal install](#install-from-terminal), not beside it.
 What you see next depends on the Mac:
 
 - **No Terminal install on this Mac:** a Welcome page asks for your postcode, then opens Settings,
-  where **How to connect Gmail** walks you through the rest, click by click. They are the same steps
-  as [What no script can do for you](#what-no-script-can-do-for-you).
+  where **How to connect Gmail** walks you through the rest, click by click. It takes about ten
+  minutes, on three Google pages, in three groups:
+  1. **Label your parcel mail in Gmail.** A filter is a Gmail rule that files mail under a label;
+     this one files your shipping emails under a label called `parcels`, and Parcels reads only that
+     label. You download the filter from Settings and import it in Gmail, then tick **Show in IMAP**
+     on the label (IMAP is the way apps like this one read mail).
+  2. **Make an App Password.** An App Password is a separate password made just for this app. It can
+     read and send mail as your whole account; Parcels only reads the `parcels` label and never
+     sends mail. You can revoke it any time at <https://myaccount.google.com/apppasswords>.
+  3. **Paste it here.** Your Gmail address and the App Password go into Settings; saving tests the
+     connection and says when your parcels will appear.
+
+  They are the same steps as [What no script can do for you](#what-no-script-can-do-for-you). Not
+  ready? **Skip for now — add a parcel by hand** is under the guide, and you can connect Gmail later.
 - **A Terminal install on this Mac:** a Move in page offers to bring it in; see
   [Moving from the Terminal install](#moving-from-the-terminal-install).
 
@@ -62,6 +75,22 @@ Settings → Advanced → **Show in Finder** opens the Application Support folde
 Open **Health** and press **Update now**. It downloads the new version and checks that it is signed by
 the same certificate as the one you have; then **Restart to update** closes Parcels and opens the new
 version, which takes a few seconds. If a check fails, Health says why and nothing is changed.
+
+## Uninstalling
+
+To remove the Mac app and everything it keeps:
+
+1. Quit Parcels from the menu bar: click its icon, then **Quit Parcels**.
+2. Move the app to the Trash: drag **Parcels** out of Applications.
+3. Delete its files: the folders `~/Library/Application Support/Parcels` (your settings, parcels and
+   mail) and `~/Library/Logs/Parcels` (the logs). In Finder, **Go** → **Go to Folder…** takes you to
+   either one.
+4. Revoke the App Password at <https://myaccount.google.com/apppasswords>.
+5. In Gmail, delete the filter (Settings → **Filters and Blocked Addresses**) and the `parcels` label
+   (Settings → **Labels**).
+
+Steps 1 to 3 remove Parcels from this Mac; steps 4 and 5 undo what it set up in your Google account.
+Deleting the folders in step 3 cannot be undone, and takes your parcel history with it.
 
 ## Moving from the Terminal install
 
@@ -195,7 +224,7 @@ A test asserts the script only ever *prints* that line, never runs it.
 
 These need a browser, a GUI prompt or a password, and the script lists them when it finishes.
 
-Connecting Gmail takes about five minutes. The Settings page shows these same steps with a link
+Connecting Gmail takes about ten minutes, on three Google pages. The Settings page shows these same steps with a link
 for each, and `setup.sh` opens it when it finishes. Do them in this order - the label has to exist,
 visible to IMAP, before the first connection test, or that test says "the mailbox is not there":
 
@@ -218,7 +247,7 @@ visible to IMAP, before the first connection test, or that test says "the mailbo
    (<https://myaccount.google.com/signinoptions/twosv>).
    1. Open <https://myaccount.google.com/apppasswords>.
    2. Type a name such as `Parcels` and click **Create**.
-   3. Copy the 16-letter password it shows. Google shows it once.
+   3. Copy the 16-character password it shows; spaces are fine. Google shows it once.
 3. **Paste it on the Settings page** (`/settings` on the dashboard): your Gmail address and the App
    Password, then **Save settings**. Saving tests the connection and answers in one line at the top
    of the page; that answer is the only thing that proves ingest works - a wrong password or a
@@ -315,6 +344,8 @@ at the start of every run, so a change reaches mail ingest and the carriers at t
 | `port` | Dashboard port, default `8787`. |
 | `notifier` | `auto` (default), `terminal-notifier` or `osascript`. `auto` tries terminal-notifier and falls back to osascript. |
 | `mapPreview` | `true` (default) or `false`. The pickup-point map. `false` stops all geocoding and tile fetching and removes the map from the page. See [Pickup point maps](#pickup-point-maps). |
+| `notifications` | Which parcel updates send a banner: `{ "progress": false, "dailyReminder": true, "delivered": true }` by default (transit updates quiet, the 08:00 reminder and *Delivered* on). Set with the three switches on Settings; a missing key takes its default. See [Notifications](#notifications). |
+| `filterVersion` | The version of the Gmail filter you last imported. No key means `1`, the filter from before 0.2.0, and while Gmail is connected a number below `2` puts a notice on Settings asking you to import the filter again. Set to `2` when you download the filter from Settings or press **Done, I imported it again**; a fresh setup writes `2`. |
 | `pickupCalendar` | The Calendar.app calendar [Add to Calendar](#add-to-calendar) puts pickups into, by name. `""` (the default) or no key: the first calendar you can write to. |
 | `appearance` | Optional. `{ "theme": "postal" \| "classic", "mode": "system" \| "light" \| "dark" }`, both parts optional, defaulting to `postal` and `system`. See [Appearance](#appearance). |
 | `imap` | Optional. Without it, no mail is read and parcels are added by hand. See below. |
@@ -431,6 +462,20 @@ Setup, in this order:
    of the most-copied phishing templates in this region, and exempting a query this broad from the
    spam filter would be a bad trade. Mail this labels that is not a parcel is stored and then left
    alone; see [What reaches the attention page](#what-reaches-the-attention-page).
+
+   **Czech mail.** Zásilkovna is Packeta under its Czech name: its mail (`zasilkovna.cz`,
+   `packeta.cz`) is read as Packeta's, with the same `Z` numbers. PPL is harder, because its numbers
+   are 11 bare digits, which is also a GLS number. So an 11-digit number is PPL's only when the mail
+   comes from `ppl.cz`, or when a shop's mail names PPL **beside** the labelled number, in the same
+   sentence (`Dopravce: PPL` on the line above `Číslo zásilky: …`). Never by its shape alone: a shop
+   mail that only lists PPL in its footer, or names no carrier at all, makes no PPL parcel. A footer
+   listing the shop's carriers (`Dopravci: GLS, PPL, Zásilkovna`) does not get in the way: with PPL
+   beside the number it is PPL's, with GLS beside it, or no carrier beside it, it is GLS's as before.
+   Only a mail naming both GLS and PPL beside the number goes to needs-attention for you to choose. A
+   number you add by hand is never detected as PPL either; choose PPL on Add. **Set up before
+   0.2.0?** Your Gmail filter predates the Czech rules, and Gmail never updates a filter it has
+   imported: import `gmail-filter.xml` again from Settings, delete the old filter, and press **Done,
+   I imported it again**.
 2. **Make the label visible to IMAP. This is the step that catches everyone.** Gmail hides labels
    from IMAP by default. Go to **Settings, Labels**, check the `parcels` label is there (create
    it if it is not), and tick **Show in IMAP** for it. If you skip this the app connects fine,
@@ -707,6 +752,41 @@ about tracking changes.
 
 ## Notifications
 
+A banner is for something you can act on. By default:
+
+- **These send a banner:** *Out for delivery*, *Ready for pickup* (with where, and the collect-by
+  date if the carrier gave one), a failed delivery attempt, a delivery problem, *Returning to sender*
+  and *Returned to sender*, a pickup point named for the first time (not while the parcel's status is
+  one kept quiet, below; the *Ready for pickup* banner names it when it comes), the warning 48 hours
+  before a pickup deadline, and [one reminder a day](#reminders-while-a-parcel-is-waiting) while a
+  parcel waits for you. So do the alarms about the app itself: a carrier's tracking broken or stale, mail ingest
+  failing, the poller having been away, and an update being available.
+- **Registered and in transit are quiet.** They are on the dashboard, on the parcel page and in the
+  activity log as always; they just do not interrupt you.
+- **Delivered sends a banner, unless you said so first.** A parcel you marked
+  [collected or received](#mark-as-collected) yourself gets no *Delivered* banner when the carrier
+  catches up: you already know.
+- **More than four parcel updates in one run** (usually a catch-up after the Mac slept) become one
+  summary banner, with the parcels waiting for pickup first. The app's own alarms are never folded
+  into it.
+- **A pickup code or PIN is never in a banner.** It opens a physical locker, and banners show on the
+  lock screen; see [Pickup codes and PINs](#pickup-codes-and-pins).
+
+The **Notifications** block on Settings has three switches, saved with the rest of the form:
+
+| Switch | Default | What it does |
+|---|---|---|
+| **Registered and in-transit updates** | off | A banner when a parcel is registered with the carrier and when it starts moving. |
+| **A daily reminder while a parcel waits for you** | on | The 08:00 reminder described in [Reminders while a parcel is waiting](#reminders-while-a-parcel-is-waiting). |
+| **Delivered** | on | A banner when the carrier says a parcel was delivered (never for one you marked yourself). |
+
+They are stored as `"notifications": { "progress": false, "dailyReminder": true, "delivered": true }`
+in `config.json`, which the poller re-reads every run. An update a switch kept quiet is still recorded
+as said, so switching one on later sends no backlog of old news, only what changes from then on. The
+other banners above have no switch: each one asks you to do something.
+
+### How banners are sent
+
 Notification text is always passed as process arguments, never built into a shell or AppleScript
 string.
 
@@ -877,7 +957,7 @@ Which `node` goes into the plists is discovered, not hard-coded — `scripts/lib
 
 | Agent | What it does |
 |---|---|
-| `local.parcels.poller` | Runs `dist/poll.js` hourly on the hour from 07:00 to 21:00, plus 15:30 for the afternoon reminder (16 slots). |
+| `local.parcels.poller` | Runs `dist/poll.js` hourly on the hour from 07:00 to 21:00, plus 15:30 (16 slots), kept for an earlier afternoon check, so a ready banner or a pickup deadline warning arrives half an hour sooner. |
 | `local.parcels.web` | Runs `dist/server.js` and is `KeepAlive`, so it restarts if it dies. |
 
 Things worth knowing:
@@ -1034,26 +1114,37 @@ that would have made that incident self-diagnosing reads:
 
 ### Reminders while a parcel is waiting
 
-A parcel left at a pickup point is mentioned again **twice a day, at 08:00 and 15:30** local, until
-it is collected or its status changes. The banner says which day of waiting it is (`Still waiting for
-you · day 3`, the day it arrived being day 1, counted in calendar days in Bratislava), where it is
-waiting, and the deadline if the carrier gave one.
+A parcel left at a pickup point is mentioned again **once a day, at 08:00** local, from the day
+**after** it arrived, until it is collected or its status changes. On the day it arrived the *Ready for
+pickup* banner already said it, so there is no reminder that day, not even at 08:00 for a parcel that
+arrived at 06:30.
 
-- The poller's launchd schedule carries a **15:30 slot** on top of the hourly runs for exactly this
-  reason; without it the afternoon reminder would arrive at 16:00, since every other run is on the
-  hour. Re-run `scripts/install-agents.sh` after changing the slots.
-- Only the **newest passed slot** can fire. A Mac asleep all day wakes to one reminder, not to the
-  whole day's slots at once, and a slot that was missed cannot fire retroactively.
-- A transition banner counts: a parcel that became ready at 10:00 already told you, so the 08:00 slot
-  it fell inside is marked spent rather than repeating an hour later. The 15:30 one still arrives.
+The banner reads `Still waiting since Tue — <parcel>`: the weekday it arrived, counted in calendar days
+in Bratislava, or the date (`Still waiting since 3 Nov`) once it has waited a week or more, when a
+weekday alone would be ambiguous. Where the arrival time is not known it reads `Still waiting for you`.
+The text says where it is waiting and the collect-by date if the carrier gave one, and ends with
+`Collected it? Mark it in the app to stop these.`: [marking it](#mark-as-collected) is what stops them.
+Like every banner, it never shows the pickup code.
+
+- **Turned off** with *A daily reminder while a parcel waits for you* on Settings. The 48-hour
+  deadline warning is separate and still arrives. A morning's reminder that the switch held back is
+  not owed: switching it on at 09:00 sends nothing until the next day's 08:00.
+- A Mac asleep all morning wakes to **one** reminder at its first poll, and the reminder of a day it
+  slept through entirely is never sent later.
+- Any other banner about the parcel counts: one sent at 10:00 (a deadline warning, say) marks that
+  day's 08:00 slot spent, so no reminder repeats it an hour later.
 - Sent slots are keyed by local date, so the rows expire by themselves and yesterday can never
   suppress today.
+- The poller's launchd schedule still carries a **15:30 run** on top of the hourly ones. It was added
+  for an afternoon reminder that is gone; it stays because it matches the schedule already installed,
+  and it brings a ready banner or a deadline warning half an hour sooner. Re-run
+  `scripts/install-agents.sh` after changing the poll slots.
 
 ### Mark as collected
 
 A parcel at a pickup point leaves the dashboard when the carrier reports it delivered, and that lags:
 you can be home with it while the page still says *Ready for pickup*, still shows the locker code, and
-the poller still sends *Still waiting for you* twice a day. Some parcels the carrier never closes at
+the poller still sends *Still waiting since Tue* every morning at 08:00. Some parcels the carrier never closes at
 all (a shop's own delivery, a tracking number that went quiet), and the only way off the page used to be
 Delete, which throws their history away.
 
@@ -1082,23 +1173,46 @@ still in flight - there it reads **Mark as received** when the parcel was not at
   is already delivered, returned or archived cannot be marked, and the buttons are ordinary POST forms
   behind the same Host and cross-site checks as every other write.
 
-### The Z-BOX opening code
+### Pickup codes and PINs
 
-A parcel waiting in a Packeta Z-BOX shows the code that opens the box. **The code is never in the
-tracking API** - it arrives only in the pickup email - so it is read back out of the stored `.eml`
+A parcel waiting at a self-service point shows the code or PIN that opens it. **The code is never in
+any tracking API** - it arrives only in the pickup email - so it is read back out of the stored `.eml`
 during a poll, from local files, with no network call. That is also why historical mail works: a
 parcel whose pickup email arrived before this existed gets its code on the next poll, with no
 backfill command.
 
+Mail from these carriers carries one, and is read:
+
+- **Packeta** Z-BOX (SK and CZ): "Kód pre otvorenie schránky";
+- **GLS** BOX and ParcelShop: the PIN;
+- **DPD** Pickup Station: the PIN;
+- **Slovenská pošta** BalíkoBOX: the PIN;
+- **SPS** balíkovo: the verification code ("Verifikačný kód");
+- **PPL** ParcelShop and Parcelbox: the PIN.
+
+A number is taken only when a label stands right before it. One whose sentence also mentions a phone
+number or an order number is refused, as is one shaped like a mobile number (`0905 123 456`), and so
+is anything with fewer than 4 or more than 10 digits, so a tracking number, an order number or a
+phone number is never mistaken for a code.
+
+**How the card words it** depends on the kind of pickup point the carrier named, because the same
+digits are used in two different ways:
+
+- a Z-BOX or a locker: `Open the box with 631285`;
+- a ParcelShop or a post office: `Show this PIN at the counter: 402211`;
+- no place, or one that is not recognised: just `PIN 402211`, which claims nothing about where it is used.
+
 - Stored as **text**: real codes carry leading zeros (`004467`), and a number would drop them.
-- A **staffed** pickup point ("pripravená na výdaj") has no code, because a person hands the parcel
-  over. Nothing is shown in that case - no empty state, because there is no problem to report.
+- A **staffed** pickup point with no PIN in its mail ("pripravená na výdaj") shows nothing, because a
+  person hands the parcel over. No empty state, because there is no problem to report.
 - A parcel whose mail yielded no code is only rescanned when new mail arrives for it, so a codeless
-  parcel is not re-read from disk every hour.
-- **The code is deliberately kept out of notifications and out of `data/poll.log`.** It opens a
-  physical locker, and notification banners render on the lock screen. The one place it leaves the
-  app is the description of an [Add to Calendar](#add-to-calendar) event you add yourself, and even
-  there it is kept out of the event's title and its alert, which are what a lock screen shows.
+  parcel is not re-read from disk every hour. Parcels that were waiting when the list of carriers
+  above grew were re-read once, so a PIN already sitting in your mail appears without any action.
+- **The code is read from mail only, and is deliberately kept out of notifications and out of
+  `data/poll.log`.** It opens a physical locker, and notification banners render on the lock screen.
+  The one place it leaves the app is the description of an [Add to Calendar](#add-to-calendar) event
+  you add yourself, and even there it is kept out of the event's title and its alert, which are what a
+  lock screen shows.
 
 ### Add to Calendar
 
@@ -1119,7 +1233,7 @@ groups several parcels at one place, each parcel has its own. Opening it shows a
 **One click puts the event straight into Calendar.app** - the server does it with `osascript`, on this
 Mac - and the page says where it went: `Added Bratiska to Calendar “Home”: Wed 28 Oct, 13:00.` The
 event is 30 minutes at that time, titled `Pick up: <name>`, at the pickup address, with the Apple Maps
-link as its URL and a description holding the carrier, the tracking number, the Z-BOX code if one is
+link as its URL and a description holding the carrier, the tracking number, the pickup code if one is
 stored, and the real deadline (`Collect by Thu 29 Oct, 18:00`, or that the carrier gave none). It has
 **one alert, at its start**: the time you chose is the reminder. The code is never in the title or the
 alert. Calendar syncs it to your phone like any other event.
@@ -1205,6 +1319,7 @@ node dist/cli.js probe <carrier> <number>
 | Packeta | Owed: `item` field names and `packetStatusId` values; whether `branchAddress` is absent for courier delivery. |
 | GLS | `rstt028` **confirmed live** (2026-10-27, an `INTRANSIT` parcel): a *bare* object, not wrapped in `tuStatus[]` like `rstt029`; the adapter reads both. Real numbers are 10 digits. Owed: whether `rstt029` includes `history` or only `progressBar`; which `addresses[]` entry is the parcel shop (needs a captured `INPICKUP` record). |
 | DPD | Owed: the postcode-verified shape; diff of step 3 with and without `dataForVerification`. |
+| PPL | Polled, but **not yet checked against a real parcel**: no real PPL number has been seen. The adapter follows the response shape the open-source [ha-ppl-cz](https://github.com/ha-parcel-integrations/ha-ppl-cz) integration parses and a not-found probe of 2026-10-30 (HTTP 400, `service.TrackAndTrace.ShipmentNotFound`). Owed: everything else — the `phase` / `lastEventCode` / event `code` values, the date format of `eventDate`, and how `accessPoint` looks at a ParcelShop and at a Parcelbox. Its numbers are 11 digits like GLS's, so "Detect from number" never picks PPL: choose it on Add. |
 | DHL | Not polled at all (email only), so nothing is owed here. If a key is ever issued, three things need a real parcel: the not-found shape, whether DHL Parcel SK/CZ is in the API at all, and how a pickup looks — the canonical vocabulary has no pickup state. |
 
 ## Your data

@@ -1,7 +1,12 @@
 import { DateTime } from 'luxon'
 
-/** Local times at which a parcel still waiting for collection is mentioned again. */
-export const NUDGE_SLOTS = [{ hour: 8, minute: 0 }, { hour: 15, minute: 30 }] as const
+/**
+ * Local times at which a parcel still waiting for collection is mentioned again: once a day, in the
+ * morning, when the day's plans are made. There used to be a 15:30 slot as well; two banners a day for a
+ * parcel the reader already knows about read as nagging, and the afternoon one rarely changed a plan.
+ * Still a list, and still keyed per slot (below), so a second time of day stays a one-line change.
+ */
+export const NUDGE_SLOTS = [{ hour: 8, minute: 0 }] as const
 
 const ZONE = 'Europe/Bratislava'
 
@@ -9,7 +14,7 @@ const ZONE = 'Europe/Bratislava'
  * Every reminder slot that has already come round today, oldest first, as stable keys.
  *
  * Slots are keyed by local date and time rather than counted, because the poller is a fresh process
- * each run and may be late: a run at 16:00 must still be able to tell that the 15:30 slot has passed
+ * each run and may be late: a run at 10:00 must still be able to tell that the 08:00 slot has passed
  * and was never sent. Keying by date also means yesterday's rows can never suppress today's.
  */
 export function passedSlots(now: Date): string[] {

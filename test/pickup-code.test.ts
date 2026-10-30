@@ -1,13 +1,14 @@
-import { test, expect, beforeEach } from 'vitest'
+import { describe, test, expect, beforeEach } from 'vitest'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openDb, type Database } from '../src/db/index.js'
 import { getParcel, insertParcel, updateParcelState, deleteParcel, setPickupCoords } from '../src/db/parcels.js'
 import { getPickupCode, needsPickupCodeCheck, recordPickupCode, pickupCodesFor } from '../src/db/pickup-codes.js'
-import { extractPickupCode } from '../src/ingest/extract.js'
+import { extractPickupCode, mailText } from '../src/ingest/extract.js'
 import { runPickupCodes } from '../src/core/pickup-code.js'
 import { runPoll } from '../src/core/poll.js'
+import { MIGRATIONS } from '../src/db/migrate.js'
 import type { Notification } from '../src/notify/types.js'
 import { bodyHttp, config, okResult, stubAdapter } from './poll-helpers.js'
 import type { CarrierId, PickupPoint } from '../src/core/types.js'
@@ -68,6 +69,82 @@ test('the Czech spelling is read too', () => {
 test('a run of digits that is too short or too long is not a code', () => {
   expect(extractPickupCode('Kód pre otvorenie schránky 1 2 3 koniec')).toBeUndefined()
   expect(extractPickupCode('Kód pre otvorenie schránky 1 2 3 4 5 6 7 8 9 0 1 2 koniec')).toBeUndefined()
+})
+
+describe('pickup PINs for every carrier', () => {
+  // Read through `mailText`, exactly as the pickup-code pass reads a stored mail, so the tests see the
+  // same text (charset decoded, html flattened) the pass does.
+  const corpus = (name: string) => mailText(readFileSync(new URL(`./fixtures/fake-mail/${name}.eml`, import.meta.url)))
+  const real = (name: string) => mailText(readFileSync(new URL(`./fixtures/mail/${name}.eml`, import.meta.url)))
+
+  test.each([
+    ['20-gls-ready-glsbox-pin', '402211'],                    // GLS BOX: "použite PIN kód 402211."
+    ['43-dpd-pickup-station-ready-pin', '120477'],            // DPD Pickup Station: "PIN: 120477"
+    ['44-posta-balikobox-pin', '631285'],                     // pošta BalíkoBOX: "PIN kód na otvorenie schránky:"
+    ['28-sps-balikovo-cp1250-base64', '551902'],              // SPS Balíkovo: "Verifikačný kód: 551902."
+    ['26-packeta-ready-zbox-code-leading-zero', '040712'],    // Z-BOX, the leading zero kept
+    ['31-zasilkovna-cz-ready-iso8859-2', '918273'],           // Czech Z-BOX, one digit per line
+  ])('corpus mail %s gives %s', async (name, code) => {
+    expect(extractPickupCode(await corpus(name))).toBe(code)
+  })
+
+  // Both real mails print an anonymised PIN of six zeros; it is still the code they print.
+  test('the real GLS pickup mail gives the PIN it prints', async () => {
+    expect(extractPickupCode(await real('gls-ready-for-pickup'))).toBe('000000')
+  })
+
+  test('the real DPD Pickup Station mail gives the PIN it prints', async () => {
+    expect(extractPickupCode(await real('dpd-pickup-station'))).toBe('000000')
+  })
+
+  test('a PPL ParcelShop mail: the PIN, not the parcel number printed before it', () => {
+    expect(extractPickupCode('Dobrý den,\nzásilka 40888888801 je připravena k vyzvednutí na PPL Parcelshop Testovice, Hlavní 1.\nPIN pro vyzvednutí: 402211\nVyzvedněte ji do 5. 11. 2026.'))
+      .toBe('402211')
+  })
+
+  test('a Czech box PIN with its digits spaced', () => {
+    expect(extractPickupCode('PIN kód pro otevření schránky: 7 7 3 1 2 0')).toBe('773120')
+  })
+
+  // The digits' trailing line break is swallowed into the match; the next line is a sentence of its
+  // own and must not veto the PIN above it.
+  test.each([
+    ['PIN: 120477\nKontakt: tel. 0800 123 456', '120477'],
+    ['PIN kód: 402211\nObjednávka 123 bola odoslaná.', '402211'],
+  ])('a phone or order on the NEXT line does not refuse the PIN: %j', (text, code) => {
+    expect(extractPickupCode(text)).toBe(code)
+  })
+
+  test('a refused PIN candidate falls through to a later valid one', () => {
+    // Across labels: the vetoed `PIN:` and a later `PIN kód`.
+    expect(extractPickupCode('PIN: 0905123456 (telefón kuriéra).\nPIN kód 123456')).toBe('123456')
+    // Within one label: the next `PIN:` match is tried.
+    expect(extractPickupCode('PIN: 0905123456 (telefón kuriéra).\nPIN: 123456')).toBe('123456')
+    // A phone-shaped candidate is refused the same way, and the next label is tried.
+    expect(extractPickupCode('PIN kód nájdete v SMS, linka: 0905123456\nPIN: 123456')).toBe('123456')
+  })
+
+  test('a short PIN that merely starts like a dialling code is still a PIN', () => {
+    // 420/421 open a Czech/Slovak number written internationally, but such a number is 12 digits,
+    // longer than any PIN: a six-digit code that starts the same way is a code.
+    expect(extractPickupCode('PIN: 420113')).toBe('420113')
+    expect(extractPickupCode('PIN kód 421907')).toBe('421907')
+  })
+
+  test.each([
+    ['a phone number with no PIN label','Zákaznícka linka 0905 123 456'],
+    ['a tracking number', 'Číslo zásielky: 90444444401'],
+    ['a "PIN" sentence that names a phone', 'PIN: 0905123456 (telefón kuriéra)'],
+    ['a "PIN" sentence that names an order', 'Objednávka č. 123456, PIN kód 4711 nájdete v objednávke'],
+    ['a promo "PIN" with no digits after it', 'Nový PIN kód k vašej karte získate v aplikácii!'],
+    ['a 3-digit run', 'PIN: 123'],
+    ['an 11-digit run', 'PIN: 12345678901'],
+    ['the DPD line that mentions the PIN but prints none', 'Vašu zásielku môže prevziať aj osoba, ktorej poskytnete PIN kód.'],
+    // Label 2's "words up to a colon" reach a phone that no veto word names.
+    ['a phone the `PIN kód ...:` bridge reaches', 'PIN kód nájdete v SMS, linka: 0905123456'],
+  ])('%s is not a code', (_what, text) => {
+    expect(extractPickupCode(text)).toBeUndefined()
+  })
 })
 
 // --- storage ------------------------------------------------------------------------------------
@@ -168,6 +245,30 @@ test('a second poll does not re-read mail it has already scanned', async () => {
   expect(getPickupCode(db, id)).toBe('987654')
 })
 
+test('a waiting parcel whose mail was read before the PIN patterns existed is read again after the migration', async () => {
+  const id = insertParcel(db, { carrier: 'gls', trackingNumber: '12345678901', source: 'manual' })
+  updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'locker', name: 'GLS BOX', street: 'Hlavna 6', city: 'Bratislava', postalCode: '821 01' } })
+  mail(id, '/mail/gls.eml')
+  // What the previous version left behind: it looked at the one message, found no Z-BOX code, and
+  // wrote that down. The watermark now says there is nothing new to read.
+  recordPickupCode(db, id, undefined, 1, new Date('2026-10-01T10:00:00Z'))
+  const body = readFileSync(new URL('./fixtures/fake-mail/20-gls-ready-glsbox-pin.eml', import.meta.url))
+
+  const before = await runPickupCodes({ db, now: NOW, readMail: () => body })
+  expect(before.scanned).toBe(0)
+  expect(getPickupCode(db, id)).toBeUndefined()
+
+  // The migration's own statement, run as it runs on an upgrading database.
+  const latest = MIGRATIONS.at(-1)!
+  latest.up(db)
+  const after = await runPickupCodes({ db, now: NOW, readMail: () => body })
+  expect(after.found).toBe(1)
+  expect(getPickupCode(db, id)).toBe('402211')
+
+  // And only once: the pass records the real count, so the next poll does not open the mail again.
+  expect(needsPickupCodeCheck(db, id, 1)).toBe(false)
+})
+
 // --- what the reader sees -----------------------------------------------------------------------
 
 test('the code is shown on the parcel page and on the dashboard card', async () => {
@@ -183,6 +284,64 @@ test('the code is shown on the parcel page and on the dashboard card', async () 
 
   const dash = (await app.inject({ method: 'GET', url: '/' })).body
   expect(dash).toContain('004467')
+})
+
+// --- how the card words the code ----------------------------------------------------------------
+
+describe('the card words the code by the kind of pickup point', async () => {
+  const { pickupCodeLine } = await import('../src/web/views/index.js')
+  const BOX = 'Open the box with'
+  const COUNTER = 'Show this PIN at the counter:'
+  const CODE = '<b class="mono sel">631285</b>'
+
+  test.each(['zbox', 'locker'] as const)('%s: open the box', kind => {
+    const out = String(pickupCodeLine('631285', kind))
+    expect(out).toContain(BOX)
+    expect(out).toContain(CODE)
+    expect(out).not.toContain(COUNTER)
+  })
+
+  test.each(['parcelshop', 'post_office'] as const)('%s: show the PIN at the counter', kind => {
+    const out = String(pickupCodeLine('631285', kind))
+    expect(out).toContain(COUNTER)
+    expect(out).toContain(CODE)
+    expect(out).not.toContain(BOX)
+  })
+
+  test.each(['unknown', undefined] as const)('%s: just "PIN", claiming nothing about the place', kind => {
+    const out = String(pickupCodeLine('402211', kind))
+    expect(out).toContain('<span class="code-l">PIN</span>')
+    expect(out).toContain('<b class="mono sel">402211</b>')
+    expect(out).not.toContain(BOX)
+    expect(out).not.toContain(COUNTER)
+  })
+
+  test('no code, no line, whatever the kind', () => {
+    expect(String(pickupCodeLine(undefined, 'zbox'))).toBe('')
+    expect(String(pickupCodeLine(undefined, undefined))).toBe('')
+  })
+
+  test('the markup is the one the stylesheet knows', () => {
+    expect(String(pickupCodeLine('631285', 'zbox')))
+      .toBe('<p class="code"><span class="code-l">Open the box with</span> <b class="mono sel">631285</b></p>')
+  })
+
+  test('a locker parcel and a counter parcel read differently on the page', async () => {
+    const { buildServer } = await import('../src/web/server.js')
+    let n = 0
+    const page = async (pickup: PickupPoint): Promise<string> => {
+      const id = insertParcel(db, { carrier: 'gls', trackingNumber: `00000000000${++n}`, source: 'manual' })
+      updateParcelState(db, id, { status: 'ready_for_pickup', pickup })
+      recordPickupCode(db, id, '402211', 1, NOW)
+      return (await buildServer({ db, config }).inject({ method: 'GET', url: `/parcel/${id}` })).body
+    }
+    const counter = await page({ kind: 'post_office', name: 'Pošta Bratislava 1', street: 'Nám. SNP 35', city: 'Bratislava', postalCode: '810 00' })
+    expect(counter).toContain(COUNTER)
+    expect(counter).not.toContain(BOX)
+    const locker = await page({ kind: 'locker', name: 'GLS BOX Example', street: 'Príkladová 6', city: 'Testville', postalCode: '00001' })
+    expect(locker).toContain(BOX)
+    expect(locker).not.toContain(COUNTER)
+  })
 })
 
 test('a pickup with no code says nothing at all about codes', async () => {

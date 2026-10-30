@@ -1,10 +1,11 @@
-import { NOTIFIERS } from '../../core/config.js'
+import { CURRENT_FILTER_VERSION, NOTIFIERS } from '../../core/config.js'
 import type { ImapProbeResult } from '../../ingest/imap-probe.js'
 import { CalendarFailure } from '../../core/calendar-app.js'
 import type { SettingsValues } from '../settings.js'
 import { appearanceFields } from './appearance.js'
 import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
+import { formatClock, dayKey } from './format.js'
 import { layout, notice, type PageCtx } from './layout.js'
 
 /** The two fields a form cannot change, and the file they live in. Shown, with the reason, never editable. */
@@ -21,6 +22,12 @@ export interface SettingsState {
   saved?: boolean
   /** The result of a connection test made by the POST that rendered this page. */
   test?: ImapProbeResult
+  /**
+   * When the next scheduled check runs, given only to the page a save lands on. Its presence is what
+   * makes an `ok` result say when parcels will appear: "Test again" does not pass it, because that
+   * answer is about the connection and the person asking has already been told the time.
+   */
+  nextCheck?: Date
   /**
    * The file on disk does not load - it was edited by hand into a state this app rejects. The page
    * still renders (it is the one place that can explain and repair it), but nothing is tested until
@@ -64,29 +71,42 @@ const GMAIL_LABELS = 'https://mail.google.com/mail/u/0/#settings/labels'
  * Filters tab, and "Settings, Filters and Blocked Addresses" is three clicks they would have to find.
  * The filter itself is a download from this server, so "Choose File" finds it in Downloads.
  *
+ * Written for someone who has never heard "IMAP" or "filter": each is explained once, where it first
+ * appears, and the timing is the honest one (ten minutes, three Google pages) rather than the hopeful
+ * one. The App Password sentence says what the password can really do, because Google's own page
+ * only says "app", and what Parcels does with it. The skip link is outside the fold on purpose: a
+ * person who is stuck should see the way out without reading the guide, and it goes away once mail
+ * is connected.
+ *
  * The order matters: the label must exist and be visible to IMAP before the first test, or that test
  * says the mailbox is not there.
  */
 function gmailGuide(v: SettingsValues): Html {
-  return html`<details class="guide"${v.imapConfigured ? '' : raw(' open')}><summary>How to connect Gmail — three steps, about five minutes</summary>
+  return html`<details class="guide"${v.imapConfigured ? '' : raw(' open')}><summary>How to connect Gmail — about ten minutes, on three Google pages</summary>
 <ol class="steps">
-<li><strong>Label your shipping emails.</strong>
+<li><strong>Label your parcel mail in Gmail</strong>
+<p class="meta">A filter is a Gmail rule that files mail under a label. This one files your shipping emails under a label called <span class="mono">parcels</span>, and Parcels reads only that label.</p>
 <ol>
 <li>Download the filter: <a href="/gmail-filter.xml" download>gmail-filter.xml</a>. It goes to your Downloads folder.</li>
 <li>Open <a href="${GMAIL_FILTERS}">Gmail’s filter settings</a> (in Gmail: the gear icon → <strong>See all settings</strong> → <strong>Filters and Blocked Addresses</strong>). Signed in to more than one Google account? Check the address at the top right is the one you will enter below.</li>
 <li>At the bottom of the page, click <strong>Import filters</strong>.</li>
 <li>Click <strong>Choose File</strong>, pick <strong>gmail-filter.xml</strong> in Downloads, then click <strong>Open file</strong>.</li>
 <li>Gmail shows the filter it found. Tick <strong>Apply new filters to existing email</strong> — without it only mail that arrives from now on is labelled — then click <strong>Create filters</strong>.</li>
-<li>Open <a href="${GMAIL_LABELS}">Gmail’s label settings</a>, find <strong>parcels</strong> under Labels, and make sure <strong>Show in IMAP</strong> is ticked.</li>
-</ol></li>
-<li><strong>Make an App Password</strong>, which lets this app read that label without your Google password.
+<li>Open <a href="${GMAIL_LABELS}">Gmail’s label settings</a>, find <strong>parcels</strong> under Labels, and make sure <strong>Show in IMAP</strong> is ticked. IMAP is the way apps like this one read mail, and Gmail hides a label from it until you say otherwise.</li>
+</ol>
+<p class="meta">Sell online? Add <span class="mono">-from:yourshop.sk</span> to the filter so your customers’ dispatch copies are not tracked as your parcels.</p></li>
+<li><strong>Make an App Password</strong>
+<p class="meta">An App Password is a separate password made just for this app. An App Password can read and send mail as your whole account. Parcels only reads the <span class="mono">parcels</span> label and never sends mail. You can revoke it any time at <a href="${APP_PASSWORDS}">myaccount.google.com/apppasswords</a>.</p>
 <ol>
 <li><a href="${TWO_STEP}">2-Step Verification</a> has to be on. If it is off, turn it on first.</li>
 <li>Open <a href="${APP_PASSWORDS}">App passwords</a>, type a name such as <strong>Parcels</strong>, and click <strong>Create</strong>.</li>
-<li>Google shows a 16-letter password once. Copy it.</li>
+<li>Google shows a 16-character password once. Copy it; spaces are fine.</li>
 </ol></li>
-<li><strong>Paste it here.</strong> Enter your Gmail address and the App Password below and click <strong>Save settings</strong>. Saving tests the connection, and the answer appears at the top of this page.</li>
-</ol></details>`
+<li><strong>Paste it here</strong>
+<p>Enter your Gmail address and the App Password below and click <strong>Save settings</strong>. Saving tests the connection, and the answer appears at the top of this page.</p></li>
+</ol>
+<p class="meta">Company (Google Workspace) accounts work too; your admin may have to allow App Passwords.</p></details>${
+    v.imapConfigured ? '' : html`<p class="meta"><a href="/add">Skip for now — add a parcel by hand</a></p>`}`
 }
 
 /** The notifier choices, said as what they do. Only under Advanced; "Automatic" is right for everyone. */
@@ -96,6 +116,26 @@ const NOTIFIER_LABEL: Record<string, string> = {
   osascript: 'Built-in macOS notifications only',
 }
 
+/**
+ * The three notification switches. Quiet by default (see `DEFAULT_NOTIFICATIONS`): the first is off.
+ * The hidden marker is what lets POST /settings tell an unticked box from a form that never had it.
+ * Each hint says what the switch covers, because the README's list of banners that always arrive
+ * (ready for pickup, out for delivery, a problem) has no switch and the page should say so.
+ */
+function notificationsBlock(v: SettingsValues): Html {
+  const box = (name: string, on: boolean, label: string, hint: string): Html =>
+    html`<label class="check"><input type="checkbox" name="${name}"${on ? raw(' checked') : ''}><span>${label}</span><span class="meta hint">${hint}</span></label>`
+  return html`<h2>Notifications</h2>
+<input type="hidden" name="notificationsForm" value="1">
+<div class="checks">
+${box('notifyProgress', v.notifications.progress, 'Registered and in-transit updates', 'A banner when a parcel is registered with the carrier and when it starts moving.')}
+${box('notifyDailyReminder', v.notifications.dailyReminder, 'A daily reminder while a parcel waits for you', 'At 08:00, until you mark it collected.')}
+${box('notifyDelivered', v.notifications.delivered, 'Delivered', 'When the carrier says it arrived. Never for a parcel you marked yourself.')}
+</div>
+<p class="meta">Ready for pickup, out for delivery and problems with a parcel always send a banner.</p>
+`
+}
+
 const option = (value: string, label: string, current: string): Html =>
   html`<option value="${value}"${value === current ? raw(' selected') : ''}>${label}</option>`
 
@@ -103,12 +143,25 @@ const option = (value: string, label: string, current: string): Html =>
 const why = (detail: string | undefined): Html =>
   detail ? html`<p class="meta">The server said: ${detail}</p>` : html``
 
+/** "Your parcels appear at the next check (15:00)": today's time, or `tomorrow 07:00` when the slot is on the next day (Ruling R12). */
+const nextCheckLine = (n: { at: Date; now: Date } | undefined): Html => {
+  if (!n) return html``
+  const when = dayKey(n.at) === dayKey(n.now) ? formatClock(n.at) : `tomorrow ${formatClock(n.at)}`
+  return html`<p>Your parcels appear at the next check (${when}) — or press Refresh now.</p>`
+}
+
 /**
  * The answer to the one question this page exists to answer. Every branch names what to do next,
  * because every one of these failures is otherwise silent: a wrong password shows up three polls
  * later on /health, and a label that is not ticked "Show in IMAP" is indistinguishable from no mail.
+ *
+ * Right after a save, the "Connected" answer (the label has mail) also says when the next check is, in
+ * the same words as the dashboard's schedule: nobody who has just finished ten minutes of setup should
+ * be left wondering whether to wait or to press something. The empty-label answer does not: it says
+ * nothing is there to become a parcel yet, and a promise of parcels would contradict it. The time is
+ * today's or "tomorrow", never a date, because the next slot is never further away than that.
  */
-function testResult(r: ImapProbeResult): Html {
+function testResult(r: ImapProbeResult, next?: { at: Date; now: Date }): Html {
   switch (r.kind) {
     case 'not_configured':
       return notice('neutral', html`<p><strong>No mail account is configured.</strong></p>
@@ -121,7 +174,7 @@ function testResult(r: ImapProbeResult): Html {
 <p class="meta">The connection, the password and the label are all fine, so this is not a fault: a Gmail filter that matches nothing looks exactly like this. Check that the filter's action is <strong>Apply the label: ${r.mailbox}</strong>, and that <strong>Apply new filters to existing email</strong> was ticked when you imported it (<strong>Also apply filter to matching conversations</strong>, on a filter made by hand), which is what fills the label with mail you already have.</p>`, true)
         : notice('neutral', html`<p class="st t-ok">${glyph('delivered')}Connected</p>
 <p><strong>${r.user}</strong> — the label <strong>${r.mailbox}</strong> has <strong>${r.messages}</strong> ${r.messages === 1 ? 'message' : 'messages'}.</p>
-<p class="meta">Signed in, the label is visible, and its emails can be read. Everything is in place: new shipping emails become parcels at the next hourly check.</p>`, true)
+<p class="meta">Signed in, the label is visible, and its emails can be read. Everything is in place${next ? '.' : ': new shipping emails become parcels at the next hourly check.'}</p>${nextCheckLine(next)}`, true)
 
     case 'auth':
       return notice('warn', html`<p><strong>Authentication failed for ${r.user}.</strong></p>
@@ -185,6 +238,24 @@ function testTarget(v: SettingsValues): Html {
 const appFiles = html`<p class="meta">Parcels keeps its settings and data in Application Support/Parcels.</p>
 <p><button form="reveal-data" type="submit">Show in Finder</button></p>`
 
+/**
+ * Gmail never updates a filter it has imported, so someone who set up before the Czech rules existed
+ * is told once to import the file again. Shown only while mail is connected (a new setup has no old
+ * filter) and the version they last imported is behind this build's. The button belongs to its own
+ * empty form (`filterImportedForm`, below the page's forms) through the `form` attribute, for the same
+ * reason as `appFiles`: forms cannot nest, and it sits inside the settings form.
+ */
+const filterStale = (v: SettingsValues): boolean => v.imapConfigured && v.filterVersion < CURRENT_FILTER_VERSION
+
+const filterNotice = (v: SettingsValues): Html =>
+  filterStale(v)
+    ? notice('neutral', html`<p>Set up before 0.2.0? Import the filter again and delete the old one, so Czech mail is labelled too.</p>
+<p><button form="filter-imported" type="submit">Done, I imported it again</button></p>`)
+    : html``
+
+const filterImportedForm = (v: SettingsValues): Html =>
+  filterStale(v) ? html`<form method="post" action="/settings/filter-imported" id="filter-imported"></form>` : html``
+
 const revealForm = html`<form method="post" action="/app/reveal-data" id="reveal-data"></form>`
 
 /**
@@ -213,20 +284,21 @@ ${state.configError ? notice('warn', html`<p><strong>The saved settings cannot b
 <p class="meta">Parcels are not being checked until this is fixed. Correcting the fields below and saving puts things right.</p>`) : ''}
 ${state.error ? notice('warn', html`<p>${state.error}</p><p class="meta">Nothing was saved.</p>`, true) : ''}
 ${state.saved ? notice('neutral', html`<p>Saved.</p>`, true) : ''}
-${state.test && state.saved ? testResult(state.test) : ''}
+${state.test && state.saved ? testResult(state.test, state.nextCheck && { at: state.nextCheck, now: ctx.now }) : ''}
 
 <form method="post" action="/settings">
 <h2>Gmail</h2>
 <p class="meta">The app reads the emails Gmail files under one label, signing in with an App Password rather than your Google password. To stop reading mail, clear these fields and the mail server under Advanced.</p>
+${filterNotice(v)}
 ${gmailGuide(v)}
 <div class="fields">
 <label class="wide">Gmail address<input type="email" name="imapUser" value="${v.imapUser}" autocomplete="username" placeholder="you@gmail.com" autocapitalize="off" spellcheck="false"></label>
 <label class="wide">App Password <span class="meta">${v.passSet ? '(set)' : '(not set)'}</span><input type="password" name="imapPass" autocomplete="new-password" spellcheck="false">${
     v.passSet
       ? html`<span class="meta hint">Saved, and never shown again. Leave this blank to keep it; type a new one to replace it.</span>`
-      : html`<span class="meta hint">A 16-character App Password from <a href="${APP_PASSWORDS}">myaccount.google.com/apppasswords</a>, not your Google password. Spaces are ignored.</span>`
+      : html`<span class="meta hint">A 16-character App Password from <a href="${APP_PASSWORDS}">myaccount.google.com/apppasswords</a>, not your Google password. Spaces are fine.</span>`
   }</label>
-<label class="wide">Gmail label<input name="imapMailbox" value="${v.imapMailbox}" autocapitalize="off" spellcheck="false"><span class="meta hint">The label your parcel emails are filed under. In Gmail's label settings it must have "Show in IMAP" ticked. A label inside another is written <span class="mono">parent/child</span>.</span></label>
+<label class="wide">Gmail label<input name="imapMailbox" value="${v.imapMailbox}" autocapitalize="off" spellcheck="false"><span class="meta hint">The label your parcel emails are filed under. In Gmail’s label settings it must have <strong>Show in IMAP</strong> ticked. A label inside another is written <span class="mono">parent/child</span>.</span></label>
 </div>
 
 <h2>Parcels</h2>
@@ -236,6 +308,7 @@ ${gmailGuide(v)}
 ${calendarField(v, state.calendars)}
 </div>
 
+${notificationsBlock(v)}
 ${appearanceFields(v)}
 <details class="adv"${app ? raw(' id="adv"') : ''}><summary>Advanced</summary>
 <p class="meta">Nothing here normally needs changing.</p>
@@ -260,5 +333,6 @@ ${app ? appFiles : html`<p class="meta">Fixed while the app is running:</p>
 ${state.test && !state.saved ? testResult(state.test) : ''}
 ${testTarget(v)}
 <form method="post" action="/settings/test#test"><button>${state.test ? 'Test again' : 'Test connection'}</button></form>
+${filterImportedForm(v)}
 ${app ? revealForm : ''}</div>`, ctx)
 }

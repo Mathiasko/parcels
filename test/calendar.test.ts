@@ -39,6 +39,17 @@ describe('what a pickup event says', () => {
     })
   })
 
+  test('the code line is worded for the kind of place, as on the card', () => {
+    const line = (pickup: Parcel['pickup']): string | undefined =>
+      pickupEventContent(parcel({ pickup }), '402211', NOW).description[1]
+    expect(line({ ...ZBOX, kind: 'zbox' })).toBe('Open the box with 402211')
+    expect(line({ ...ZBOX, kind: 'locker' })).toBe('Open the box with 402211')
+    expect(line({ ...ZBOX, kind: 'parcelshop' })).toBe('Show this PIN at the counter: 402211')
+    expect(line({ ...ZBOX, kind: 'post_office' })).toBe('Show this PIN at the counter: 402211')
+    expect(line({ ...ZBOX, kind: 'unknown' })).toBe('PIN 402211')
+    expect(line(undefined)).toBe('PIN 402211')
+  })
+
   test('a whole-day deadline has no time; no code line without a code; no deadline says so', () => {
     expect(pickupEventContent(parcel({ retainedTill: ALL_DAY }), undefined, NOW).description)
       .toEqual(['Packeta · Z1172430119', 'Collect by Thu 29 Oct'])

@@ -1,14 +1,15 @@
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, test } from 'vitest'
+import { Settings } from 'luxon'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { buildServer, CSP, type WebDeps } from '../src/web/server.js'
 import type { Database } from '../src/db/index.js'
 import type { ImapProbeLike } from '../src/ingest/imap-probe.js'
 import type { ImapConfig } from '../src/ingest/imap.js'
 import { fakeImap, type FakeImap } from './imap-fake.js'
 import { config, memDb, NOW } from './poll-helpers.js'
-import { settingsValues, applySettings } from '../src/web/settings.js'
+import { settingsValues, applySettings, changedSettingFields } from '../src/web/settings.js'
 import { listActivity } from '../src/db/activity-log.js'
 
 const PASS = 'abcdefghijklmnop'
@@ -129,6 +130,41 @@ describe('the settings page speaks to the person setting up Gmail', () => {
     expect(done).toContain('<details class="guide"><summary>')
   })
 
+  test('the guide is three plain groups, with the jargon explained where it is first used', async () => {
+    const fresh = (await harness({ imap: undefined }).get('/settings')).body
+    const guide = /<details class="guide"[\s\S]*?<\/details>/.exec(fresh)![0]
+    expect(guide).toContain('about ten minutes, on three Google pages')
+    const top = [...guide.matchAll(/<li><strong>([^<]+)<\/strong>/g)].map(m => m[1])
+    expect(top.slice(0, 3)).toEqual(['Label your parcel mail in Gmail', 'Make an App Password', 'Paste it here'])
+    expect(guide).toContain('a Gmail rule that files mail under a label')
+    expect(guide).toContain('the way apps like this one read mail')
+    // The step that catches everyone is bold in the guide and said again where the label is typed.
+    expect(guide).toContain('<strong>Show in IMAP</strong>')
+    const hint = /<label class="wide">Gmail label[\s\S]*?<\/label>/.exec(fresh)![0]
+    expect(hint).toContain('<strong>Show in IMAP</strong>')
+    // The App Password sentence says what it can do, and that it can be taken back.
+    expect(guide).toContain('An App Password can read and send mail as your whole account. Parcels only reads the <span class="mono">parcels</span> label and never sends mail. You can revoke it any time at <a href="https://myaccount.google.com/apppasswords">myaccount.google.com/apppasswords</a>')
+    const pass = /<label class="wide">App Password[\s\S]*?<\/label>/.exec(fresh)![0]
+    expect(pass).toContain('16-character')
+    expect(pass).toContain('Spaces are fine')
+    // Other setups.
+    expect(guide).toContain('Company (Google Workspace) accounts work too; your admin may have to allow App Passwords.')
+    // The seller line sits in step 1, where the filter is imported, not after the last step.
+    expect(guide.indexOf('Sell online?')).toBeGreaterThan(guide.indexOf('Show in IMAP'))
+    expect(guide.indexOf('Sell online?')).toBeLessThan(guide.indexOf('Make an App Password'))
+    expect(guide).toContain('An App Password is a separate password made just for this app. An App Password can read and send')
+    expect(guide).toContain('Sell online? Add <span class="mono">-from:yourshop.sk</span> to the filter so your customers’ dispatch copies are not tracked as your parcels.')
+  })
+
+  test('a way out of the guide shows only while Gmail is not connected', async () => {
+    const skip = '<a href="/add">Skip for now — add a parcel by hand</a>'
+    const fresh = (await harness({ imap: undefined }).get('/settings')).body
+    expect(fresh).toContain(skip)
+    expect(fresh.indexOf(skip)).toBeGreaterThan(fresh.indexOf('</details>'))
+    expect(fresh.indexOf(skip)).toBeLessThan(fresh.indexOf('name="imapUser"'))
+    expect((await harness().get('/settings')).body).not.toContain(skip)
+  })
+
   test('the filter it tells you to import is a download from this server, the very file in the checkout', async () => {
     const res = await harness().get('/gmail-filter.xml')
     expect(res.statusCode).toBe(200)
@@ -178,6 +214,13 @@ describe('the settings page speaks to the person setting up Gmail', () => {
 })
 
 describe('saving runs the connection test', () => {
+  // `nextSlot` works in the machine's zone (the poller fires at the Mac's local times) while the page
+  // renders in Europe/Bratislava; the expected times below are for a Mac in Bratislava, so the zone
+  // luxon treats as "the system's" is pinned here instead of depending on where the tests run.
+  const zone = Settings.defaultZone
+  beforeAll(() => { Settings.defaultZone = 'Europe/Bratislava' })
+  afterAll(() => { Settings.defaultZone = zone })
+
   test('a save that changed the mail settings is tested at once, and the answer is on the page it lands on', async () => {
     const h = harness({}, fakeImap([], { exists: 7 }))
     const res = await h.post('/settings', fields({ imapMailbox: 'zasielky' }))
@@ -195,6 +238,33 @@ describe('saving runs the connection test', () => {
     expect(h.seen).toHaveLength(1)
     // ...and the button now offers to test again.
     expect(page).toContain('<button>Test again</button>')
+  })
+
+  test('right after a save, the Connected answer says when parcels appear; Test again does not', async () => {
+    const line = (t: string) => `Your parcels appear at the next check (${t}) — or press Refresh now.`
+    const at = (iso: string) => ({ now: () => new Date(iso) })
+    // 14:20 in Bratislava: the next slot is 15:00 the same day.
+    const afternoon = harness({}, fakeImap([], { exists: 7 }), at('2026-10-26T14:20:00+01:00'))
+    const res = await afternoon.post('/settings', fields({ imapMailbox: 'zasielky' }))
+    const page = (await afternoon.get(String(res.headers.location))).body
+    expect(page).toContain(line('15:00'))
+    expect(page).not.toContain('next hourly check')
+    // After the last slot of the day it is the first slot tomorrow.
+    const night = harness({}, fakeImap([], { exists: 7 }), at('2026-10-26T22:00:00+01:00'))
+    const saved = await night.post('/settings', fields({ imapMailbox: 'zasielky' }))
+    expect((await night.get(String(saved.headers.location))).body).toContain(line('tomorrow 07:00'))
+    // "Test again" is about the connection only: no time.
+    const again = (await night.post('/settings/test')).body
+    expect(again).toMatch(/Connected/)
+    expect(again).not.toContain('Your parcels appear at the next check')
+  })
+
+  test('an empty label after a save does not promise parcels', async () => {
+    const h = harness({}, fakeImap([], { exists: 0 }), { now: () => new Date('2026-10-26T14:20:00+01:00') })
+    const res = await h.post('/settings', fields({ imapMailbox: 'zasielky' }))
+    const page = (await h.get(String(res.headers.location))).body
+    expect(page).toContain('Connected, nothing to read')
+    expect(page).not.toContain('Your parcels appear at the next check')
   })
 
   test('a save that touched no mail setting does not dial the mail server', async () => {
@@ -347,7 +417,8 @@ describe('POST /settings/test', () => {
   })
 
   test('the answer is under its own heading, where the form posts to (#test), not at the top of the page', async () => {
-    const { res } = await resultOf(fakeImap([], { exists: 79 }))
+    // filterVersion 2: no re-import notice above the Gmail section, so the first notice is the answer
+    const { res } = await resultOf(fakeImap([], { exists: 79 }), { filterVersion: 2 })
     const heading = res.body.indexOf('<h2 id="test">Test the Gmail connection</h2>')
     expect(heading).toBeGreaterThan(-1)
     expect(res.body.indexOf('<div class="notice')).toBeGreaterThan(heading)
@@ -589,5 +660,161 @@ describe('Settings chooses the theme and the mode', () => {
   test('settingsValues reads the effective choice: the defaults when absent', () => {
     expect(settingsValues({ defaultPostalCode: '81101' })).toMatchObject({ theme: 'postal', mode: 'system' })
     expect(settingsValues({ defaultPostalCode: '81101', appearance: { theme: 'classic' } })).toMatchObject({ theme: 'classic', mode: 'system' })
+  })
+})
+
+describe('the Notifications block', () => {
+  const MARKER = '<input type="hidden" name="notificationsForm" value="1">'
+  const box = (body: string, name: string): string => {
+    const m = new RegExp(`<input[^>]*name="${name}"[^>]*>`).exec(body)
+    expect(m, `a checkbox named ${name}`).not.toBeNull()
+    return m![0]
+  }
+  const NAMES = ['notifyProgress', 'notifyDailyReminder', 'notifyDelivered'] as const
+
+  test('renders the heading, the marker and three labelled checkboxes, on the defaults when the file has no block', async () => {
+    const body = (await harness().get('/settings')).body
+    expect(body).toContain('<h2>Notifications</h2>')
+    expect(body).toContain(MARKER)
+    for (const name of NAMES) expect(box(body, name)).toContain('type="checkbox"')
+    expect(body).toContain('Registered and in-transit updates')
+    expect(body).toContain('A daily reminder while a parcel waits for you')
+    expect(body).toMatch(/<span>Delivered<\/span>/)
+    expect(box(body, 'notifyProgress')).not.toContain('checked')
+    expect(box(body, 'notifyDailyReminder')).toContain('checked')
+    expect(box(body, 'notifyDelivered')).toContain('checked')
+    // between the Parcels fields and Advanced
+    expect(body.indexOf('<h2>Parcels</h2>')).toBeLessThan(body.indexOf('<h2>Notifications</h2>'))
+    expect(body.indexOf('<h2>Notifications</h2>')).toBeLessThan(body.indexOf('<summary>Advanced</summary>'))
+  })
+
+  test('the boxes are ticked per the stored values', async () => {
+    const body = (await harness({ notifications: { progress: true, dailyReminder: false, delivered: false } }).get('/settings')).body
+    expect(box(body, 'notifyProgress')).toContain('checked')
+    expect(box(body, 'notifyDailyReminder')).not.toContain('checked')
+    expect(box(body, 'notifyDelivered')).not.toContain('checked')
+  })
+
+  test('a partial stored block shows the defaults for the absent keys', () => {
+    expect(settingsValues({ notifications: { progress: true } }).notifications)
+      .toEqual({ progress: true, dailyReminder: true, delivered: true })
+  })
+
+  test('posting with the marker and only Delivered ticked writes the whole block', async () => {
+    const h = harness()
+    const res = await h.post('/settings', fields({ notificationsForm: '1', notifyDelivered: 'on' }))
+    expect(res.statusCode).toBe(303)
+    expect(read(h.path).notifications).toEqual({ progress: false, dailyReminder: false, delivered: true })
+  })
+
+  test('posting without the marker leaves the stored block untouched', async () => {
+    const stored = { progress: true, dailyReminder: false, delivered: true }
+    const h = harness({ notifications: stored })
+    const res = await h.post('/settings', fields({ defaultPostalCode: '90031' }))
+    expect(res.statusCode).toBe(303)
+    expect(read(h.path)).toMatchObject({ defaultPostalCode: '90031', notifications: stored })
+  })
+
+  test('posting without the marker adds no block to a file that has none', async () => {
+    const h = harness()
+    await h.post('/settings', fields())
+    expect(read(h.path)).not.toHaveProperty('notifications')
+  })
+
+  test('a rejected save re-renders what was ticked', async () => {
+    const h = harness({ notifications: { progress: false, dailyReminder: true, delivered: true } })
+    const res = await h.post('/settings', fields({ defaultPostalCode: 'nope', notificationsForm: '1', notifyProgress: 'on' }))
+    expect(res.statusCode).toBe(400)
+    expect(box(res.body, 'notifyProgress')).toContain('checked')
+    expect(box(res.body, 'notifyDailyReminder')).not.toContain('checked')
+    expect(box(res.body, 'notifyDelivered')).not.toContain('checked')
+  })
+
+  test('the activity log names notifications.dailyReminder when only it changed', async () => {
+    const h = harness()
+    await h.post('/settings', fields({ notificationsForm: '1', notifyDelivered: 'on' }))
+    expect(listActivity(h.db, 10)[0]).toMatchObject({ kind: 'settings_saved', detail: 'notifications.dailyReminder' })
+  })
+
+  test('a save that keeps the defaults on a file with no block records nothing changed', async () => {
+    const h = harness()
+    await h.post('/settings', fields({ notificationsForm: '1', notifyDailyReminder: 'on', notifyDelivered: 'on' }))
+    expect(read(h.path).notifications).toEqual({ progress: false, dailyReminder: true, delivered: true })
+    expect(listActivity(h.db, 10)[0]).toMatchObject({ kind: 'settings_saved' })
+    expect(listActivity(h.db, 10)[0]!.detail ?? '').toBe('')
+  })
+})
+
+describe('the filter re-import notice', () => {
+  const SENTENCE = 'Set up before 0.2.0? Import the filter again and delete the old one, so Czech mail is labelled too.'
+  const BUTTON = 'Done, I imported it again'
+
+  test('Gmail connected and no filterVersion: the sentence, and a button in a form posting to /settings/filter-imported', async () => {
+    const body = (await harness().get('/settings')).body
+    expect(body).toContain(SENTENCE)
+    expect(body).toContain(BUTTON)
+    expect(body).toMatch(/<form method="post" action="\/settings\/filter-imported" id="filter-imported"><\/form>/)
+    expect(body).toMatch(/<button form="filter-imported"[^>]*>Done, I imported it again<\/button>/)
+    // in the Gmail section, above the guide
+    expect(body.indexOf(SENTENCE)).toBeGreaterThan(body.indexOf('<h2>Gmail</h2>'))
+    expect(body.indexOf(SENTENCE)).toBeLessThan(body.indexOf('How to connect Gmail'))
+  })
+
+  test('absent with filterVersion 2, and without a Gmail connection', async () => {
+    expect((await harness({ filterVersion: 2 }).get('/settings')).body).not.toContain(SENTENCE)
+    const fresh = (await harness({ imap: undefined }).get('/settings')).body
+    expect(fresh).not.toContain(SENTENCE)
+    expect(fresh).not.toContain(BUTTON)
+  })
+
+  test('the button writes filterVersion 2, keeps every other key, and redirects to /settings', async () => {
+    const h = harness({ notifications: { progress: true, dailyReminder: false, delivered: true }, somethingNewer: { a: 1 } })
+    const before = read(h.path)
+    const res = await h.post('/settings/filter-imported')
+    expect(res.statusCode).toBe(303)
+    expect(res.headers.location).toBe('/settings')
+    expect(read(h.path)).toEqual({ ...before, filterVersion: 2 })
+    expect(imapOf(h.path).pass).toBe(PASS)
+    expect(listActivity(h.db, 10)[0]).toMatchObject({ kind: 'settings_saved', detail: 'filterVersion' })
+    expect((await h.get('/settings')).body).not.toContain(SENTENCE)
+  })
+
+  test('the button on a file that is already at 2 changes nothing and logs nothing', async () => {
+    const h = harness({ filterVersion: 2 })
+    const bytes = readFileSync(h.path, 'utf8')
+    expect((await h.post('/settings/filter-imported')).statusCode).toBe(303)
+    expect(readFileSync(h.path, 'utf8')).toBe(bytes)
+    expect(listActivity(h.db, 10)).toHaveLength(0)
+  })
+
+  test('downloading the filter marks it imported, so a new setup never sees the notice', async () => {
+    const h = harness()
+    const res = await h.get('/gmail-filter.xml')
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toContain('application/xml')
+    expect(read(h.path).filterVersion).toBe(2)
+    expect(listActivity(h.db, 10)[0]).toMatchObject({ kind: 'settings_saved', detail: 'filterVersion' })
+    expect((await h.get('/settings')).body).not.toContain(SENTENCE)
+  })
+
+  test('a download from a file that does not validate is still served, and the file is left alone', async () => {
+    const h = harness({ port: 'eighty' })
+    const bytes = readFileSync(h.path, 'utf8')
+    const res = await h.get('/gmail-filter.xml')
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toContain('application/xml')
+    expect(readFileSync(h.path, 'utf8')).toBe(bytes)
+    expect(listActivity(h.db, 10)).toHaveLength(0)
+  })
+
+  test('a file that cannot be written does not stop the download', async () => {
+    const h = harness({}, undefined, { configPath: '/nonexistent-dir/config.json' })
+    const res = await h.get('/gmail-filter.xml')
+    expect(res.statusCode).toBe(200)
+  })
+
+  test('changedSettingFields compares filterVersion by effective value', () => {
+    expect(changedSettingFields({ defaultPostalCode: '1' }, { defaultPostalCode: '1', filterVersion: 1 })).toEqual([])
+    expect(changedSettingFields({ defaultPostalCode: '1' }, { defaultPostalCode: '1', filterVersion: 2 })).toEqual(['filterVersion'])
   })
 })

@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon'
 import type { Database } from '../db/index.js'
 import type { CanonicalStatus, CarrierId, NewEvent } from '../core/types.js'
+import { DEFAULT_NOTIFICATIONS, type NotificationPrefs } from '../core/config.js'
 import { getParcel, markAnnounced, parcelName, pickupSummary, type Parcel } from '../db/parcels.js'
 import { carrierHealth, markCarrierNotified, type HealthRow } from '../db/health.js'
 import { getIngestStatus, markIngestNotified } from '../db/ingest-status.js'
@@ -32,21 +33,35 @@ export const STATUS_TITLE: Record<CanonicalStatus, string> = {
 
 export const CARRIER_NAME: Record<CarrierId, string> = {
   posta: 'Slovenská pošta', packeta: 'Packeta', gls: 'GLS', sps: 'SPS', dpd: 'DPD', dhl: 'DHL',
+  ppl: 'PPL',
 }
 
 const collectBy = (d: Date): string =>
   `collect by ${DateTime.fromJSDate(d, { zone: DISPLAY_ZONE }).setLocale('en').toFormat('ccc d LLL')}`
 
-/**
- * `· day 3`: which calendar day (in Bratislava) of waiting this is, the day it arrived being day 1.
- * Counted from `lastChangedAt`, the newest carrier event - for a parcel sitting at a pickup point that
- * is its arrival there, and it is what the dashboard's "Since ..." shows. Without it, nothing is said.
- */
-function waitingDay(p: Parcel, now: Date): string {
-  if (!p.lastChangedAt) return ''
+/** Appended to the daily reminder's message: the reminder is the one banner the reader can switch off by acting. */
+const STOP_REMINDING = 'Collected it? Mark it in the app to stop these.'
+
+/** Whole calendar days in Bratislava from `then` to `now`: 0 the same day, 1 the next, however late or early. */
+const calendarDaysSince = (then: Date, now: Date): number => {
   const day = (d: Date) => DateTime.fromJSDate(d, { zone: DISPLAY_ZONE }).startOf('day')
-  const n = Math.round(day(now).diff(day(p.lastChangedAt), 'days').days) + 1
-  return n >= 1 ? ` · day ${n}` : ''
+  return Math.round(day(now).diff(day(then), 'days').days)
+}
+
+/**
+ * The reminder's headline: `Still waiting since Tue` for an arrival one to six calendar days ago (in
+ * Bratislava), `Still waiting since 3 Nov` from a week on, where a bare weekday would be ambiguous.
+ * Counted from `lastChangedAt`, the newest carrier event - for a parcel sitting at a pickup point that
+ * is its arrival there, and it is what the dashboard's "Since ..." shows. A day the reader can picture
+ * replaced "· day 3", which made them count. Without a known arrival it says no more than "for you"; an
+ * arrival today or in the future never reaches here, the ready-day rule holds the reminder back then.
+ */
+function waitingSince(p: Parcel, now: Date): string {
+  if (!p.lastChangedAt) return 'Still waiting for you'
+  const days = calendarDaysSince(p.lastChangedAt, now)
+  if (days < 1) return 'Still waiting for you'
+  const since = DateTime.fromJSDate(p.lastChangedAt, { zone: DISPLAY_ZONE }).setLocale('en')
+  return `Still waiting since ${since.toFormat(days <= 6 ? 'ccc' : 'd LLL')}`
 }
 
 /**
@@ -63,11 +78,27 @@ function waitingDay(p: Parcel, now: Date): string {
  * - `newEvents` (this run's inserted events) is used only for a repeat failed attempt, where the
  *   status does not change but a new attempt happened.
  *
+ * `prefs` (the config's `notifications` switches) make some statuses QUIET: `pre_transit` and
+ * `in_transit` while `progress` is off, and `delivered` while `delivered` is off or once the user has
+ * marked the parcel themselves (a `user_marks` row: they already said they have it). A parcel in a quiet
+ * status speaks neither for its transition nor for a new pickup point (DPD and Posta name one while the
+ * parcel is still in transit; the ready-for-pickup banner carries it anyway), on that poll or a later
+ * one. Both are still recorded with `markAnnounced`, so switching a switch on later releases no backlog.
+ * Every other status is announced exactly as before.
+ *
+ * The daily reminder for a parcel waiting at a pickup point fires at the 08:00 slot, from the day AFTER
+ * it arrived (the ready banner said it that day), and only while `prefs.dailyReminder` is on. Its slots
+ * are marked spent whenever the parcel is waiting, reminded or not, so a reminder held back (the ready
+ * day, the switch off) is never owed later: switching it on at 09:00 does not fire that morning's.
+ *
  * Parcel updates beyond four collapse into one summary. Carrier alarms are infrastructure failures,
  * not parcel updates: they are never folded into that summary, so they can never be truncated out of it.
  */
-export function buildNotifications(db: Database, newEvents: NewEvent[], now: Date, port: number): Notification[] {
+export function buildNotifications(
+  db: Database, newEvents: NewEvent[], now: Date, port: number, prefs: NotificationPrefs = DEFAULT_NOTIFICATIONS,
+): Notification[] {
   const base = `http://127.0.0.1:${port}`
+  const marked = db.prepare('SELECT 1 FROM user_marks WHERE parcel_id = ?')
   const sent = db.prepare('INSERT INTO deadline_reminders (parcel_id, notified_at) VALUES (?, ?)')
   const reminded = db.prepare('SELECT 1 FROM deadline_reminders WHERE parcel_id = ?')
   const nudged = db.prepare('SELECT 1 FROM pickup_nudges WHERE parcel_id = ? AND slot_key = ?')
@@ -92,18 +123,39 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
       const mine = newEvents.filter(e => e.parcelId === id)
 
       const transitioned = p.status !== p.lastAnnouncedStatus && p.status !== 'unknown'
+      // A status the switches keep quiet (see above). The user_marks lookup only for a delivered parcel.
+      const quiet = (p.status === 'pre_transit' || p.status === 'in_transit') ? !prefs.progress
+        : p.status === 'delivered' ? !prefs.delivered || marked.get(id) !== undefined
+          : false
+      const speaks = transitioned && !quiet
+      const pickupPending = p.pickup !== undefined && !p.pickupAnnounced && p.status !== 'unknown'
       // Only while the parcel is *currently* failed, so a long-ago attempt in a freshly added parcel's
       // backfilled history is not mistaken for a live one.
       const failedAttempt = p.status === 'failed_attempt' && (transitioned || mine.some(e => e.status === 'failed_attempt'))
-      const newPickup = p.pickup !== undefined && !p.pickupAnnounced && p.status !== 'unknown'
+      // Not in a quiet status: the pickup point is recorded as said (below), and the ready banner names it.
+      const newPickup = pickupPending && !quiet
       const deadlineDue = p.status === 'ready_for_pickup' && p.retainedTill !== undefined
         && p.retainedTill > now && p.retainedTill.getTime() - now.getTime() <= DEADLINE_WINDOW_MS
         && reminded.get(id) === undefined
-      // A parcel left waiting is mentioned again twice a day. Only the newest passed slot can fire, so a
-      // machine that was asleep all morning produces one reminder on waking, not a burst of the day's slots.
-      const nudgeDue = p.status === 'ready_for_pickup' && dueSlot !== undefined
+      // A parcel left waiting is mentioned again once a day, but not on the day it arrived: the ready
+      // banner said it then (a parcel ready at 06:30 would otherwise be "still waiting" at 08:00). Only the
+      // newest passed slot can fire, so a machine that was asleep all morning produces one reminder on
+      // waking, not a burst of missed ones. An arrival stamped in the future (the carrier's clock ahead of
+      // this Mac's, across midnight) is the ready day too, so it is never "still waiting" before it arrived.
+      const waiting = p.status === 'ready_for_pickup'
+      const readyDay = p.lastChangedAt !== undefined && calendarDaysSince(p.lastChangedAt, now) <= 0
+      const nudgeDue = waiting && prefs.dailyReminder && !readyDay && dueSlot !== undefined
         && nudged.get(id, dueSlot) === undefined
-      if (!transitioned && !failedAttempt && !newPickup && !deadlineDue && !nudgeDue) continue
+      // Every slot already passed today is marked, not just the one that fired, and whether or not one
+      // fired: an earlier slot that was missed (asleep, or the parcel only became ready this afternoon)
+      // must not fire retroactively, a transition sent at 10:00 already told the reader what the 08:00 slot
+      // would have, and a reminder held back (the ready day, the switch off) is not owed once that changes.
+      if (waiting) for (const key of slots) nudge.run(id, key, now.toISOString())
+      if (!speaks && !failedAttempt && !newPickup && !deadlineDue && !nudgeDue) {
+        // What the quiet status kept back is recorded, so it is neither re-evaluated every run nor owed later.
+        if (quiet && (transitioned || pickupPending)) markAnnounced(db, id, p.status, p.pickup !== undefined)
+        continue
+      }
 
       const showPickup = p.status === 'ready_for_pickup' || newPickup
       const parts = [
@@ -114,22 +166,22 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
         parts.push(mine.at(-1)?.description || p.statusRaw || p.trackingNumber)
       }
 
-      const headline = transitioned || failedAttempt || newPickup
+      // The reminder is the headline only when it is the sole reason to speak; then it, alone, says how to stop it.
+      const reminder = nudgeDue && !speaks && !failedAttempt && !newPickup && !deadlineDue
+      const headline = speaks || failedAttempt || newPickup
         ? STATUS_TITLE[p.status]
-        : deadlineDue ? 'Pickup deadline approaching' : `Still waiting for you${waitingDay(p, now)}`
+        : deadlineDue ? 'Pickup deadline approaching' : waitingSince(p, now)
+      // It is the one banner that repeats until the reader acts.
+      if (reminder) parts.push(STOP_REMINDING)
       parcelUpdates.push({
         groupKey: `parcel-${id}`,
         title: `${headline} — ${parcelName(p)}`,
         message: parts.join(' · '),
         url: `${base}/parcel/${id}`,
-        waiting: p.status === 'ready_for_pickup',
+        waiting,
       })
       markAnnounced(db, id, p.status, p.pickup !== undefined)
       if (deadlineDue) sent.run(id, now.toISOString())
-      // Every slot already passed today is marked, not just the one that fired: an earlier slot that was
-      // missed (asleep, or the parcel only became ready this afternoon) must not fire retroactively, and
-      // a transition notification sent at 10:00 already told the reader what the 08:00 slot would have.
-      if (p.status === 'ready_for_pickup') for (const key of slots) nudge.run(id, key, now.toISOString())
     }
 
     const health = carrierHealth(db)

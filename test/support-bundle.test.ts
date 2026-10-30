@@ -15,7 +15,7 @@ import { appendEvents } from '../src/db/events.js'
 import { finishRun, startRun } from '../src/db/poll-runs.js'
 import { insertParcel, updateParcelState } from '../src/db/parcels.js'
 import { escapeHtml } from '../src/web/views/html.js'
-import type { Config } from '../src/core/config.js'
+import { DEFAULT_NOTIFICATIONS, type Config } from '../src/core/config.js'
 import type { Database } from '../src/db/index.js'
 import { memDb, NOW } from './poll-helpers.js'
 
@@ -57,7 +57,7 @@ const NUMBERS = {
 
 const config: Config = {
   dbPath: ':memory:', port: 8787, defaultPostalCode: SECRETS.defaultPostcode,
-  notifier: 'auto', mapPreview: true,
+  notifier: 'auto', mapPreview: true, notifications: DEFAULT_NOTIFICATIONS, filterVersion: 1,
   imap: { host: 'imap.gmail.com', port: 993, user: SECRETS.email, pass: SECRETS.appPassword, mailbox: 'parcels' },
 }
 
@@ -531,6 +531,7 @@ describe('redaction keeps pace with the carriers', () => {
     sps: ['70312345678901', 'SKABCDE12ABCDEFGHJ'],
     dpd: ['01234567890123', '01234567890123X'],
     dhl: ['JJD0099999999', 'JVGL9999999999', '3SBCC000123456', '0001234567890123'],
+    ppl: ['40888888801'],
   }
 
   test('every shape a registered carrier claims is redacted out of a bundle', async () => {

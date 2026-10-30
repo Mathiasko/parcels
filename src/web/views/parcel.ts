@@ -117,7 +117,7 @@ function pickupPanel(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx, map
   const note = ready ? noDeadlineNote([{ parcel: p, last }]) : ''
   const facts = pickupFacts(note, maps)
   return html`<section class="pk" aria-label="Pickup point"><div class="pk-h${ready ? '' : raw(' plain')}${ready && urgency === 'now' ? raw(' due-now') : ''}"><div class="where">${where}</div>${ready ? statusIndicator('ready_for_pickup') : html`<span class="meta">Pickup point</span>`}</div>
-<div class="pk-b">${clock}${ready ? pickupCodeLine(code) : ''}${ready && map ? mapPanel(map, where) : ''}${facts ? html`<p class="meta">${facts}</p>` : ''}</div></section>`
+<div class="pk-b">${clock}${ready ? pickupCodeLine(code, p.pickup?.kind) : ''}${ready && map ? mapPanel(map, where) : ''}${facts ? html`<p class="meta">${facts}</p>` : ''}</div></section>`
 }
 
 /**

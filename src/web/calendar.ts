@@ -4,7 +4,7 @@ import { icsCalendar } from '../core/ics.js'
 import { parcelName, pickupSummary, type Parcel } from '../db/parcels.js'
 import { wallClock } from './calendar-slots.js'
 import { CARRIER_NAME, DISPLAY_ZONE, formatDay } from './views/format.js'
-import { mapsUrl } from './views/index.js'
+import { mapsUrl, pickupCodeLabel } from './views/index.js'
 
 const PRODID = '-//parcels//Add to Calendar//EN'
 /** SEQUENCE counts minutes from here, so it stays a small integer for decades. */
@@ -27,7 +27,8 @@ const isWholeDay = (t: DateTime): boolean => t.toFormat('HH:mm:ss.SSS') === '23:
  *
  * - Title `Pick up: <name>`. Location the pickup address; the URL the Apple Maps link the pages print
  *   (the event lives on a phone, where this server's own loopback address means nothing).
- * - Description: carrier and tracking number, the locker code when one is stored, and the REAL deadline
+ * - Description: carrier and tracking number, the code when one is stored (worded for the kind of
+ *   place, as on the card: `pickupCodeLabel`), and the REAL deadline
  *   ("Collect by Sat 31 Oct, 18:00"), or that the carrier gave none - the event's own time is the plan,
  *   and the deadline is what the plan has to beat.
  * - The opening code goes in the description, which is the point - it is read at the locker - and never
@@ -51,7 +52,7 @@ export function pickupEventContent(p: Parcel, code: string | undefined, now: Dat
     geo: lat !== undefined && lon !== undefined ? { lat, lon } : undefined,
     description: [
       `${CARRIER_NAME[p.carrier]} · ${p.trackingNumber}`,
-      ...(code ? [`Open the box with ${code}`] : []),
+      ...(code ? [`${pickupCodeLabel(p.pickup?.kind)} ${code}`] : []),
       deadlineLine(p, now),
     ],
   }

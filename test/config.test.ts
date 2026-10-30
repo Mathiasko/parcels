@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest'
 import { fileURLToPath } from 'node:url'
-import { loadConfig, loadRuntimeConfig, validateConfig } from '../src/core/config.js'
+import { loadConfig, loadRuntimeConfig, validateConfig, DEFAULT_NOTIFICATIONS, CURRENT_FILTER_VERSION } from '../src/core/config.js'
 
 const fixturePath = (name: string) =>
   fileURLToPath(new URL(`./fixtures/config/${name}`, import.meta.url))
@@ -67,5 +67,55 @@ describe('appearance', () => {
 
   test('keys inside appearance that this version does not know are not an error', () => {
     expect(() => validateConfig({ ...base, appearance: { theme: 'classic', extra: 1 } })).not.toThrow()
+  })
+})
+
+describe('the notifications block', () => {
+  const base = { defaultPostalCode: '81101' }
+
+  test('absent means the defaults: progress off, the daily reminder and delivered on', () => {
+    expect(DEFAULT_NOTIFICATIONS).toEqual({ progress: false, dailyReminder: true, delivered: true })
+    expect(validateConfig(base).notifications).toEqual({ progress: false, dailyReminder: true, delivered: true })
+  })
+
+  test('a partial block keeps its keys and fills the rest from the defaults', () => {
+    expect(validateConfig({ ...base, notifications: { progress: true } }).notifications)
+      .toEqual({ progress: true, dailyReminder: true, delivered: true })
+  })
+
+  test('the returned block is a copy, so a caller cannot change the defaults', () => {
+    const n = validateConfig(base).notifications
+    n.progress = true
+    expect(DEFAULT_NOTIFICATIONS.progress).toBe(false)
+  })
+
+  test('a switch that is not a boolean is rejected by name', () => {
+    expect(() => validateConfig({ ...base, notifications: { delivered: 'no' } })).toThrow(/"notifications.delivered" must be true or false/)
+  })
+
+  test('a key that is not a switch is rejected by name', () => {
+    expect(() => validateConfig({ ...base, notifications: { sound: true } })).toThrow(/"notifications.sound" is not a setting/)
+  })
+
+  test('a block that is not an object is rejected', () => {
+    expect(() => validateConfig({ ...base, notifications: [] })).toThrow(/"notifications" must be an object/)
+    expect(() => validateConfig({ ...base, notifications: 1 })).toThrow(/"notifications" must be an object/)
+  })
+})
+
+describe('the filter version', () => {
+  const base = { defaultPostalCode: '81101' }
+
+  test('absent means 1: a filter imported before versions existed', () => {
+    expect(validateConfig(base).filterVersion).toBe(1)
+  })
+
+  test('a stored version is taken as it is, and this build ships version 2', () => {
+    expect(validateConfig({ ...base, filterVersion: 2 }).filterVersion).toBe(2)
+    expect(CURRENT_FILTER_VERSION).toBe(2)
+  })
+
+  test.each([0, 1.5, -1, '2', null, true])('%j is not a version', (bad) => {
+    expect(() => validateConfig({ ...base, filterVersion: bad })).toThrow(/"filterVersion" must be a whole number from 1/)
   })
 })

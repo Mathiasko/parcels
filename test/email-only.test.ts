@@ -192,7 +192,7 @@ describe('an email-only carrier is never polled', () => {
 describe('what the user is told about an email-only carrier', () => {
   test('/health shows DHL as what it is, never as a broken or never-polled carrier', async () => {
     const db = memDb()
-    for (const id of ['posta', 'packeta', 'gls', 'sps', 'dpd'] as const) recordHealth(db, id, 'ok', undefined, NOW)
+    for (const id of ['posta', 'packeta', 'gls', 'sps', 'dpd', 'ppl'] as const) recordHealth(db, id, 'ok', undefined, NOW)
     const body = (await get(db, '/health')).body
     const row = body.slice(body.indexOf('data-carrier="dhl"')).split('</tr>')[0]!
     expect(row).toContain('DHL')
@@ -200,7 +200,7 @@ describe('what the user is told about an email-only carrier', () => {
     expect(row).not.toContain('class="bad"')
     expect(row).not.toMatch(/no data|failing|needs attention/)
     // The lede counts the carriers it can actually poll, and says what DHL is instead.
-    expect(body).toContain('All 5 carriers reporting.')
+    expect(body).toContain('All 6 carriers reporting.')
     expect(body).not.toMatch(/DHL (has|have) never been polled/)
     expect(body).toMatch(/DHL is not polled/)
   })

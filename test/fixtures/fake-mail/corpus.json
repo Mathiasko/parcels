@@ -202,7 +202,8 @@
     "arrival": "2026-10-18 11:00",
     "exercises": "P7 2/4: GLS BOX ready, PIN, \"Odberné miesto:\" block (carrier answer has no pickup -> mail fills it)",
     "expect": {
-      "parcel": "gls:90444444401"
+      "parcel": "gls:90444444401",
+      "code": "402211"
     },
     "bytes": 3419
   },
@@ -286,7 +287,8 @@
     "arrival": "2026-10-20 15:00",
     "exercises": "SPS ready at balíkovo, windows-1250 base64, verification code 551902",
     "expect": {
-      "parcel": "sps:SK0FAKE26TEST00001"
+      "parcel": "sps:SK0FAKE26TEST00001",
+      "code": "551902"
     },
     "bytes": 3412
   },
@@ -438,7 +440,8 @@
     "arrival": "2026-10-24 09:00",
     "exercises": "P5 2/4: DPD Pickup Station ready, PIN 120477, address block",
     "expect": {
-      "parcel": "dpd:01505333333302"
+      "parcel": "dpd:01505333333302",
+      "code": "120477"
     },
     "bytes": 4221
   },
@@ -448,7 +451,8 @@
     "arrival": "2026-10-24 10:00",
     "exercises": "Slovenská pošta BalíkoBOX with PIN; deadline that will PASS before the end of the run",
     "expect": {
-      "parcel": "posta:EB666666025SK"
+      "parcel": "posta:EB666666025SK",
+      "code": "631285"
     },
     "bytes": 3868
   },
@@ -792,5 +796,87 @@
       "duplicateOf": "20"
     },
     "bytes": 3419
+  },
+  {
+    "file": "78-zasilkovna-cz-accepted.eml",
+    "date": "2026-10-24 10:00",
+    "arrival": "2026-10-24 10:00",
+    "exercises": "CZ Zásilkovna 1/3: accepted (\"byla podána\"), FUTURE-tense box block (\"kde bude\")",
+    "expect": {
+      "parcel": "packeta:Z2222222215"
+    },
+    "bytes": 1172
+  },
+  {
+    "file": "79-zasilkovna-cz-ready-zbox-code.eml",
+    "date": "2026-10-26 14:00",
+    "arrival": "2026-10-26 14:00",
+    "exercises": "CZ Zásilkovna 2/3: ready in a Z-BOX; \"Kód pro otevření schránky\" (305118), present-tense \"Místo, kde je...\" block, ISO-8859-2 QP",
+    "expect": {
+      "parcel": "packeta:Z2222222215",
+      "code": "305118"
+    },
+    "bytes": 1103
+  },
+  {
+    "file": "80-zasilkovna-cz-pickedup.eml",
+    "date": "2026-10-28 16:00",
+    "arrival": "2026-10-28 16:00",
+    "exercises": "CZ Zásilkovna 3/3: picked up (\"vyzvednuta\")",
+    "expect": {
+      "parcel": "packeta:Z2222222215"
+    },
+    "bytes": 977
+  },
+  {
+    "file": "81-zasilkovna-cz-returning.eml",
+    "date": "2026-10-29 09:00",
+    "arrival": "2026-10-29 09:00",
+    "exercises": "CZ Zásilkovna, a second parcel not collected in time: \"vracíme odesílateli\"",
+    "expect": {
+      "parcel": "packeta:Z2222222216"
+    },
+    "bytes": 1023
+  },
+  {
+    "file": "82-ppl-accepted.eml",
+    "date": "2026-10-27 10:00",
+    "arrival": "2026-10-27 10:00",
+    "exercises": "PPL 1/2: from ppl.cz, 11 bare digits under \"Číslo zásilky:\" (GLS's shape, PPL by sender)",
+    "expect": {
+      "parcel": "ppl:40888888801"
+    },
+    "bytes": 1016
+  },
+  {
+    "file": "83-ppl-ready-parcelshop-pin.eml",
+    "date": "2026-10-28 14:00",
+    "arrival": "2026-10-28 14:00",
+    "exercises": "PPL 2/2: ready at a ParcelShop; \"PIN pro vyzvednutí:\" (402211), pickup block under the Zásilkovna-style \"Místo, kde je vaše zásilka uložena\" label",
+    "expect": {
+      "parcel": "ppl:40888888801",
+      "code": "402211"
+    },
+    "bytes": 1219
+  },
+  {
+    "file": "84-eshop-cz-dispatch-names-ppl.eml",
+    "date": "2026-10-29 11:00",
+    "arrival": "2026-10-29 11:00",
+    "exercises": "Czech e-shop dispatch: \"Dopravce: PPL\" on the line above a labelled 11-digit number -> PPL by the shop naming it beside the number",
+    "expect": {
+      "parcel": "ppl:40888888802"
+    },
+    "bytes": 954
+  },
+  {
+    "file": "85-eshop-cz-11-digit-no-carrier.eml",
+    "date": "2026-10-29 17:00",
+    "arrival": "2026-10-29 17:00",
+    "exercises": "a stranger's mail with a labelled 11-digit number and no carrier named: never a PPL parcel (11 digits alone is no evidence); the extractor sends it to /attention (\"something shaped like a tracking number\") rather than guessing GLS or PPL",
+    "expect": {
+      "attention": true
+    },
+    "bytes": 835
   }
 ]

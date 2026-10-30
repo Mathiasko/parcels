@@ -73,6 +73,11 @@ label input,label select{display:block;width:100%;margin-top:.25rem;font-size:.9
 .fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;max-width:28rem}
 .fields .wide{grid-column:1/-1}
 .fields .hint{margin:.25rem 0 0;font-weight:400}
+/* A tick box and its words, side by side: a plain label input would stretch the box to the full width. */
+.checks{display:grid;gap:.75rem;max-width:28rem;margin:.5rem 0}
+.check{display:grid;grid-template-columns:1rem minmax(0,1fr);column-gap:.5rem;align-items:baseline;cursor:pointer}
+.check input{width:auto;height:auto;margin:0;padding:0;border:0;background:none;accent-color:var(--ink)}
+.check .hint{grid-column:2;margin:.125rem 0 0;font-weight:400}
 /* A field's label when there is no control to label (the calendar list could not be read). */
 .lbl{display:block;font-size:.8125rem;line-height:1.3846;font-weight:600;color:var(--ink-2)}
 .inl{display:flex;gap:.5rem;align-items:center}

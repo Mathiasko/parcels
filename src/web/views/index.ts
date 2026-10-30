@@ -1,7 +1,7 @@
 import { isDormant } from '../../core/backoff.js'
 import { postcodeRejected, type Parcel } from '../../db/parcels.js'
 import type { StoredEvent, UserMark } from '../../db/events.js'
-import type { CanonicalStatus } from '../../core/types.js'
+import type { CanonicalStatus, PickupPoint } from '../../core/types.js'
 import { isEmailOnlyCarrier } from '../../core/types.js'
 import {
   calendarDaysBetween, CARRIER_NAME, formatAgo, formatDateTime, formatDay, isKnown, plural, quietIndicator,
@@ -121,23 +121,42 @@ export function refreshBanner(n: RefreshNote | undefined, now: Date, doing?: str
 export interface Entry {
   parcel: Parcel
   last: StoredEvent | undefined
-  /** The Z-BOX opening code, when its mail carried one. */
+  /** The pickup code or PIN (Z-BOX opening code, ParcelShop PIN, ...), when its mail carried one. */
   code?: string
   /** The event "Add to Calendar" already made, and a refused submission to show again. */
   cal?: CalendarFormState
 }
 
 /**
- * The code that opens the locker, shown only when the mail actually carried one.
+ * The words in front of a pickup code, by the kind of place it is used at. The ONE place this mapping
+ * lives: the card (`pickupCodeLine`) and the Add to Calendar description (`pickupEventContent`) both
+ * read it, so a counter PIN is never "open the box" on one surface and "show the PIN" on the other.
  *
- * There is deliberately no empty state: a staffed pickup point never has a code, because a person
- * hands the parcel over, so "no code" is the normal and permanent answer for those and saying so
- * would invent a problem. Rendered big, monospaced and selectable - it is read off the screen while
- * standing at the box, or copied, and a mis-read digit is a wasted trip.
+ * The same six digits are used two different ways: a Z-BOX or a locker is OPENED with them, while a
+ * ParcelShop or a post office counter wants the PIN SHOWN to the person serving. Telling someone to
+ * open a box at a counter is a small lie that costs a confused minute in a queue. When the carrier
+ * named no place (or one we could not classify) the label claims nothing about how it is used and just
+ * says "PIN": no invented place, the same rule the rest of the card follows.
  */
-export function pickupCodeLine(code: string | undefined): Html {
+export function pickupCodeLabel(kind: PickupPoint['kind'] | undefined): string {
+  return kind === 'zbox' || kind === 'locker' ? 'Open the box with'
+    : kind === 'parcelshop' || kind === 'post_office' ? 'Show this PIN at the counter:'
+    : 'PIN'
+}
+
+/**
+ * The code or PIN the carrier's mail gave, worded for the kind of place it is used at
+ * (`pickupCodeLabel`).
+ *
+ * There is deliberately no empty state: a staffed pickup point with nothing to type never has a code,
+ * because a person hands the parcel over, so "no code" is the normal and permanent answer for those
+ * and saying so would invent a problem. Rendered big, monospaced and selectable - it is read off the
+ * screen while standing at the box, or copied, and a mis-read digit is a wasted trip. The markup is
+ * the same for every kind, so the stylesheet and the big monospaced digits do not care.
+ */
+export function pickupCodeLine(code: string | undefined, kind: PickupPoint['kind'] | undefined): Html {
   if (!code) return html``
-  return html`<p class="code"><span class="code-l">Open the box with</span> <b class="mono sel">${code}</b></p>`
+  return html`<p class="code"><span class="code-l">${pickupCodeLabel(kind)}</span> <b class="mono sel">${code}</b></p>`
 }
 
 /**
@@ -352,7 +371,7 @@ function cardEntry(c: Card, e: Entry, ctx: PageCtx): Html {
   return html`<li>${c.placed ? html`<h3 class="who"><a href="/parcel/${p.id}">${parcelName(p)}</a></h3>` : ''}
 <span class="meta">${CARRIER_NAME[p.carrier]}${parcelName(p) === p.trackingNumber ? ''   // unnamed: its name IS the number
     : html` · <span class="mono sel">${p.trackingNumber}</span>`}</span>
-${sentence}${pickupClock(e, ctx.now, calendarForm(p, ctx.now, e.cal, 'home')).out}${pickupCodeLine(e.code)}${postcodeRejected(p)
+${sentence}${pickupClock(e, ctx.now, calendarForm(p, ctx.now, e.cal, 'home')).out}${pickupCodeLine(e.code, p.pickup?.kind)}${postcodeRejected(p)
     ? html`<p class="meta t-warn">${glyph('problem')} Postcode needed: <a class="sel" href="/parcel/${p.id}">set one</a> to resume full tracking.</p>`
     : ''}${p.status === 'ready_for_pickup' ? markForm(p, 'Mark as collected', 'home') : ''}</li>`
 }

@@ -85,6 +85,9 @@ const SENDER_DOMAINS: ReadonlyArray<readonly [string, CarrierId]> = [
   ['dhl.com', 'dhl'], ['dhl.de', 'dhl'], ['dhl.sk', 'dhl'], ['dhl.cz', 'dhl'],
   ['dhlparcel.com', 'dhl'], ['dhlparcel.sk', 'dhl'], ['dhlparcel.cz', 'dhl'], ['dhlparcel.nl', 'dhl'],
   ['dhlexpress.com', 'dhl'],
+  // PPL writes from ppl.cz. Its 11-digit numbers are also GLS's shape, so this sender is one of the only
+  // two things that make 11 digits PPL's (the other is a shop naming PPL beside the number).
+  ['ppl.cz', 'ppl'],
 ]
 
 export function carrierForAddress(address: string): CarrierId | undefined {
@@ -108,6 +111,9 @@ const NUMBER: Record<CarrierId, RegExp> = {
   // The prefixed forms, plus the 16-digits-or-more leading-zero form; see src/carriers/dhl.ts for why
   // the bare ten-digit Express form is deliberately absent.
   dhl: /(?<![A-Z0-9])(?:JJD\d{10,22}|JVGL\d{10,22}|3S[A-Z0-9]{8,18}|000\d{13,25})(?![A-Z0-9])/g,
+  // 11 bare digits, which GLS's shape also covers: never trusted alone. Which mail may call a number
+  // PPL (its own sender, or "PPL" named beside a labelled number) is decided elsewhere, not here.
+  ppl: /(?<!\d)\d{11}(?!\d)/g,
 }
 
 /**
@@ -123,7 +129,8 @@ const SENDER_NUMBER: Partial<Record<CarrierId, RegExp>> = {
  * Shapes distinctive enough to trust without a sender hint, and the pattern that may be trusted for
  * each. Bare digits (dpd, gls) are not, and neither is DHL's `000…` form, which is why dhl appears
  * here with only its lettered prefixes: `JJD…`, `JVGL…` and `3S…` cannot be anything else, while a
- * long run of digits in a stranger's mail could be an order number or a reference.
+ * long run of digits in a stranger's mail could be an order number or a reference. PPL is absent for
+ * the same reason, and more so: its 11 digits are a GLS number too, so no shape can ever say PPL.
  */
 const DISTINCTIVE: Partial<Record<CarrierId, RegExp>> = {
   posta: NUMBER.posta,
@@ -137,12 +144,16 @@ const DISTINCTIVE: Partial<Record<CarrierId, RegExp>> = {
  * together with a labelled number of that carrier's shape: a name alone proves nothing (an order
  * confirmation says "GLS" for the chosen delivery method), which is why both signals are required.
  * Packeta, SPS and Slovenska posta need no name here: their number shapes are distinctive by themselves,
- * and so are DHL's lettered prefixes - only its `000…` form needs the name beside it.
+ * and so are DHL's lettered prefixes - only its `000…` form needs the name beside it. PPL needs its name
+ * closer than the others, in the number's own sentence, and so does GLS on a number PPL is named
+ * beside (`namedBareNumbers`).
  */
 const CARRIER_NAME = {
   gls: /(?<![\p{L}\d])GLS(?![\p{L}\d])/iu,
   dpd: /(?<![\p{L}\d])DPD(?![\p{L}\d])/iu,
   dhl: /(?<![\p{L}\d])DHL(?![\p{L}\d])/iu,
+  // Only beside the number, not anywhere in the mail: see `namedBareNumbers`.
+  ppl: /(?<![\p{L}\d])PPL(?![\p{L}\d])/iu,
 } as const
 
 const MERCHANT_MAX = 80
@@ -166,6 +177,8 @@ const isPlaceholder = (normalized: string): boolean => /^[A-Z]*(\d)\1*[A-Z]*$/.t
 
 const firstNumber = (carrier: CarrierId, haystack: string): string | undefined => {
   if (carrier === 'gls') return glsNumber(haystack)
+  // From ppl.cz, ranked like GLS (labelled first, phone-looking last), but only 11 standalone digits.
+  if (carrier === 'ppl') return rankedNumber(haystack, STANDALONE.ppl)
   return (haystack.match(SENDER_NUMBER[carrier] ?? NUMBER[carrier]) ?? []).map(normalizeNumber).find(n => !isPlaceholder(n))
 }
 
@@ -248,7 +261,15 @@ const PHONE_PREFIX = /^(?:42[01]|00421|00420|09\d{8}$)/
  * order, so within a rank the earlier one wins.
  */
 function glsNumber(haystack: string): string | undefined {
-  const candidates = [...haystack.matchAll(NUMBER.gls)].filter(m => !isPlaceholder(m[0])).map(m => {
+  return rankedNumber(haystack, NUMBER.gls)
+}
+
+/**
+ * `glsNumber`'s ranking over the candidates of any bare-digit `shape`. PPL's mail needs it as much as
+ * GLS's: a courier's phone, a reference or an order number may come before the parcel number.
+ */
+function rankedNumber(haystack: string, shape: RegExp): string | undefined {
+  const candidates = [...haystack.matchAll(shape)].filter(m => !isPlaceholder(m[0])).map(m => {
     const before = haystack.slice(Math.max(0, m.index - 50), m.index)
     const phone = PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0])
     return { number: m[0], rank: (GLS_LABEL.test(before) || NUMBERED_LABEL.test(before)) && !phone ? 0 : phone ? 2 : 1 }
@@ -262,6 +283,7 @@ const STANDALONE = {
   gls: /(?<![\p{L}\d])\d{10,12}(?![\p{L}\d])/gu,
   dpd: /(?<![\p{L}\d])\d{14}(?![\p{L}\d])/gu,
   dhl: /(?<![\p{L}\d])000\d{13,25}(?![\p{L}\d])/gu,
+  ppl: /(?<![\p{L}\d])\d{11}(?![\p{L}\d])/gu,
 } as const
 
 /**
@@ -303,19 +325,81 @@ function labelledNumbers(carrier: keyof typeof STANDALONE, haystack: string, lab
 }
 
 /** The carriers whose numbers are bare digits, so a label or a carrier name has to vouch for them. */
-const BARE_DIGIT_CARRIERS = ['gls', 'dpd', 'dhl'] as const
+const BARE_DIGIT_CARRIERS = ['gls', 'dpd', 'dhl', 'ppl'] as const
 
-/** Carriers the text names that also have a labelled number of their bare-digit shape beside it. */
-function namedBareNumbers(haystack: string): { c: CarrierId; n: string }[] {
-  return BARE_DIGIT_CARRIERS
-    .filter(c => CARRIER_NAME[c].test(haystack))
-    .flatMap(c => labelledNumbers(c, haystack).map(n => ({ c, n })))
+/** How far before, or along its line after, a number a carrier's name may stand and still be in its sentence (Ruling R2). */
+const NEARBY = 160
+/**
+ * How many occurrences of one number are looked at for a name beside it. A mail prints its number a
+ * few times (subject, body, a tracking link); a crafted one prints it tens of thousands of times, and
+ * looking at each of those made one mail cost seconds.
+ */
+const NEARBY_TRIES = 10
+/** A blank line (whitespace and quote marks only): the end of a paragraph. */
+const BLANK_LINE = /\n[ \t\u00a0>]*\r?\n/g
+
+/**
+ * Whether `name` stands in the same sentence as the number at `at`: between the number and the nearest
+ * blank line before it, at most `NEARBY` characters back, or after the number on its own line, at most
+ * `NEARBY` characters on. `Dopravce: PPL` on the line above `Číslo zásilky: 40888888801` is; a footer
+ * that says "we ship with PPL" (or links ppl.cz) paragraphs away is not.
+ */
+function namedAt(name: RegExp, haystack: string, at: number, length: number): boolean {
+  const back = haystack.slice(Math.max(0, at - NEARBY), at)
+  const paragraph = back.slice(Math.max(0, ...[...back.matchAll(BLANK_LINE)].map(m => m.index + m[0].length)))
+  const ahead = haystack.slice(at + length, at + length + NEARBY).split('\n', 1)[0] ?? ''
+  return name.test(paragraph) || name.test(ahead)
 }
 
 /**
- * Every way a carrier can be NAMED in prose, and which carrier each names. The three whose numbers are
+ * Which of the 11-digit `numbers` have `name` in their sentence (`namedAt`) at one of their first
+ * `NEARBY_TRIES` occurrences. One pass over the text, with a bounded window per occurrence looked at.
+ */
+function namedBeside(name: RegExp, haystack: string, numbers: readonly string[]): Set<string> {
+  const beside = new Set<string>()
+  if (numbers.length === 0 || !name.test(haystack)) return beside
+  const tries = new Map<string, number>()
+  for (const m of haystack.matchAll(STANDALONE.ppl)) {
+    const n = normalizeNumber(m[0])
+    const tried = tries.get(n) ?? 0
+    if (!numbers.includes(n) || beside.has(n) || tried >= NEARBY_TRIES) continue
+    tries.set(n, tried + 1)
+    if (namedAt(name, haystack, m.index, m[0].length)) beside.add(n)
+    if (numbers.every(x => beside.has(x) || (tries.get(x) ?? 0) >= NEARBY_TRIES)) break
+  }
+  return beside
+}
+
+/**
+ * Carriers the text names that also have a labelled number of their bare-digit shape beside it.
+ *
+ * GLS, DPD and DHL may be named anywhere in the mail: their name is rare enough in a mail that prints
+ * a labelled number of their shape. PPL may not. Its 11 digits are a GLS number too, so a Czech shop
+ * whose footer lists the carriers it ships with ("Dopravci: GLS, PPL, Zásilkovna") would make every
+ * GLS parcel of that shop a PPL one, or a question. So PPL counts only when it is named in the
+ * number's own sentence (`namedBeside`).
+ *
+ * The same footer names GLS too, and GLS named anywhere would still claim the number PPL is named
+ * beside, turning every PPL dispatch from such a shop into a question. So on a number PPL is named
+ * beside, GLS has to be named beside it as well; only then do both carriers claim it, which is the
+ * two-carriers question in `extractFrom` rather than a guess. GLS's claim on any other number is
+ * unchanged: named anywhere, so a GLS dispatch with that footer stays GLS.
+ */
+function namedBareNumbers(haystack: string): { c: CarrierId; n: string }[] {
+  const named = BARE_DIGIT_CARRIERS.filter(c => CARRIER_NAME[c].test(haystack))
+  const labelled = new Map(named.map(c => [c, labelledNumbers(c, haystack)] as const))
+  const ppl = namedBeside(CARRIER_NAME.ppl, haystack, labelled.get('ppl') ?? [])
+  const glsToo = namedBeside(CARRIER_NAME.gls, haystack, [...ppl])
+  return named.flatMap(c => (labelled.get(c) ?? [])
+    .filter(n => c === 'ppl' ? ppl.has(n) : c !== 'gls' || !ppl.has(n) || glsToo.has(n))
+    .map(n => ({ c, n })))
+}
+
+/**
+ * Every way a carrier can be NAMED in prose, and which carrier each names. The four whose numbers are
  * bare digits come straight from `CARRIER_NAME` - one definition of "this mail says GLS", shared with
- * the e-shop parsing rule above, so the two can never drift apart. The rest are added only for the
+ * the e-shop parsing rule above, so the two can never drift apart. (PPL named anywhere is evidence,
+ * and a look-alike's claim; only parsing asks for it beside the number.) The rest are added only for the
  * evidence test and the look-alike rule, because parsing never needed them: their number shapes speak
  * for themselves.
  *
@@ -337,7 +421,7 @@ const CARRIER_MENTIONS: ReadonlyArray<readonly [RegExp, CarrierId]> = [
 const CARRIER_MENTION: readonly RegExp[] = CARRIER_MENTIONS.map(([re]) => re)
 
 /** A carrier brand as a label, or the start of one, of a domain: `packeta-sk.example.com`, `gls.example.net`. */
-const CARRIER_IN_DOMAIN = /(?:^|[.-])(packeta|z[aá]sielkovna|z[aá]silkovna|gls|dpd|dhl)(?=[.-])/i
+const CARRIER_IN_DOMAIN = /(?:^|[.-])(packeta|z[aá]sielkovna|z[aá]silkovna|gls|dpd|dhl|ppl)(?=[.-])/i
 
 /**
  * A domain whose registrable name IS a carrier's brand: `packeta.cz`, `mail.dhl.nl`. Carriers write
@@ -347,9 +431,9 @@ const CARRIER_IN_DOMAIN = /(?:^|[.-])(packeta|z[aá]sielkovna|z[aá]silkovna|gls
  * GLS's national companies write from `gls-<country>.<tld>` (`gls-czech.cz`, `gls-hungary.com`), and
  * some markets sit under a second-level suffix (`dhl.co.uk`, `dhl.com.au`); both are the brand too.
  */
-const BRAND_DOMAIN = /(?:^|\.)(?:packeta|z[aá]sielkovna|z[aá]silkovna|gls|gls-[a-z]+|dpd|dhl)\.(?:co\.|com\.)?[a-z]{2,}$/i
+const BRAND_DOMAIN = /(?:^|\.)(?:packeta|z[aá]sielkovna|z[aá]silkovna|gls|gls-[a-z]+|dpd|dhl|ppl)\.(?:co\.|com\.)?[a-z]{2,}$/i
 
-const BRAND_CARRIER: Record<string, CarrierId> = { gls: 'gls', dpd: 'dpd', dhl: 'dhl' }
+const BRAND_CARRIER: Record<string, CarrierId> = { gls: 'gls', dpd: 'dpd', dhl: 'dhl', ppl: 'ppl' }
 
 /**
  * The carrier a sender that is NOT a known carrier address presents itself as, or undefined: a carrier
@@ -445,7 +529,9 @@ function parcelEvidence(subject: string, haystack: string): ParcelEvidence | und
   // `.match` rather than `.test`: these are global regexes, and `.test` would advance their lastIndex
   // and make the next call on the same pattern start half-way through a different message.
   if (Object.values(DISTINCTIVE).some(re => haystack.match(re) !== null)) return 'tracking-shape'
-  if (BARE_DIGIT_CARRIERS.some(c => labelledNumbers(c, haystack, PARCEL_LABEL).length > 0)) return 'tracking-shape'
+  // Not PPL: its 11 digits are inside GLS's 10-12, so asking it too could only differ where GLS's test
+  // refused two labelled numbers as ambiguous, and that is no evidence this rule ever counted.
+  if (BARE_DIGIT_CARRIERS.some(c => c !== 'ppl' && labelledNumbers(c, haystack, PARCEL_LABEL).length > 0)) return 'tracking-shape'
   if (SHIPPING_SUBJECT.test(subject)) return 'shipping-subject'
   return undefined
 }
@@ -514,6 +600,10 @@ const MERCHANT: Partial<Record<CarrierId, RegExp[]>> = {
     /od odosielateľa\s+(.{1,400}?),?\s+(?:je pre vás|sme nemohli)/i, /odosielateľ\s+(.{1,400}?)\s+nám práve/i,
     // The same two sentences as Zásilkovna (packeta.cz / zasilkovna.cz) and packeta.com write them.
     /od odesílatele\s+(.{1,400}?),?\s+(?:je pro vás|jsme nemohli)/i, /odesílatel\s+(.{1,400}?)\s+nám právě/i,
+    // Zásilkovna's picked-up and returning mails name the shop in a different sentence: "vaše zásilka
+    // (Z 222 2222 215) od odesílatele X byla úspěšně vyzvednuta" / "... X nebyla vyzvednuta v úložní době,
+    // a proto ji vracíme odesílateli". The verb ends the name, as "je pro vás" does in the ready mail.
+    /od odesílatele\s+(.{1,400}?),?\s+(?:byla (?:úspěšně )?vyzvednuta|nebyla vyzvednuta)/i,
     /from the sender\s+(.{1,400}?),?\s+is (?:ready|waiting)/i, /the sender\s+(.{1,400}?)\s+has just handed/i,
   ],
   dpd: [/Odosielateľ:\s*(.{1,400}?)\s+Číslo balíka/i],
@@ -640,27 +730,107 @@ function carrierMerchant(carrier: CarrierId, haystack: string): string | undefin
 }
 
 /**
- * The code that opens a Z-BOX. Packeta puts it in the pickup email only - the tracking API never
- * carries it - laid out one digit per cell, so the digits arrive separated:
+ * The code that opens a pickup box or proves the reader at a counter: a Z-BOX's opening code, a PIN
+ * for a GLS BOX or ParcelShop, a pošta BalíkoBOX, a DPD Pickup Station, a PPL ParcelShop or Parcelbox,
+ * SPS Balíkovo's verification code. No carrier's tracking API carries it; only the pickup mail does.
  *
- *     Kód pre otvorenie schránky 7 9 9 8 7 4 Miesto, kde je vaša zásielka uložená ...
+ * Every pattern is a LABEL followed at once by 4-10 digits (spaces allowed between them, see below)
+ * and no further digit. Nothing here looks for a bare six-digit run: a pickup mail is full of numbers
+ * (the parcel number, a phone, a postcode, a date), and only the label says which one opens the box.
+ * The labels, most specific first:
  *
- * The same phrase appears a second time further down, inside the instructions ("...otvorenie
- * schránky ALEBO stiahnutá aktuálna verzia aplikácie Packeta"), with no digits after it. That is why
- * the digits must follow immediately: anchoring on the phrase alone matches the wrong occurrence.
+ *   1. Packeta's Z-BOX, SK and CZ: `Kód pre otvorenie schránky` / `Kód pro otevření schránky`. Laid
+ *      out one digit per cell, so the digits arrive separated:
+ *
+ *          Kód pre otvorenie schránky 7 9 9 8 7 4 Miesto, kde je vaša zásielka uložená ...
+ *
+ *      The same phrase appears a second time further down, inside the instructions ("...otvorenie
+ *      schránky ALEBO stiahnutá aktuálna verzia aplikácie Packeta"), with no digits after it. That is
+ *      why the digits must follow immediately: anchoring on the phrase alone matches the wrong one.
+ *   2. `PIN kód` / `PIN kod`, alone (GLS: "Pre vydanie balíka použite PIN kód 402211.") or with a few
+ *      words up to a colon (pošta: "PIN kód na otvorenie schránky: 631285", and the Czech "PIN kód pro
+ *      otevření schránky:"). The words may not cross a digit, a colon or a sentence end, so DPD's
+ *      "...ktorej poskytnete PIN kód." cannot reach a number in the next sentence.
+ *   3. `PIN:` and `PIN pro vyzvednutí:` / `PIN pre vyzdvihnutie:` (DPD Pickup Station's own phrasing,
+ *      "PIN: 120477", and PPL's), and `PIN na otvorenie schránky` / `PIN pro otevření (schránky)`
+ *      without a colon.
+ *   4. `Verifikačný kód` / `overovací kód`, SPS Balíkovo's word for it ("Verifikačný kód: 551902.").
+ *
+ * Most specific first because a mail can carry more than one label, and the longer label says more
+ * about what follows it: a bare `PIN:` is the loosest of them, so it is only trusted when no label
+ * that names the box or the PIN kód matched anywhere in the mail.
+ *
+ * A match is refused when the sentence it stands in names an order, an invoice or a phone
+ * (`NOT_TRACKING`, the same vocabulary the tracking number is judged by): "PIN: 0905123456 (telefón
+ * kuriéra)" is a phone, "Objednávka č. 123456, PIN kód 4711 nájdete v objednávke" is a shop's. Then
+ * the label's next match is tried, then the next label. So is a match whose digits are shaped like a
+ * phone (`PHONE_PREFIX`: 0905 123 456), even when no word in its sentence says so.
  *
  * Returned as a string because real codes carry leading zeros (004467, 007018); a number would drop
  * them silently and send the reader to the locker with a code one digit short.
  */
-const PICKUP_CODE = /k[oó]d p(?:re|ro) ot(?:vorenie|evřen[ieí]|evren[ieí]) schr[aá]nky[\s:]*((?:\d[ \t ]*){4,10})(?![ \t ]*\d)/i
+const PICKUP_CODES: readonly RegExp[] = [
+  String.raw`k[oó]d p(?:re|ro) ot(?:vorenie|evřen[ieí]|evren[ieí]) schr[aá]nky`,
+  String.raw`\bPIN[ \t]*k[oó]d(?:[^\d:.!?]{0,40}:)?`,
+  String.raw`\bPIN(?: pro vyzvednut[ií]| pre vyzdvihnutie)?[ \t]*:|\bPIN (?:na otvorenie schr[aá]nky|pro otev[řr]en[ií](?: schr[aá]nky)?)`,
+  String.raw`(?:verifika[čc]n[ýy]|overovac[ií]) k[oó]d`,
+].map(label => new RegExp(String.raw`(?:${label})[\s:]*((?:\d[ \t\u00a0]*){4,10})(?![ \t\u00a0]*\d)`, 'gi'))
+
+/** What ends the sentence a code's label stands in, for the `NOT_TRACKING` veto. */
+const PIN_SENTENCE_END = /[.!?\n]/
+/**
+ * How far the veto's sentence reaches on either side of the label and the code, at most. The veto is
+ * about words NEAR the code ("tel.", "objednávka"); a real sentence around a PIN is well inside this.
+ * Unbounded, a mail flattened to one line with no full stop made each candidate's sentence the whole
+ * rest of the text, and a 400 KB body repeating a vetoed `PIN: 1234 tel` took over a minute, during a
+ * poll the web server runs on Refresh.
+ */
+const PIN_SENTENCE_REACH = 300
 
 export function extractPickupCode(text: string): string | undefined {
   // Collapse whitespace first. The digits sit one per table cell, so in the plain-text rendering they
   // are separated by NEWLINES as often as by spaces, and the phrase itself can wrap mid-sentence.
-  const m = PICKUP_CODE.exec(text.replace(/\s+/g, ' '))
-  if (!m) return undefined
-  const digits = m[1]!.replace(/\D/g, '')
-  return digits.length >= 4 && digits.length <= 10 ? digits : undefined
+  // `at[i]` is where the flat text's character i came from, so a match found in the flat text can be
+  // judged by the ORIGINAL lines: the line breaks are where a sentence ends.
+  const at: number[] = []
+  const flat = text.replace(/\s+|[^\s]+/g, (run, offset: number) => {
+    if (/^\s/.test(run)) { at.push(offset); return ' ' }
+    for (let i = 0; i < run.length; i++) at.push(offset + i)
+    return run
+  })
+  for (const pattern of PICKUP_CODES) {
+    for (const m of flat.matchAll(pattern)) {
+      const digits = m[1]!.replace(/\D/g, '')
+      if (digits.length < 4 || digits.length > 10) continue
+      // A phone needs no veto word to be refused: label 2's words up to a colon can bridge to one
+      // ("PIN kód nájdete v SMS, linka: 0905123456"). Only from nine digits on, the length of a
+      // national-format number: `PHONE_PREFIX` also opens on 420/421, and a six-digit code that
+      // starts that way is a code (an international number is 12 digits, past any PIN).
+      if (digits.length >= 9 && PHONE_PREFIX.test(digits)) continue
+      // The sentence ends after the code's LAST DIGIT, not after the match: the digit group also
+      // swallows the space after the code, and in the flat text that space may stand for a line
+      // break, which would pull the next line (a "tel." footer, an order line) into the veto.
+      const lastDigit = m.index + m[0].trimEnd().length - 1
+      if (NOT_TRACKING.test(sentenceAround(text, at[m.index]!, at[lastDigit]! + 1))) continue
+      return digits
+    }
+  }
+  return undefined
+}
+
+/**
+ * The sentence from `start` to `end` of `text` stands in: back to the previous sentence end or line
+ * break, on to the next one, but never more than `PIN_SENTENCE_REACH` characters either way. Only this
+ * is vetoed, never the whole line - a mail whose html is flattened can arrive as one long line, and a
+ * "tel." in its footer says nothing about the PIN.
+ */
+function sentenceAround(text: string, start: number, end: number): string {
+  const floor = Math.max(0, start - PIN_SENTENCE_REACH)
+  let from = start
+  while (from > floor && !PIN_SENTENCE_END.test(text[from - 1]!)) from--
+  const ahead = text.slice(end, end + PIN_SENTENCE_REACH)
+  const after = ahead.search(PIN_SENTENCE_END)
+  return text.slice(from, end + (after < 0 ? ahead.length : after))
 }
 
 /**

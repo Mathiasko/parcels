@@ -1,7 +1,7 @@
 import * as nodeFs from 'node:fs'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, isAbsolute, join } from 'node:path'
-import { writeConfigDocument, type ConfigDocument } from '../src/core/config.js'
+import { CURRENT_FILTER_VERSION, DEFAULT_NOTIFICATIONS, writeConfigDocument, type ConfigDocument } from '../src/core/config.js'
 import { escapeHtml } from '../src/web/views/html.js'
 
 /**
@@ -82,6 +82,10 @@ export const WELCOME_DOCUMENT: Readonly<ConfigDocument> = {
   port: 8787,
   notifier: 'auto',
   mapPreview: true,
+  notifications: { ...DEFAULT_NOTIFICATIONS },
+  // A fresh install imports the filter this build ships. Absent would read as 1, the filter from
+  // before versions existed, and Settings would ask a brand-new reader to import it "again".
+  filterVersion: CURRENT_FILTER_VERSION,
   pickupCalendar: '',
 }
 
