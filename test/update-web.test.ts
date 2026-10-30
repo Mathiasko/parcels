@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { buildServer, type WebDeps } from '../src/web/server.js'
+import { buildServer, CSP, type WebDeps } from '../src/web/server.js'
 import {
   parseUpdateCheck, updateStatusPath, UPDATE_STALE_MS, type ScriptResult, type SpawnOptions,
 } from '../src/core/update.js'
@@ -126,7 +126,7 @@ describe('the Update section on /health', () => {
     const { app } = server(db)
     const res = await app.inject({ method: 'GET', url: '/health' })
     expect(res.headers['content-security-policy'])
-      .toBe("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
+      .toBe(CSP)
     expect(res.body).not.toMatch(/<script/i)
     expect(res.body).not.toMatch(/\son[a-z]+="/i)
   })

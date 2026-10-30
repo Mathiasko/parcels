@@ -14,6 +14,7 @@ files:
   - dist-app/**
   - app/pages/**
   - app/assets/**
+  - assets/fonts/**
   - package.json
   - node_modules/**
   # better-sqlite3 loads its prebuilt prebuilds/darwin-<arch>.node (spec §10), so SQLite's C source,

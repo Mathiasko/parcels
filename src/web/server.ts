@@ -15,6 +15,7 @@ import { createHttpClient } from '../core/http.js'
 import { cachedGrid } from '../core/map-preview.js'
 import { parseTile } from '../core/slippy.js'
 import { readTile, tileDirFor } from '../core/tiles.js'
+import { FONT_HEADERS, fontDir as defaultFontDir, readFont } from './fonts.js'
 import { isDormant } from '../core/backoff.js'
 import { recordPollRun, runPoll, type PollDeps } from '../core/poll.js'
 import { claimRun, failRun, getRun, listRuns, reapStaleRuns, runningRun, type PollRun } from '../db/poll-runs.js'
@@ -86,6 +87,8 @@ export interface WebDeps {
   now?: () => Date
   /** The map-tile cache; defaults to `data/tiles` beside the database, as the poller writes it. */
   tileDir?: string
+  /** The theme fonts; defaults to the repo's `assets/fonts`. Tests plant a fake one. */
+  fontDir?: string
   /**
    * Calendar.app, for "Add to Calendar" and the settings page's list of calendars. Defaults to the
    * osascript client (core/calendar-app.ts); every test injects a fake, and the real one refuses to run
@@ -170,6 +173,9 @@ export interface AppWebDeps {
  * only, never configurable, never `0.0.0.0`. `startServer` is the only place a socket is opened.
  */
 export const BIND_HOST = '127.0.0.1'
+
+/** The policy every response carries; the comment in the `onRequest` hook says why each directive is there. */
+export const CSP = "default-src 'none'; img-src 'self' data:; font-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
 
 export async function startServer(app: FastifyInstance, port: number): Promise<void> {
   await app.listen({ host: BIND_HOST, port })
@@ -299,6 +305,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   let config = deps.config
   const configPath = deps.configPath ?? runtimeConfigPath()
   const tileDir = deps.tileDir ?? tileDirFor(config.dbPath)
+  const fontDir = deps.fontDir ?? defaultFontDir()
   const app = Fastify({ logger: false })
   // Resolved once here, never per request: it reads package.json and spawns git. In the app the running
   // version is the app's own; a stored check carries the release it found, which is never "running".
@@ -322,13 +329,18 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   // server on localhost is just as foreign.
   app.addHook('onRequest', async (req, reply) => {
     // Second layer behind the structural escaping: even injected markup could load nothing and run nothing.
-    // `img-src 'self'` is the one addition the map preview needs, and it is the narrowest one that
-    // works: the tiles are served by this server from its own on-disk cache, so no third-party origin
-    // appears here and the page still cannot load or run anything from anywhere else.
+    // Two directives are open, each as narrow as it can be, and nothing else is:
+    //   `img-src 'self' data:` - 'self' is the map preview: the tiles are served by this server from its
+    //   own on-disk cache, so no third-party origin appears here. `data:` is the theme's paper grain,
+    //   an inline SVG in the stylesheet; a data: image is bytes already in the page, it contacts nobody.
+    //   `font-src 'self'` - the themes' fonts, served from /fonts/<file> out of this install (an
+    //   allowlist of file names, see web/fonts.ts). No font is fetched from anywhere else.
+    // There is still no `script-src`, so `default-src 'none'` keeps scripts, frames, connections and
+    // everything else off.
     //
     // `frame-ancestors 'none'` (and X-Frame-Options for anything that predates it): no other page may
     // frame this one, or it could lay a decoy over the Delete or Update button and borrow the click.
-    reply.header('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
+    reply.header('Content-Security-Policy', CSP)
     reply.header('X-Content-Type-Options', 'nosniff')
     reply.header('X-Frame-Options', 'DENY')
     // No other site may even EMBED a response. Without this a page could `<img src>` a map tile from
@@ -635,6 +647,20 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     // A given z/x/y is the same picture for months, and it is already on local disk; a day of browser
     // caching saves the re-request without ever making the page depend on a remote service.
     return reply.code(200).type('image/png').header('cache-control', 'private, max-age=86400').send(bytes)
+  })
+
+  /**
+   * One theme font, from the install's `assets/fonts` and nothing else.
+   *
+   * Fastify percent-decodes the parameter, so `..%2fconfig.json` arrives as `../config.json`. The name
+   * is therefore checked against the allowlist (`FONT_FILES`, every file a theme names) before any
+   * disk access, and `readFont` builds the path only from a name that passed. Anything else beside the
+   * fonts - the licences, the READMEs, other folders - is a 404, as is a listed font that is missing.
+   */
+  app.get<{ Params: { file: string } }>('/fonts/:file', async (req, reply) => {
+    const bytes = readFont(fontDir, req.params.file)
+    if (!bytes) return reply.code(404).type('text/plain').send('not found')
+    return reply.code(200).headers(FONT_HEADERS).send(bytes)
   })
 
   /**

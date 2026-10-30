@@ -400,6 +400,7 @@ async function run(): Promise<void> {
       firstRun: first,
       configPath: paths.config,
       pages: readPages(join(app.getAppPath(), 'app', 'pages')),
+      fontDir: join(app.getAppPath(), 'assets', 'fonts'),
       start: startServer,
       moveIn: () => {
         moving = moveIn({

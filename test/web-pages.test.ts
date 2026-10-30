@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { fakeImap } from './imap-fake.js'
 import { listActive } from '../src/db/parcels.js'
 import { describe, expect, test, vi } from 'vitest'
-import { buildServer, refreshIdle, type WebDeps } from '../src/web/server.js'
+import { buildServer, CSP, refreshIdle, type WebDeps } from '../src/web/server.js'
 import { finishRun, getRun, startRun, type RunCounts } from '../src/db/poll-runs.js'
 import { appendEvents } from '../src/db/events.js'
 import { recordHealth } from '../src/db/health.js'
@@ -638,7 +638,7 @@ describe('web pages: fix round 1', () => {
     const tile = await app.inject({ method: 'GET', url: '/tile/16/1/1.png' })
     for (const res of [ok, refused, missing, tile]) {
       expect(res.headers['content-security-policy']).toBe(
-        "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
+        CSP)
       expect(res.headers['x-content-type-options']).toBe('nosniff')
       // No other site may frame a page (clickjacking the Delete or Update buttons)...
       expect(res.headers['x-frame-options']).toBe('DENY')
@@ -1384,7 +1384,7 @@ describe('GET /: one card design, whatever the state or the carrier', () => {
     inflight(db, { name: 'Waiting at the box', status: 'ready_for_pickup', pickup: { kind: 'zbox', name: 'Z-BOX Hlavna 6' } })
     const res = await get(db, '/')
     expect(res.headers['content-security-policy'])
-      .toBe("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
+      .toBe(CSP)
     expect(res.body).not.toContain('<script')
     expect(res.body).not.toContain('onclick')
   })

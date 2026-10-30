@@ -205,6 +205,7 @@ test('persona simulator', async () => {
     firstRun: S.meta.firstRun === 'move-in' ? { kind: 'move-in', clone: S.meta.clone ?? '/Users/you/parcels', plists: ['local.parcels.web.plist', 'local.parcels.poller.plist'] } : { kind: 'welcome' },
     configPath: join(DIR, 'welcome', 'config.json'),
     pages,
+    fontDir: join(ROOT, 'assets', 'fonts'),
     ...(appearance && { appearance }),
     start: path => { firstRunDone = path },
     moveIn: async () => ({ ok: true }) as never,

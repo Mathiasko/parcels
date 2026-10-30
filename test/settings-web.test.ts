@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { buildServer, type WebDeps } from '../src/web/server.js'
+import { buildServer, CSP, type WebDeps } from '../src/web/server.js'
 import type { Database } from '../src/db/index.js'
 import type { ImapProbeLike } from '../src/ingest/imap-probe.js'
 import type { ImapConfig } from '../src/ingest/imap.js'
@@ -96,7 +96,7 @@ describe('GET /settings', () => {
     expect(res.body).not.toContain('<script')
     expect(res.body).not.toMatch(/\son[a-z]+=/)
     expect(res.headers['content-security-policy']).toBe(
-      "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
+      CSP)
   })
 
   test('the nav links to it from every page', async () => {

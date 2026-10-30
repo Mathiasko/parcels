@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -7,13 +7,15 @@ import { firstRunHandler, NOT_A_POSTCODE, PAGE_CSP, readPages, type FirstRunDeps
 
 const pages = readPages(join(import.meta.dirname, '../../app/pages'))
 
-function setup(firstRun: FirstRunDeps['firstRun'], result: MoveInResult = { ok: true }, appearance?: FirstRunDeps['appearance']) {
+const fontDir = join(import.meta.dirname, '../../assets/fonts')
+
+function setup(firstRun: FirstRunDeps['firstRun'], result: MoveInResult = { ok: true }, appearance?: FirstRunDeps['appearance'], fonts = fontDir) {
   const configPath = join(mkdtempSync(join(tmpdir(), 'parcels-protocol-')), 'Parcels', 'config.json')
   const started: string[] = []
   let quits = 0
   let moves = 0
   const handle = firstRunHandler({
-    firstRun, configPath, pages, ...(appearance && { appearance }),
+    firstRun, configPath, pages, fontDir: fonts, ...(appearance && { appearance }),
     start: path => started.push(path),
     moveIn: async () => { moves++; return result },
     quit: () => { quits++ },
@@ -24,6 +26,10 @@ function setup(firstRun: FirstRunDeps['firstRun'], result: MoveInResult = { ok: 
   }))
   return { handle, post, configPath, started, quits: () => quits, moves: () => moves }
 }
+
+const PAGE_CSP_EXACT = "default-src 'none'; style-src 'unsafe-inline'; font-src parcels:; img-src data:; form-action parcels:"
+const FONT = 'courier-prime-latin-400-normal.woff2'
+const FONT_HEADERS = { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=31536000, immutable' }
 
 const MOVE_IN: FirstRunDeps['firstRun'] = { kind: 'move-in', clone: '/Users/a/Desktop/parcels', plists: [] }
 
@@ -141,4 +147,49 @@ test('every first-run page carries the appearance it was given', async () => {
   expect(await (await move.post('move-in', 'action=move')).text()).toContain(tag)
   // A welcome page re-shown after a bad postcode keeps it too.
   expect(await (await setup({ kind: 'welcome' }, undefined, appearance).post('welcome', 'postcode=abc')).text()).toContain(tag)
+})
+
+test('PAGE_CSP allows exactly fonts and the inline grain on top of inline style', () => {
+  expect(PAGE_CSP).toBe(PAGE_CSP_EXACT)
+})
+
+test('GET /fonts/<allowlisted> serves the font with the font headers and the CSP', async () => {
+  const s = setup({ kind: 'welcome' })
+  const res = await s.handle(new Request(`parcels://welcome/fonts/${FONT}`))
+  expect(res.status).toBe(200)
+  for (const [k, v] of Object.entries(FONT_HEADERS)) expect(res.headers.get(k)).toBe(v)
+  expect(res.headers.get('content-security-policy')).toBe(PAGE_CSP)
+  expect(Buffer.from(await res.arrayBuffer()).equals(readFileSync(join(fontDir, FONT)))).toBe(true)
+})
+
+test('fonts off the allowlist, traversal, a missing file and a directory are 404s that read nothing', async () => {
+  const planted = mkdtempSync(join(tmpdir(), 'parcels-planted-fonts-'))
+  for (const name of ['secret.woff2', 'OFL.txt', 'README.md']) writeFileSync(join(planted, name), 'PLANTED')
+  mkdirSync(join(planted, 'sub'))
+  writeFileSync(join(planted, 'sub', FONT), 'PLANTED')
+  const s = setup({ kind: 'welcome' }, { ok: true }, undefined, planted)
+  for (const path of ['OFL.txt', 'README.md', 'secret.woff2', '..%2fpackage.json', '%2e%2e%2fpackage.json', '', `sub%2f${FONT}`, '../x.woff2']) {
+    const res = await s.handle(new Request(`parcels://welcome/fonts/${path}`))
+    expect(res.status, path).toBe(404)
+    expect(await res.text()).not.toMatch(/PLANTED/)
+  }
+  const emptyDir = setup({ kind: 'welcome' }, { ok: true }, undefined, mkdtempSync(join(tmpdir(), 'parcels-nofonts-')))
+  expect((await emptyDir.handle(new Request(`parcels://welcome/fonts/${FONT}`))).status).toBe(404)
+})
+
+test('a font path accepts GET only', async () => {
+  const s = setup({ kind: 'welcome' })
+  for (const method of ['POST', 'PUT', 'DELETE']) {
+    const res = await s.handle(new Request(`parcels://welcome/fonts/${FONT}`, { method, ...(method !== 'DELETE' && { body: 'x=1' }) }))
+    expect(res.status, method).toBe(405)
+  }
+  expect(s.started).toEqual([])
+})
+
+test('fonts are served on the active first-run host only', async () => {
+  const welcome = setup({ kind: 'welcome' })
+  expect((await welcome.handle(new Request(`parcels://move-in/fonts/${FONT}`))).status).toBe(404)
+  const move = setup(MOVE_IN)
+  expect((await move.handle(new Request(`parcels://move-in/fonts/${FONT}`))).status).toBe(200)
+  expect((await move.handle(new Request(`parcels://welcome/fonts/${FONT}`))).status).toBe(404)
 })

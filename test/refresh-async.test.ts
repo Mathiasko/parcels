@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { buildServer, refreshIdle, type WebDeps } from '../src/web/server.js'
+import { buildServer, CSP, refreshIdle, type WebDeps } from '../src/web/server.js'
 import { failRun, finishRun, getRun, listRuns, RUN_STALE_MS, startRun } from '../src/db/poll-runs.js'
 import { getParcel, insertParcel } from '../src/db/parcels.js'
 import type { CarrierAdapter, CarrierId } from '../src/core/types.js'
@@ -7,8 +7,6 @@ import type { Database } from '../src/db/index.js'
 import { STYLE } from '../src/web/views/style.js'
 import { formatAgo, formatElapsed } from '../src/web/views/format.js'
 import { bodyHttp, config, ev, memDb, NOW, okResult, stubAdapter } from './poll-helpers.js'
-
-const CSP = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
 
 const form = (fields: Record<string, string>) => ({
   payload: new URLSearchParams(fields).toString(),

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Protocol } from 'electron'
 import { DEFAULT_APPEARANCE, type Appearance } from '../src/core/appearance.js'
+import { FONT_HEADERS, readFont } from '../src/web/fonts.js'
 import { STYLE } from '../src/web/views/style.js'
 import { fillPage, normalisePostcode, writeWelcomeConfig, type FirstRun } from './first-run.js'
 import type { MoveInResult } from './move-in.js'
@@ -15,8 +16,15 @@ import type { MoveInResult } from './move-in.js'
 
 export const SCHEME = 'parcels'
 
-/** The pages' CSP: no scripts, no fetches, no frames, inline style only, and forms post only to `parcels:`. */
-export const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action parcels:"
+/**
+ * The pages' CSP: no scripts, no fetches, no frames, inline style only, and forms post only to
+ * `parcels:`. Two things are let in, for the themes: fonts from `parcels:` (the allowlisted
+ * /fonts/<file> route below) and `data:` images (the paper grain, an inline SVG in the stylesheet).
+ */
+export const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; font-src parcels:; img-src data:; form-action parcels:"
+
+/** Where the theme fonts are served, on whichever first-run host is active. */
+const FONT_PATH = '/fonts/'
 
 export const NOT_A_POSTCODE = 'That is not a postcode. Five digits, like 81101.'
 
@@ -57,6 +65,8 @@ export interface FirstRunDeps {
   firstRun: Exclude<FirstRun, { kind: 'ready' }>
   configPath: string
   pages: Pages
+  /** The theme fonts (`assets/fonts`); only the allowlisted names in it are ever served. */
+  fontDir: string
   /** The theme and mode the pages wear; absent is the defaults, since a first run has no config yet. */
   appearance?: Appearance
   /** Starts the server, then shows `path` on the dashboard once it answers. Called once. */
@@ -138,7 +148,15 @@ export function firstRunHandler(d: FirstRunDeps): (req: Request) => Promise<Resp
       const which = url.host === 'welcome' && d.firstRun.kind === 'welcome' ? 'welcome'
         : url.host === 'move-in' && d.firstRun.kind === 'move-in' ? 'move-in'
           : undefined
-      if (which === undefined || url.pathname !== '/') return plain(404, 'There is no such page.')
+      if (which === undefined) return plain(404, 'There is no such page.')
+      if (url.pathname.startsWith(FONT_PATH)) {
+        if (req.method !== 'GET') return plain(405, 'Not allowed.')
+        // The raw (still percent-encoded) name, checked against the allowlist before any disk access.
+        const bytes = readFont(d.fontDir, url.pathname.slice(FONT_PATH.length))
+        if (!bytes) return plain(404, 'There is no such font.')
+        return new Response(new Uint8Array(bytes), { status: 200, headers: { ...FONT_HEADERS, 'content-security-policy': PAGE_CSP } })
+      }
+      if (url.pathname !== '/') return plain(404, 'There is no such page.')
       if (req.method === 'GET') {
         return which === 'welcome' ? welcomePage('', '') : page(fillPage(d.pages.moveIn, { clone, theme, mode }, STYLE))
       }

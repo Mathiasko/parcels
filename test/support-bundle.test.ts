@@ -6,7 +6,7 @@ import {
   buildSupportBundle, launchdAgents, LOG_TAIL_BYTES, REDACTED_EMAIL, REDACTED_NUMBER, redactSensitive,
   SUPPORT_AGENTS, SUPPORT_BUNDLE_MAX_BYTES, supportBundleFilename, type LaunchdReport, type SupportDeps,
 } from '../src/core/support.js'
-import { buildServer, type WebDeps } from '../src/web/server.js'
+import { buildServer, CSP, type WebDeps } from '../src/web/server.js'
 import { recordHealth } from '../src/db/health.js'
 import { recordIngest } from '../src/db/ingest-status.js'
 import { recordPickupCode } from '../src/db/pickup-codes.js'
@@ -494,7 +494,6 @@ describe('the Support section on /health and the download route', () => {
   })
 
   test('neither response adds a script, and the CSP is the one every page sends', async () => {
-    const CSP = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
     const db = loadedDb()
     const dir = dataDir()
     for (const res of [

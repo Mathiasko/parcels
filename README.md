@@ -610,8 +610,9 @@ for any shop nobody writes an adapter for.
 A parcel that is **ready for pickup** can show a small static map of the place, with a marker on it,
 next to the "Open in Apple Maps" link. It is plain `<img>` tags and CSS: no JavaScript, no map
 library, and the page's Content-Security-Policy still forbids scripts and allows images only from
-this server (`default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self';
-frame-ancestors 'none'`).
+this server, plus `data:` images for the theme's paper grain, and fonts only from this server
+(`default-src 'none'; img-src 'self' data:; font-src 'self'; style-src 'unsafe-inline';
+form-action 'self'; frame-ancestors 'none'`).
 
 **Viewing a page never touches the internet.** Everything the map needs is fetched during a poll and
 read from disk afterwards. That is the whole design, and it is what keeps the dashboard from
