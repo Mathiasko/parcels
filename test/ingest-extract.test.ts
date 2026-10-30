@@ -348,6 +348,33 @@ describe('extract: no sender hint', () => {
         .toEqual({ confidence: 'none', evidence: 'carrier-named' })
     })
 
+    // Persona finding A4: CykloParts' "Parcel 1: 01505666666605 / Parcel 2: 01505666666606" went to
+    // /attention as "no tracking number found (it names a carrier)": the "1" after "Parcel" broke the label.
+    test('a numbered label ("Parcel 1:") still introduces its number', async () => {
+      const dpd = (line: string) => extract(eml('CykloParts GmbH <versand@cykloparts.example.de>',
+        'Versandbestätigung / Shipping confirmation CP-77120', `your order CP-77120 has been dispatched with DPD.\r\n${line}\r\n\r\nItems:\r\n - Shimano chain CN-HG71 x20`))
+      for (const line of ['Parcel 1: 01505666666602', 'Balík č. 1: 01505666666602', 'Parcel #1: 01505666666602', 'Parcel no. 2 - 01505666666602']) {
+        expect(await dpd(line), line).toMatchObject({ carrier: 'dpd', number: '01505666666602', confidence: 'shape', merchant: 'CykloParts GmbH' })
+      }
+    })
+
+    test('a numbered two-line list makes both parcels (the persona\'s real mail)', async () => {
+      const e = await extract(eml('CykloParts GmbH <versand@cykloparts.example.de>', 'Shipping confirmation CP-77125',
+        'Dear customer,\r\n\r\nyour order CP-77125 has been dispatched with DPD.\r\nParcel 1: 01505666666605\r\nParcel 2: 01505666666606\r\n\r\nItems:\r\n - Brake pads x4'))
+      expect(e).toMatchObject({ carrier: 'dpd', number: '01505666666605', moreNumbers: ['01505666666606'], confidence: 'shape' })
+    })
+
+    test.each([
+      ['a three-digit "ordinal"', 'Parcel 123: 01505666666605'],
+      ['digits run on from the label with no punctuation', 'Parcel 12 01505666666605'],
+      ['a list where only one label is numbered', 'Parcel 1: 01505666666605\r\nČíslo balíka: 01505666666606'],
+      // The ordinal must not hide the word that says what the number is.
+      ['a numbered ORDER number', 'Order number 1: 01505666666605'],
+      ['a numbered order list', 'Číslo objednávky 1: 01505666666605\r\nČíslo objednávky 2: 01505666666606'],
+    ])('the ordinal lets nothing else through: %s -> none', async (_, line) => {
+      expect(await extract(eml(shop, 'Odoslané cez DPD', line))).toMatchObject({ confidence: 'none' })
+    })
+
     test('"GLS" inside another word is not the carrier', async () => {
       // "OGLS" is not GLS, so the carrier-name signal does not fire; the labelled number does.
       expect(await extract(eml(shop, 'Odoslané', 'Angels and OGLS. Číslo balíka: 1234567890')))

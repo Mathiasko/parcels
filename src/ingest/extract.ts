@@ -206,13 +206,27 @@ function listedAfter(carrier: CarrierId, haystack: string, first: string): strin
  * when the label ends in a colon. GLS prints `Číslo balíka:` in one table cell and the number in the
  * next, so in the text rendering the number always starts the following line.
  */
-const GLS_LABEL = /(?:parcel|package|tracking|track|number|zásielk\w*|zasielk\w*|balík\w*|balik\w*|číslo|cislo|paket\w*)(?:[^\n\d]{0,30}|[^\n\d]{0,30}:[ \t]*\r?\n[ \t>]*)$/i
+const GLS_WORDS = String.raw`parcel|package|tracking|track|number|zásielk\w*|zasielk\w*|balík\w*|balik\w*|číslo|cislo|paket\w*`
+/**
+ * A parcel's place in a list, right after its label word: `Parcel 1:`, `Balík č. 1:`, `Parcel #1:`,
+ * `Parcel no. 2 -`. One or two digits, and only when the label's own punctuation follows them, so the
+ * leading group of a number printed in groups (`Parcel 12 3456789012`) is never read as one.
+ */
+const ORDINAL = String.raw`[ \t]*(?:č\.|#|no\.)?[ \t]*\d{1,2}(?=[ \t]*[:.)\-–])`
+/** Whatever may follow the label word before the number: a few words on its line, or a colon and a line break. */
+const LABEL_TAIL = String.raw`(?:[^\n\d]{0,30}|[^\n\d]{0,30}:[ \t]*\r?\n[ \t>]*)$`
+const GLS_LABEL = new RegExp(`(?:${GLS_WORDS})(?:${ORDINAL})?${LABEL_TAIL}`, 'i')
+/** `GLS_LABEL` with the ordinal required: a label that numbers its parcel, so the mail is listing several. */
+const NUMBERED_LABEL = new RegExp(`(?:${GLS_WORDS})${ORDINAL}${LABEL_TAIL}`, 'i')
+/** A label word with its ordinal, to drop the ordinal from a label before its words are judged. */
+const ORDINAL_IN_LABEL = new RegExp(`(${GLS_WORDS})${ORDINAL}`, 'gi')
 /**
  * `GLS_LABEL` without the bare "number" words (`číslo`, `number`): a label that says PARCEL. For the
  * evidence test with no carrier named, where `Katalógové číslo produktu 123456789012` in a newsletter
  * must not read as a parcel number - beside a named carrier, a bare `Sledovacie číslo:` still does.
  */
-const PARCEL_LABEL = /(?:parcel|package|tracking|track|zásielk\w*|zasielk\w*|z[áa]silk\w*|balík\w*|balik\w*|paket\w*|sledovac\w*)(?:[^\n\d]{0,30}|[^\n\d]{0,30}:[ \t]*\r?\n[ \t>]*)$/i
+const PARCEL_LABEL = new RegExp(
+  String.raw`(?:parcel|package|tracking|track|zásielk\w*|zasielk\w*|z[áa]silk\w*|balík\w*|balik\w*|paket\w*|sledovac\w*)(?:${ORDINAL})?${LABEL_TAIL}`, 'i')
 const PHONE_LABEL = /(?:tel\w*|phone|mobil\w*|call|fax|zavolajte|volajte|\+)[^\n\d]{0,15}$/i
 // 10 digits is also the length of a Slovak national-format mobile number (0900123456).
 const PHONE_PREFIX = /^(?:42[01]|00421|00420|09\d{8}$)/
@@ -248,19 +262,26 @@ const NOT_TRACKING = /objedn|order|fakt[uú]r|invoice|variabil|referenc|tel\b|te
  * Stricter than `firstNumber`, because here nothing but the text vouches for the carrier: the number
  * must be introduced by a "parcel number" style label (never by an order/phone/invoice one), must not
  * be cut out of a longer alphanumeric token (a URL id, a message id), and must not look like a phone.
- * Two different such numbers are ambiguous, which is refused rather than guessed.
+ * Two different such numbers are ambiguous, which is refused rather than guessed - unless every one
+ * of them has a numbered label (`Parcel 1:` / `Parcel 2:`): then the mail is listing its parcels, and
+ * all of them are returned in text order, at most `MAX_NUMBERS`.
  */
-function labelledNumber(carrier: keyof typeof STANDALONE, haystack: string, label = GLS_LABEL): string | undefined {
-  const found = new Set<string>()
+function labelledNumbers(carrier: keyof typeof STANDALONE, haystack: string, label = GLS_LABEL): string[] {
+  // Each number, and whether every label that introduced it was a numbered one.
+  const found = new Map<string, boolean>()
   for (const m of haystack.matchAll(STANDALONE[carrier])) {
     const before = haystack.slice(Math.max(0, m.index - 50), m.index)
     // The label may sit on the line above (`Číslo objednávky:` / number), so it is the label's own
     // line that the NOT_TRACKING words are looked for in, not the empty start of the number's line.
-    const sentence = before.replace(/:[ \t]*\r?\n[ \t>]*$/, ': ').split(/[.!?\n\d]/).pop() ?? ''
+    // The sentence starts after the last digit, so a label's own ordinal is dropped first: otherwise
+    // the "1" of `Order number 1:` would cut "Order" off and let an order number through.
+    const sentence = before.replace(/:[ \t]*\r?\n[ \t>]*$/, ': ').replace(ORDINAL_IN_LABEL, '$1').split(/[.!?\n\d]/).pop() ?? ''
     if (!label.test(before) || PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0]) || NOT_TRACKING.test(sentence) || isPlaceholder(m[0])) continue
-    found.add(normalizeNumber(m[0]))
+    const n = normalizeNumber(m[0])
+    found.set(n, (found.get(n) ?? true) && NUMBERED_LABEL.test(before))
   }
-  return found.size === 1 ? [...found][0] : undefined
+  if (found.size <= 1) return [...found.keys()]
+  return found.size <= MAX_NUMBERS && [...found.values()].every(Boolean) ? [...found.keys()] : []
 }
 
 /** The carriers whose numbers are bare digits, so a label or a carrier name has to vouch for them. */
@@ -270,7 +291,7 @@ const BARE_DIGIT_CARRIERS = ['gls', 'dpd', 'dhl'] as const
 function namedBareNumbers(haystack: string): { c: CarrierId; n: string }[] {
   return BARE_DIGIT_CARRIERS
     .filter(c => CARRIER_NAME[c].test(haystack))
-    .flatMap(c => { const n = labelledNumber(c, haystack); return n ? [{ c, n }] : [] })
+    .flatMap(c => labelledNumbers(c, haystack).map(n => ({ c, n })))
 }
 
 /**
@@ -406,7 +427,7 @@ function parcelEvidence(subject: string, haystack: string): ParcelEvidence | und
   // `.match` rather than `.test`: these are global regexes, and `.test` would advance their lastIndex
   // and make the next call on the same pattern start half-way through a different message.
   if (Object.values(DISTINCTIVE).some(re => haystack.match(re) !== null)) return 'tracking-shape'
-  if (BARE_DIGIT_CARRIERS.some(c => labelledNumber(c, haystack, PARCEL_LABEL) !== undefined)) return 'tracking-shape'
+  if (BARE_DIGIT_CARRIERS.some(c => labelledNumbers(c, haystack, PARCEL_LABEL).length > 0)) return 'tracking-shape'
   if (SHIPPING_SUBJECT.test(subject)) return 'shipping-subject'
   return undefined
 }
