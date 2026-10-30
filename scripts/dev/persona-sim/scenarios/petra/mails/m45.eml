@@ -1,0 +1,70 @@
+Delivered-To: petra.smyslena@example.sk
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake9m;
+        Tue, 10 Nov 2026 07:30:10 +0100
+Return-Path: <eshop@kocurik.example.sk>
+Date: Tue, 10 Nov 2026 07:30:10 +0100
+From: =?utf-8?Q?Hra=C4=8Dky_Koc=C3=BArik?= <eshop@kocurik.example.sk>
+To: =?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>
+Subject: =?utf-8?Q?Va=C5=A1a_objedn=C3=A1vka_?=
+ =?utf-8?Q?K-7781_bola_rozdel?=
+ =?utf-8?Q?en=C3=A1_a_odoslan=C3=A1?=
+Message-ID: <petra.m45.ship-K-7781@kocurik.example.sk>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_9lxxxx.fake"
+
+------=_Part_alt_9lxxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Dobr=C3=BD de=C5=88,
+
+va=C5=A1a objedn=C3=A1vka =C4=8D. K-7781 bola pr=C3=A1ve odoslan=C3=A1.
+=C4=8Cas=C5=A5 1: Packeta Z-BOX Testovce, =C5=A0kolsk=C3=A1 2 (Z=C5=A0); =
+=C4=8Das=C5=A5 2: DPD kuri=C3=A9r na adresu
+Packeta: Z 555 5555 511
+DPD: 01505555555512
+
+Obsah z=C3=A1sielky:
+ - Stavebnica Kocky 500 ks
+ - B=C3=A1bika s ko=C4=8D=C3=ADkom
+
+
+=C4=8Eakujeme za n=C3=A1kup!
+T=C3=ADm Hra=C4=8Dky Koc=C3=BArik
+
+
+------=_Part_alt_9lxxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>Hra=C4=8Dky Koc=C3=BArik</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color=
+:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">Objedn=C3=A1vka =
+K-7781 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</s=
+pan>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#2b7a3d;padding:16px;color:#fff;font-size:20px"=
+><img src=3D"https://img.example.com/logo.png" alt=3D"Hra=C4=8Dky =
+Koc=C3=BArik" width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Dobr=C3=BD de=C5=88,</p><p>va=C5=A1a =
+objedn=C3=A1vka =C4=8D. <strong>K-7781</strong> bola pr=C3=A1ve =
+odoslan=C3=A1.</p><p>=C4=8Cas=C5=A5 1: Packeta Z-BOX Testovce, =
+=C5=A0kolsk=C3=A1 2 (Z=C5=A0); =C4=8Das=C5=A5 2: DPD kuri=C3=A9r na =
+adresu</p><p>Packeta: Z 555 5555 511
+DPD: 01505555555512</p><table><tr><td>Stavebnica Kocky 500 =
+ks</td></tr><tr><td>B=C3=A1bika s ko=C4=8D=C3=ADkom</td></tr></table></td><=
+/tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">=C4=8Eakujeme za =
+n=C3=A1kup! T=C3=ADm Hra=C4=8Dky Koc=C3=BArik. </td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_9lxxxx.fake--

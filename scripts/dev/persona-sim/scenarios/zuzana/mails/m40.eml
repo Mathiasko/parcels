@@ -1,0 +1,55 @@
+Delivered-To: zuzana.fiktivna@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fakeer;
+        Tue, 3 Nov 2026 18:40:03 +0100
+Return-Path: <info@packeta-sk.example.com>
+Date: Tue, 3 Nov 2026 18:40:03 +0100
+From: Packeta <info@packeta-sk.example.com>
+To: =?utf-8?Q?Zuzana_Fikt=C3=ADvna?= <zuzana.fiktivna@example.com>
+Subject: =?utf-8?Q?Va=C5=A1a_z=C3=A1sielka_=C4=8D?=
+ =?utf-8?Q?ak=C3=A1_=E2=80=93_uhra=C4=8Fte_?=
+ =?utf-8?Q?poplatok_1,99_=E2=82=AC?=
+Message-ID: <zuzana.m40.mail@packeta-sk.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_eqxxxx.fake"
+
+------=_Part_alt_eqxxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Dobr=C3=BD de=C5=88,
+va=C5=A1a z=C3=A1sielka Z 333 3333 399 =C4=8Dak=C3=A1 v depe. Pre =
+doru=C4=8Denie uhra=C4=8Fte poplatok 1,99 =E2=82=AC na https://packeta-sk.=
+example.com/pay do 24 hod=C3=ADn.
+Packeta
+
+------=_Part_alt_eqxxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>Va=C5=A1a z=C3=A1sielka =C4=8Dak=C3=A1 =E2=80=93 uhra=C4=8Fte =
+poplatok 1,99 =E2=82=AC</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#f=
+ff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">&#847;&zwnj;&nbsp=
+;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#444;padding:16px;color:#fff;font-size:20px"><i=
+mg src=3D"https://img.example.com/logo.png" alt=3D"Packeta" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Dobr=C3=BD de=C5=88,</p><p>va=C5=A1a =
+z=C3=A1sielka Z 333 3333 399 =C4=8Dak=C3=A1 v depe. Pre doru=C4=8Denie =
+uhra=C4=8Fte poplatok 1,99 =E2=82=AC na https://packeta-sk.example.com/pay =
+do 24 hod=C3=ADn.</p><p>Packeta</p></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">Tento e-mail bol =
+vygenerovan=C3=BD automaticky.</td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_eqxxxx.fake--

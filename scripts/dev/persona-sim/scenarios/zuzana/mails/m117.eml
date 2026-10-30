@@ -1,0 +1,60 @@
+Delivered-To: zuzana.fiktivna@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fakehv;
+        Thu, 12 Nov 2026 02:00:12 +0100
+Return-Path: <transaction@notice.aliexpress.example.com>
+Date: Thu, 12 Nov 2026 02:00:12 +0100
+From: AliExpress <transaction@notice.aliexpress.example.com>
+To: =?utf-8?Q?Zuzana_Fikt=C3=ADvna?= <zuzana.fiktivna@example.com>
+Subject: Your order 8193333300000020 has been shipped
+Message-ID: <zuzana.m117.en-8193333300000020@notice.aliexpress.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_huxxxx.fake"
+
+------=_Part_alt_huxxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Hi Zuzana,
+
+Good news! Your order 8193333300000020 has been shipped.
+Carrier: Cainiao Super Economy Global
+Tracking number: LP00333333333320
+Estimated delivery: Nov 18 - Dec 2
+
+Items:
+ - Keyboard wrist rest
+
+Track your order in the app.
+
+
+------=_Part_alt_huxxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>Your order 8193333300000020 has been shipped</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#f=
+ff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">&#847;&zwnj;&nbsp=
+;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#444;padding:16px;color:#fff;font-size:20px"><i=
+mg src=3D"https://img.example.com/logo.png" alt=3D"AliExpress" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Hi Zuzana,</p><p>Good news! Your order =
+8193333300000020 has been shipped.</p><p>Carrier: Cainiao Super Economy =
+Global</p><p>Tracking number: LP00333333333320</p><p>Estimated delivery: =
+Nov 18 - Dec 2</p><p>Items:</p><p> - Keyboard wrist rest</p><p>Track your =
+order in the app.</p></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">You received this =
+e-mail because you have an account with us.</td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_huxxxx.fake--

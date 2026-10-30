@@ -1,0 +1,57 @@
+Delivered-To: petra.smyslena@example.sk
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake8l;
+        Fri, 6 Nov 2026 09:20:06 +0100
+Return-Path: <info@topanocky.example.sk>
+Date: Fri, 6 Nov 2026 09:20:06 +0100
+From: =?utf-8?Q?Top=C3=A1no=C4=8Dky?= <info@topanocky.example.sk>
+To: =?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>
+Subject: =?utf-8?Q?Vr=C3=A1tenie_tovaru_k?=
+ =?utf-8?Q?_objedn=C3=A1vke_T-900?=
+ =?utf-8?Q?1?=
+Message-ID: <petra.m21.mail@topanocky.example.sk>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_8kxxxx.fake"
+
+------=_Part_alt_8kxxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Dobr=C3=BD de=C5=88,
+vr=C3=A1tenie tovaru sme zaevidovali. Z=C3=A1sielku podajte do 14 dn=C3=AD =
+v ktoromko=C4=BEvek Z-BOXe alebo v=C3=BDdajnom mieste Packeta.
+K=C3=B3d na podanie: R-555505
+=C4=8C=C3=ADslo z=C3=A1sielky na vr=C3=A1tenie: Z 555 5555 505
+
+Top=C3=A1no=C4=8Dky
+
+------=_Part_alt_8kxxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>Vr=C3=A1tenie tovaru k objedn=C3=A1vke T-9001</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#f=
+ff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">&#847;&zwnj;&nbsp=
+;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#444;padding:16px;color:#fff;font-size:20px"><i=
+mg src=3D"https://img.example.com/logo.png" alt=3D"Top=C3=A1no=C4=8Dky" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Dobr=C3=BD de=C5=88,</p><p>vr=C3=A1tenie =
+tovaru sme zaevidovali. Z=C3=A1sielku podajte do 14 dn=C3=AD v =
+ktoromko=C4=BEvek Z-BOXe alebo v=C3=BDdajnom mieste Packeta.</p><p>K=C3=B3d=
+ na podanie: R-555505</p><p>=C4=8C=C3=ADslo z=C3=A1sielky na vr=C3=A1tenie:=
+ Z 555 5555 505</p><p>Top=C3=A1no=C4=8Dky</p></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">Tento e-mail bol =
+vygenerovan=C3=BD automaticky.</td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_8kxxxx.fake--

@@ -1,0 +1,690 @@
+{
+ "meta": {
+  "away": [],
+  "firstRun": "welcome",
+  "id": "lucia",
+  "fullName": "Lucia Vymyslená",
+  "email": "lucia.vymyslena@example.cz",
+  "digit": "7",
+  "day0": "2026-11-01",
+  "postcode": "99950",
+  "town": "Brno"
+ },
+ "points": [
+  {
+   "name": "Z-BOX Brno, Smyšlená 12 (Albert)",
+   "street": "Smyšlená 12",
+   "zip": "999 50",
+   "city": "Brno"
+  },
+  {
+   "name": "Trafika U Fiktivního parku – výdejní místo",
+   "street": "Parková 3",
+   "zip": "999 50",
+   "city": "Brno",
+   "hours": "shop"
+  }
+ ],
+ "parcels": [
+  {
+   "key": "l1",
+   "carrier": "packeta",
+   "number": "Z7777777701",
+   "label": "statistics textbook (výdejní místo)",
+   "events": [
+    {
+     "at": "D2 15:00",
+     "status": "pre_transit",
+     "text": "Zásilka byla podána."
+    },
+    {
+     "at": "D3 03:00",
+     "status": "in_transit",
+     "text": "Zásilka je na cestě."
+    }
+   ],
+   "ready": {
+    "at": "D4 10:00",
+    "text": "Zásilka je připravena k vyzvednutí na výdejním místě.",
+    "pickup": {
+     "kind": "parcelshop",
+     "name": "Trafika U Fiktivního parku – výdejní místo",
+     "street": "Parková 3",
+     "city": "Brno"
+    },
+    "till": "D11 23:59",
+    "hours": "shop",
+    "where": "Trafika U Fiktivního parku – výdejní místo"
+   },
+   "collect": {
+    "lagMin": 3,
+    "text": "Zásilka byla vyzvednuta."
+   },
+   "expire": {
+    "returningText": "Zásilka nebyla vyzvednuta v úložní době, vracíme ji odesílateli.",
+    "returnedText": "Zásilka byla vrácena odesílateli."
+   }
+  },
+  {
+   "key": "l2",
+   "carrier": "packeta",
+   "number": "Z7777777702",
+   "label": "sweater (Z-BOX)",
+   "events": [
+    {
+     "at": "D4 18:00",
+     "status": "pre_transit",
+     "text": "Zásilka byla podána."
+    },
+    {
+     "at": "D5 06:00",
+     "status": "in_transit",
+     "text": "Zásilka je na cestě."
+    }
+   ],
+   "ready": {
+    "at": "D7 09:30",
+    "text": "Zásilka je připravena k vyzvednutí v Z-BOXu.",
+    "pickup": {
+     "kind": "zbox",
+     "name": "Z-BOX Brno, Smyšlená 12 (Albert)",
+     "street": "Smyšlená 12",
+     "city": "Brno"
+    },
+    "till": "D14 23:59",
+    "code": "664210",
+    "hours": "24/7",
+    "where": "Z-BOX Brno, Smyšlená 12 (Albert)"
+   },
+   "collect": {
+    "lagMin": 3,
+    "text": "Zásilka byla vyzvednuta."
+   },
+   "expire": {
+    "returningText": "Zásilka nebyla vyzvednuta v úložní době, vracíme ji odesílateli.",
+    "returnedText": "Zásilka byla vrácena odesílateli."
+   }
+  },
+  {
+   "key": "l3",
+   "carrier": "packeta",
+   "number": "Z7777777703",
+   "label": "Vinted jacket (Z-BOX); only the Vinted mail reaches the label",
+   "events": [
+    {
+     "at": "D6 10:00",
+     "status": "pre_transit",
+     "text": "Zásilka byla podána."
+    },
+    {
+     "at": "D6 22:00",
+     "status": "in_transit",
+     "text": "Zásilka je na cestě."
+    }
+   ],
+   "ready": {
+    "at": "D9 08:40",
+    "text": "Zásilka je připravena k vyzvednutí v Z-BOXu.",
+    "pickup": {
+     "kind": "zbox",
+     "name": "Z-BOX Brno, Smyšlená 12 (Albert)",
+     "street": "Smyšlená 12",
+     "city": "Brno"
+    },
+    "till": "D16 23:59",
+    "code": "307714",
+    "hours": "24/7",
+    "where": "Z-BOX Brno, Smyšlená 12 (Albert)"
+   },
+   "collect": {
+    "lagMin": 3,
+    "text": "Zásilka byla vyzvednuta."
+   },
+   "expire": {
+    "returningText": "Zásilka nebyla vyzvednuta v úložní době, vracíme ji odesílateli.",
+    "returnedText": "Zásilka byla vrácena odesílateli."
+   }
+  },
+  {
+   "owner": "flatmate",
+   "key": "l4",
+   "carrier": "packeta",
+   "number": "Z7777777704",
+   "label": "Klára's cosmetics (Lucia's address used)",
+   "events": [
+    {
+     "at": "D6 14:00",
+     "status": "pre_transit",
+     "text": "Zásilka byla podána."
+    },
+    {
+     "at": "D7 02:00",
+     "status": "in_transit",
+     "text": "Zásilka je na cestě."
+    }
+   ],
+   "ready": {
+    "at": "D8 11:00",
+    "text": "Zásilka je připravena k vyzvednutí na výdejním místě.",
+    "pickup": {
+     "kind": "parcelshop",
+     "name": "Trafika U Fiktivního parku – výdejní místo",
+     "street": "Parková 3",
+     "city": "Brno"
+    },
+    "till": "D15 23:59",
+    "hours": "shop",
+    "where": "Trafika U Fiktivního parku – výdejní místo"
+   },
+   "collect": {
+    "lagMin": 3,
+    "text": "Zásilka byla vyzvednuta."
+   },
+   "expire": {
+    "returningText": "Zásilka nebyla vyzvednuta v úložní době, vracíme ji odesílateli.",
+    "returnedText": "Zásilka byla vrácena odesílateli."
+   }
+  },
+  {
+   "owner": "me",
+   "key": "l6",
+   "carrier": "gls",
+   "number": "90777777706",
+   "label": "Sportovní Brno via GLS (door)",
+   "events": [
+    {
+     "at": "D10 17:00",
+     "status": "pre_transit",
+     "text": "Údaje o balíku boli zaregistrované"
+    },
+    {
+     "at": "D11 04:00",
+     "status": "in_transit",
+     "text": "Balík je na ceste",
+     "location": "Sered"
+    },
+    {
+     "at": "D12 06:40",
+     "status": "out_for_delivery",
+     "text": "Balík je na doručení"
+    },
+    {
+     "at": "D12 12:20",
+     "status": "delivered",
+     "text": "Balík bol doručený"
+    }
+   ]
+  }
+ ],
+ "mails": [
+  {
+   "id": "m01",
+   "at": "D2 10:00",
+   "about": "l1 Czech shop dispatch (\"odeslána\": labelled)",
+   "spec": {
+    "from": "Knihkupectví Příkladné <eshop@knihkupectvi.example.cz>",
+    "subject": "Vaše objednávka č. 2026-4410 byla odeslána",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m01.cz-2026-4410@knihkupectvi.example.cz>",
+    "text": "Dobrý den,\n\nvaše objednávka č. 2026-4410 byla právě odeslána.\nDoprava: Zásilkovna – výdejní místo Trafika U Fiktivního parku\nČíslo zásilky: Z 777 7777 701\n\nObsah zásilky:\n - Učebnice: Úvod do statistiky\n\nDěkujeme za nákup!\nTým Knihkupectví Příkladné\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Vaše objednávka č. 2026-4410 byla odeslána</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Knihkupectví Příkladné\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý den,</p><p>vaše objednávka č. 2026-4410 byla právě odeslána.</p><p>Doprava: Zásilkovna – výdejní místo Trafika U Fiktivního parku</p><p>Číslo zásilky: Z 777 7777 701</p><p>Obsah zásilky:</p><p> - Učebnice: Úvod do statistiky</p><p>Děkujeme za nákup!</p><p>Tým Knihkupectví Příkladné</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m02",
+   "at": "D2 15:08",
+   "about": "l1: Packeta accepted",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka Z 777 7777 701 je na cestě",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m02.Z7777777701-acc@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 701\n\nDobrý den,\nodesílatel Knihkupectví Příkladné nám právě předal vaši zásilku, která vám bude doručena na výdejní místo.\n\nMísto, kde bude vaše zásilka uložena\nTrafika U Fiktivního parku – výdejní místo\nParková 3 999 50 Brno\n\nZaplaceno\n\nČíslo zásilky Z 777 7777 701\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 701&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 701</p><p>Dobrý den,</p><p>odesílatel Knihkupectví Příkladné nám právě předal vaši zásilku, která vám bude doručena na výdejní místo.</p><p>Místo, kde bude vaše zásilka uložena</p><p>Trafika U Fiktivního parku – výdejní místo</p><p>Parková 3 999 50 Brno</p><p>Zaplaceno</p><p>Číslo zásilky Z 777 7777 701</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m03",
+   "at": "D4 10:04",
+   "about": "l1: Packeta ready, until 12.11.2026",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka je připravena k vyzvednutí",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m03.Z7777777701-ready@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 701\n\nDobrý den,\nvaše zásilka od odesílatele Knihkupectví Příkladné je pro vás připravena k vyzvednutí na výdejním místě.\n\nMísto, kde je vaše zásilka uložena\nTrafika U Fiktivního parku – výdejní místo\nParková 3 999 50 Brno\nVyzvedněte nejpozději do 12.11.2026 23:59.\n\nZaplaceno\n\nČíslo zásilky Z 777 7777 701\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 701&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 701</p><p>Dobrý den,</p><p>vaše zásilka od odesílatele Knihkupectví Příkladné je pro vás připravena k vyzvednutí na výdejním místě.</p><p>Místo, kde je vaše zásilka uložena</p><p>Trafika U Fiktivního parku – výdejní místo</p><p>Parková 3 999 50 Brno</p><p>Vyzvedněte nejpozději do 12.11.2026 23:59.</p><p>Zaplaceno</p><p>Číslo zásilky Z 777 7777 701</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m04",
+   "at": "D10 10:00",
+   "cond": {
+    "notCollected": "l1"
+   },
+   "about": "l1: reminder, day before the deadline (only if not collected)",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Připomínáme: zásilka na vás čeká",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m04.Z7777777701-rem@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 701\n\nDobrý den,\npřipomínáme, že vaše zásilka od odesílatele Knihkupectví Příkladné na vás stále čeká. Vyzvedněte si ji nejpozději do 12.11.2026.\n\nMísto, kde je vaše zásilka uložena\nTrafika U Fiktivního parku – výdejní místo\nParková 3 999 50 Brno\nVyzvedněte nejpozději do 12.11.2026 23:59.\n\nZaplaceno\n\nČíslo zásilky Z 777 7777 701\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 701&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 701</p><p>Dobrý den,</p><p>připomínáme, že vaše zásilka od odesílatele Knihkupectví Příkladné na vás stále čeká. Vyzvedněte si ji nejpozději do 12.11.2026.</p><p>Místo, kde je vaše zásilka uložena</p><p>Trafika U Fiktivního parku – výdejní místo</p><p>Parková 3 999 50 Brno</p><p>Vyzvedněte nejpozději do 12.11.2026 23:59.</p><p>Zaplaceno</p><p>Číslo zásilky Z 777 7777 701</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m05",
+   "trigger": {
+    "afterCollect": "l1",
+    "min": 6
+   },
+   "about": "l1: picked-up confirmation (after sim collect)",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka byla vyzvednuta",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m05.Z7777777701-picked@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 701\n\nDobrý den,\nvaše zásilka Z 777 7777 701 od odesílatele Knihkupectví Příkladné byla úspěšně vyzvednuta.\n\nČíslo zásilky Z 777 7777 701\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 701&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 701</p><p>Dobrý den,</p><p>vaše zásilka Z 777 7777 701 od odesílatele Knihkupectví Příkladné byla úspěšně vyzvednuta.</p><p>Číslo zásilky Z 777 7777 701</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m06",
+   "at": "D12 09:30",
+   "cond": {
+    "notCollected": "l1"
+   },
+   "about": "l1: not collected in time, returning",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka bude vrácena odesílateli",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m06.Z7777777701-ret@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 701\n\nDobrý den,\nvaše zásilka od odesílatele Knihkupectví Příkladné nebyla vyzvednuta v úložní době, a proto ji vracíme odesílateli.\n\nČíslo zásilky Z 777 7777 701\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 701&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 701</p><p>Dobrý den,</p><p>vaše zásilka od odesílatele Knihkupectví Příkladné nebyla vyzvednuta v úložní době, a proto ji vracíme odesílateli.</p><p>Číslo zásilky Z 777 7777 701</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m07",
+   "at": "D2 12:00",
+   "about": "university (not labelled)",
+   "spec": {
+    "from": "Studijní oddělení <studijni@fakulta.example.cz>",
+    "subject": "Zápis na zkouškové období",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m07.mail@fakulta.example.cz>",
+    "text": "Vážení studenti,\nzápis termínů zkoušek se otevírá 16. 11.\nStudijní oddělení\n",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m08",
+   "at": "D4 09:00",
+   "about": "l2 Slovak shop to her Brno Z-BOX (Slovak dispatch labelled; carrier mails Czech)",
+   "spec": {
+    "from": "Móda Bratislava <eshop@modaba.example.sk>",
+    "subject": "Objednávka č. MB-1290 bola odoslaná",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m08.ship-MB-1290@modaba.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. MB-1290 bola práve odoslaná.\nDoprava: Packeta – Z-BOX Brno, Smyšlená 12 (Albert)\nČíslo zásielky: Z 777 7777 702\n\nObsah zásielky:\n - Sveter, veľ. S\n\n\nĎakujeme za nákup!\nTím Móda Bratislava\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Móda Bratislava</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka MB-1290 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Móda Bratislava\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>MB-1290</strong> bola práve odoslaná.</p><p>Doprava: Packeta – Z-BOX Brno, Smyšlená 12 (Albert)</p><p>Číslo zásielky: Z 777 7777 702</p><table><tr><td>Sveter, veľ. S</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Móda Bratislava. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m09",
+   "at": "D4 18:08",
+   "about": "l2: Packeta accepted",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka Z 777 7777 702 je na cestě",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m09.Z7777777702-acc@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 702\n\nDobrý den,\nodesílatel Móda Bratislava nám právě předal vaši zásilku, která vám bude doručena do Z-BOXu.\n\nMísto, kde bude vaše zásilka uložena\nZ-BOX Brno, Smyšlená 12 (Albert)\nSmyšlená 12 999 50 Brno\n\nZaplaceno\n\nČíslo zásilky Z 777 7777 702\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 702&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 702</p><p>Dobrý den,</p><p>odesílatel Móda Bratislava nám právě předal vaši zásilku, která vám bude doručena do Z-BOXu.</p><p>Místo, kde bude vaše zásilka uložena</p><p>Z-BOX Brno, Smyšlená 12 (Albert)</p><p>Smyšlená 12 999 50 Brno</p><p>Zaplaceno</p><p>Číslo zásilky Z 777 7777 702</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m10",
+   "at": "D7 09:34",
+   "about": "l2: Packeta ready, code 664210, until 15.11.2026",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka je připravena k vyzvednutí",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m10.Z7777777702-ready@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 702\n\nDobrý den,\nvaše zásilka od odesílatele Móda Bratislava je pro vás připravena k vyzvednutí v Z-BOXu.\n\nKód pro otevření schránky\n6\n6\n4\n2\n1\n0\n\nMísto, kde je vaše zásilka uložena\nZ-BOX Brno, Smyšlená 12 (Albert)\nSmyšlená 12 999 50 Brno\nVyzvedněte nejpozději do 15.11.2026 23:59.\n\nZaplaceno\n\nČíslo zásilky Z 777 7777 702\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 702&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 702</p><p>Dobrý den,</p><p>vaše zásilka od odesílatele Móda Bratislava je pro vás připravena k vyzvednutí v Z-BOXu.</p><p>Kód pro otevření schránky</p><p>6</p><p>6</p><p>4</p><p>2</p><p>1</p><p>0</p><p>Místo, kde je vaše zásilka uložena</p><p>Z-BOX Brno, Smyšlená 12 (Albert)</p><p>Smyšlená 12 999 50 Brno</p><p>Vyzvedněte nejpozději do 15.11.2026 23:59.</p><p>Zaplaceno</p><p>Číslo zásilky Z 777 7777 702</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m11",
+   "at": "D13 10:00",
+   "cond": {
+    "notCollected": "l2"
+   },
+   "about": "l2: reminder, day before the deadline (only if not collected)",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Připomínáme: zásilka na vás čeká",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m11.Z7777777702-rem@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 702\n\nDobrý den,\npřipomínáme, že vaše zásilka od odesílatele Móda Bratislava na vás stále čeká. Vyzvedněte si ji nejpozději do 15.11.2026.\n\nKód pro otevření schránky\n6\n6\n4\n2\n1\n0\n\nMísto, kde je vaše zásilka uložena\nZ-BOX Brno, Smyšlená 12 (Albert)\nSmyšlená 12 999 50 Brno\nVyzvedněte nejpozději do 15.11.2026 23:59.\n\nZaplaceno\n\nČíslo zásilky Z 777 7777 702\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 702&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 702</p><p>Dobrý den,</p><p>připomínáme, že vaše zásilka od odesílatele Móda Bratislava na vás stále čeká. Vyzvedněte si ji nejpozději do 15.11.2026.</p><p>Kód pro otevření schránky</p><p>6</p><p>6</p><p>4</p><p>2</p><p>1</p><p>0</p><p>Místo, kde je vaše zásilka uložena</p><p>Z-BOX Brno, Smyšlená 12 (Albert)</p><p>Smyšlená 12 999 50 Brno</p><p>Vyzvedněte nejpozději do 15.11.2026 23:59.</p><p>Zaplaceno</p><p>Číslo zásilky Z 777 7777 702</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m12",
+   "trigger": {
+    "afterCollect": "l2",
+    "min": 6
+   },
+   "about": "l2: picked-up confirmation (after sim collect)",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka byla vyzvednuta",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m12.Z7777777702-picked@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 702\n\nDobrý den,\nvaše zásilka Z 777 7777 702 od odesílatele Móda Bratislava byla úspěšně vyzvednuta.\n\nČíslo zásilky Z 777 7777 702\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 702&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 702</p><p>Dobrý den,</p><p>vaše zásilka Z 777 7777 702 od odesílatele Móda Bratislava byla úspěšně vyzvednuta.</p><p>Číslo zásilky Z 777 7777 702</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m14",
+   "at": "D3 20:00",
+   "about": "l5 Czech shop via PPL (unsupported carrier); 11-digit number looks GLS-shaped",
+   "spec": {
+    "from": "Elektro Brno <obchod@elektrobrno.example.cz>",
+    "subject": "Objednávka EB-77120 odeslána",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m14.mail@elektrobrno.example.cz>",
+    "text": "Dobrý den,\nvaše objednávka EB-77120 byla předána dopravci PPL.\nČíslo zásilky PPL: 40777777701\nDoručení: zítra 8:00–17:00 na adresu\n\nElektro Brno\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Objednávka EB-77120 odeslána</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Elektro Brno\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý den,</p><p>vaše objednávka EB-77120 byla předána dopravci PPL.</p><p>Číslo zásilky PPL: 40777777701</p><p>Doručení: zítra 8:00–17:00 na adresu</p><p>Elektro Brno</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m15",
+   "at": "D4 07:40",
+   "about": "l5 PPL courier today (not labelled: unknown carrier, Czech words)",
+   "spec": {
+    "from": "PPL CZ <info@ppl.example.cz>",
+    "subject": "Dnes vám doručíme zásilku 40777777701",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m15.mail@ppl.example.cz>",
+    "text": "Dobrý den,\nzásilku 40777777701 od Elektro Brno vám doručíme dnes mezi 10:00 a 13:00.\nPPL CZ\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Dnes vám doručíme zásilku 40777777701</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"PPL CZ\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý den,</p><p>zásilku 40777777701 od Elektro Brno vám doručíme dnes mezi 10:00 a 13:00.</p><p>PPL CZ</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m16",
+   "at": "D4 11:50",
+   "about": "l5 PPL delivered (not labelled)",
+   "spec": {
+    "from": "PPL CZ <info@ppl.example.cz>",
+    "subject": "Zásilka 40777777701 byla doručena",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m16.mail@ppl.example.cz>",
+    "text": "Dobrý den,\nzásilka 40777777701 byla doručena.\nPPL CZ\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilka 40777777701 byla doručena</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"PPL CZ\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý den,</p><p>zásilka 40777777701 byla doručena.</p><p>PPL CZ</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m17",
+   "at": "D5 18:30",
+   "about": "l3 Vinted; \"balíček\" in the subject, so labelled; Zásilkovna number in the body",
+   "spec": {
+    "from": "Vinted <no-reply@vinted.example.cz>",
+    "subject": "Tvůj nákup: Zimní bunda – prodejce odeslal balíček",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m17.mail@vinted.example.cz>",
+    "text": "Ahoj Lucie,\nprodejce odeslal tvůj balíček.\nSledovací číslo Zásilkovny: Z 777 7777 703\nVinted\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Tvůj nákup: Zimní bunda – prodejce odeslal balíček</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Vinted\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Ahoj Lucie,</p><p>prodejce odeslal tvůj balíček.</p><p>Sledovací číslo Zásilkovny: Z 777 7777 703</p><p>Vinted</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m18",
+   "at": "D6 10:08",
+   "about": "l3: Packeta accepted",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka Z 777 7777 703 je na cestě",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m18.Z7777777703-acc@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 703\n\nDobrý den,\nodesílatel Vinted Go nám právě předal vaši zásilku, která vám bude doručena do Z-BOXu.\n\nMísto, kde bude vaše zásilka uložena\nZ-BOX Brno, Smyšlená 12 (Albert)\nSmyšlená 12 999 50 Brno\n\nZaplaceno\n\nČíslo zásilky Z 777 7777 703\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 703&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 703</p><p>Dobrý den,</p><p>odesílatel Vinted Go nám právě předal vaši zásilku, která vám bude doručena do Z-BOXu.</p><p>Místo, kde bude vaše zásilka uložena</p><p>Z-BOX Brno, Smyšlená 12 (Albert)</p><p>Smyšlená 12 999 50 Brno</p><p>Zaplaceno</p><p>Číslo zásilky Z 777 7777 703</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m19",
+   "at": "D9 08:44",
+   "about": "l3: Packeta ready, code 307714, until 17.11.2026",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka je připravena k vyzvednutí",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m19.Z7777777703-ready@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 703\n\nDobrý den,\nvaše zásilka od odesílatele Vinted Go je pro vás připravena k vyzvednutí v Z-BOXu.\n\nKód pro otevření schránky\n3\n0\n7\n7\n1\n4\n\nMísto, kde je vaše zásilka uložena\nZ-BOX Brno, Smyšlená 12 (Albert)\nSmyšlená 12 999 50 Brno\nVyzvedněte nejpozději do 17.11.2026 23:59.\n\nZaplaceno\n\nČíslo zásilky Z 777 7777 703\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 703&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 703</p><p>Dobrý den,</p><p>vaše zásilka od odesílatele Vinted Go je pro vás připravena k vyzvednutí v Z-BOXu.</p><p>Kód pro otevření schránky</p><p>3</p><p>0</p><p>7</p><p>7</p><p>1</p><p>4</p><p>Místo, kde je vaše zásilka uložena</p><p>Z-BOX Brno, Smyšlená 12 (Albert)</p><p>Smyšlená 12 999 50 Brno</p><p>Vyzvedněte nejpozději do 17.11.2026 23:59.</p><p>Zaplaceno</p><p>Číslo zásilky Z 777 7777 703</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m21",
+   "trigger": {
+    "afterCollect": "l3",
+    "min": 6
+   },
+   "about": "l3: picked-up confirmation (after sim collect)",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka byla vyzvednuta",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m21.Z7777777703-picked@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 703\n\nDobrý den,\nvaše zásilka Z 777 7777 703 od odesílatele Vinted Go byla úspěšně vyzvednuta.\n\nČíslo zásilky Z 777 7777 703\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 703&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 703</p><p>Dobrý den,</p><p>vaše zásilka Z 777 7777 703 od odesílatele Vinted Go byla úspěšně vyzvednuta.</p><p>Číslo zásilky Z 777 7777 703</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m23",
+   "at": "D6 14:08",
+   "about": "l4 (flatmate): Packeta accepted",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka Z 777 7777 704 je na cestě",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m23.Z7777777704-acc@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 704\n\nDobrý den,\nodesílatel Kosmetika Bella nám právě předal vaši zásilku, která vám bude doručena na výdejní místo.\n\nMísto, kde bude vaše zásilka uložena\nTrafika U Fiktivního parku – výdejní místo\nParková 3 999 50 Brno\n\nZaplaceno\n\nČíslo zásilky Z 777 7777 704\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 704&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 704</p><p>Dobrý den,</p><p>odesílatel Kosmetika Bella nám právě předal vaši zásilku, která vám bude doručena na výdejní místo.</p><p>Místo, kde bude vaše zásilka uložena</p><p>Trafika U Fiktivního parku – výdejní místo</p><p>Parková 3 999 50 Brno</p><p>Zaplaceno</p><p>Číslo zásilky Z 777 7777 704</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m24",
+   "at": "D8 11:04",
+   "about": "l4 (flatmate): Packeta ready, until 16.11.2026",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka je připravena k vyzvednutí",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m24.Z7777777704-ready@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 704\n\nDobrý den,\nvaše zásilka od odesílatele Kosmetika Bella je pro vás připravena k vyzvednutí na výdejním místě.\n\nMísto, kde je vaše zásilka uložena\nTrafika U Fiktivního parku – výdejní místo\nParková 3 999 50 Brno\nVyzvedněte nejpozději do 16.11.2026 23:59.\n\nZaplaceno\n\nČíslo zásilky Z 777 7777 704\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 704&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 704</p><p>Dobrý den,</p><p>vaše zásilka od odesílatele Kosmetika Bella je pro vás připravena k vyzvednutí na výdejním místě.</p><p>Místo, kde je vaše zásilka uložena</p><p>Trafika U Fiktivního parku – výdejní místo</p><p>Parková 3 999 50 Brno</p><p>Vyzvedněte nejpozději do 16.11.2026 23:59.</p><p>Zaplaceno</p><p>Číslo zásilky Z 777 7777 704</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m25",
+   "at": "D14 10:00",
+   "cond": {
+    "notCollected": "l4"
+   },
+   "about": "l4: reminder, day before the deadline (only if not collected)",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Připomínáme: zásilka na vás čeká",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m25.Z7777777704-rem@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 704\n\nDobrý den,\npřipomínáme, že vaše zásilka od odesílatele Kosmetika Bella na vás stále čeká. Vyzvedněte si ji nejpozději do 16.11.2026.\n\nMísto, kde je vaše zásilka uložena\nTrafika U Fiktivního parku – výdejní místo\nParková 3 999 50 Brno\nVyzvedněte nejpozději do 16.11.2026 23:59.\n\nZaplaceno\n\nČíslo zásilky Z 777 7777 704\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 704&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 704</p><p>Dobrý den,</p><p>připomínáme, že vaše zásilka od odesílatele Kosmetika Bella na vás stále čeká. Vyzvedněte si ji nejpozději do 16.11.2026.</p><p>Místo, kde je vaše zásilka uložena</p><p>Trafika U Fiktivního parku – výdejní místo</p><p>Parková 3 999 50 Brno</p><p>Vyzvedněte nejpozději do 16.11.2026 23:59.</p><p>Zaplaceno</p><p>Číslo zásilky Z 777 7777 704</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m26",
+   "trigger": {
+    "afterCollect": "l4",
+    "min": 6
+   },
+   "about": "l4: picked-up confirmation (after sim collect)",
+   "spec": {
+    "from": "Zásilkovna <noreply@zasilkovna.cz>",
+    "subject": "Zásilka byla vyzvednuta",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m26.Z7777777704-picked@zasilkovna.cz>",
+    "text": "Zásilka Z 777 7777 704\n\nDobrý den,\nvaše zásilka Z 777 7777 704 od odesílatele Kosmetika Bella byla úspěšně vyzvednuta.\n\nČíslo zásilky Z 777 7777 704\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásilkovna</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásilka Z 777 7777 704&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásilka Z 777 7777 704</p><p>Dobrý den,</p><p>vaše zásilka Z 777 7777 704 od odesílatele Kosmetika Bella byla úspěšně vyzvednuta.</p><p>Číslo zásilky Z 777 7777 704</p><p>Děkujeme, že jste si pro doručení vybrali Zásilkovnu.</p><p>tým Zásilkovny</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail je generován automaticky, neodpovídejte na něj.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m28",
+   "at": "D9 13:15",
+   "about": "l4 flatmate asks (not labelled)",
+   "spec": {
+    "from": "Klára Smyšlená <klara.smyslena@example.cz>",
+    "subject": "kosmetika",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m28.mail@example.cz>",
+    "text": "Lucko, dala jsem omylem tvůj mail u objednávky kosmetiky z Belly :( nepřišlo ti něco ze Zásilkovny? Můžeš mi to prosím vyzvednout, jsem do pátku doma v Olomouci. Díky! K.\n",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m29",
+   "at": "D7 09:00",
+   "about": "carrier promo from zasilkovna.cz (not labelled)",
+   "spec": {
+    "from": "Zásilkovna <novinky@zasilkovna.cz>",
+    "subject": "Nové Z-BOXy ve vašem okolí",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m29.mail@zasilkovna.cz>",
+    "text": "V Brně přibylo 12 nových Z-BOXů.\nZásilkovna\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Nové Z-BOXy ve vašem okolí</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Zásilkovna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>V Brně přibylo 12 nových Z-BOXů.</p><p>Zásilkovna</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m30",
+   "at": "D10 16:00",
+   "about": "l6 Czech shop, \"balík\": labelled; GLS courier",
+   "spec": {
+    "from": "Sportovní Brno <eshop@sportbrno.example.cz>",
+    "subject": "Váš balík je na cestě",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m30.mail@sportbrno.example.cz>",
+    "text": "Dobrý den,\nváš balík s objednávkou SB-2051 je na cestě přes GLS.\nČíslo balíku: 90777777706\nSportovní Brno\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Váš balík je na cestě</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Sportovní Brno\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý den,</p><p>váš balík s objednávkou SB-2051 je na cestě přes GLS.</p><p>Číslo balíku: 90777777706</p><p>Sportovní Brno</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m31",
+   "at": "D10 17:20",
+   "about": "l6: GLS accepted",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Balík 90777777706 sme prevzali od odosielateľa",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m31.90777777706-acc@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík sme prevzali od odosielateľa a je na ceste k vám. Predpokladaný dátum doručenia vám oznámime v ďalšom e-maile.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík sme prevzali od odosielateľa a je na ceste k vám. Predpokladaný dátum doručenia vám oznámime v ďalšom e-maile.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90777777706</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Sportovní Brno</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90777777706\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m32",
+   "at": "D12 07:10",
+   "about": "l6: GLS out for delivery today",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Váš balík 90777777706 je na ceste",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m32.90777777706-tr@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík je na ceste. Doručíme ho dnes medzi 11:00 a 14:00. Ak vám termín nevyhovuje, môžete ho zmeniť cez FlexDelivery.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík je na ceste. Doručíme ho dnes medzi 11:00 a 14:00. Ak vám termín nevyhovuje, môžete ho zmeniť cez FlexDelivery.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90777777706</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Sportovní Brno</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90777777706\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m33",
+   "at": "D12 12:29",
+   "about": "l6: GLS delivered to the door",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Balík 90777777706 bol doručený",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m33.90777777706-del@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík bol úspešne doručený. Ďakujeme, že ste využili služby GLS.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík bol úspešne doručený. Ďakujeme, že ste využili služby GLS.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90777777706</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Sportovní Brno</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90777777706\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m34",
+   "at": "D12 08:00",
+   "about": "Vinted (not labelled)",
+   "spec": {
+    "from": "Vinted <no-reply@vinted.example.cz>",
+    "subject": "Nezapomeň potvrdit, že je vše v pořádku",
+    "to": "=?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>",
+    "messageId": "<lucia.m34.mail@vinted.example.cz>",
+    "text": "Potvrď převzetí balíčku do 2 dnů.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Nezapomeň potvrdit, že je vše v pořádku</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Vinted\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Potvrď převzetí balíčku do 2 dnů.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "lucia.vymyslena@example.cz"
+   },
+   "labelled": false
+  }
+ ]
+}

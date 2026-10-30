@@ -1,0 +1,67 @@
+Delivered-To: zuzana.fiktivna@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fakegi;
+        Mon, 9 Nov 2026 09:40:09 +0100
+Return-Path: <orders@temu.example.com>
+Date: Mon, 9 Nov 2026 09:40:09 +0100
+From: Temu <orders@temu.example.com>
+To: =?utf-8?Q?Zuzana_Fikt=C3=ADvna?= <zuzana.fiktivna@example.com>
+Subject: =?utf-8?Q?=F0=9F=93=A6_Your_Temu_ord?=
+ =?utf-8?Q?er_has_shipped?=
+Message-ID: <zuzana.m80.en-PO-211-33000013@temu.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_ghxxxx.fake"
+
+------=_Part_alt_ghxxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Hi Zuzana,
+
+Good news! Your order PO-211-33000013 has been shipped.
+Carrier: Packeta
+
+Estimated delivery: 3-6 business days
+
+Items:
+ - Storage boxes x4
+ - Label maker
+
+Your order ships in 2 parcels:
+Parcel 1/2: Z 333 3333 313 (storage boxes)
+Parcel 2/2: Z 333 3333 314 (label maker)
+
+Track your order in the app.
+
+
+------=_Part_alt_ghxxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>=F0=9F=93=A6 Your Temu order has shipped</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#f=
+ff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">&#847;&zwnj;&nbsp=
+;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#444;padding:16px;color:#fff;font-size:20px"><i=
+mg src=3D"https://img.example.com/logo.png" alt=3D"Temu" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Hi Zuzana,</p><p>Good news! Your order =
+PO-211-33000013 has been shipped.</p><p>Carrier: Packeta</p><p>Estimated =
+delivery: 3-6 business days</p><p>Items:</p><p> - Storage boxes x4</p><p> -=
+ Label maker</p><p>Your order ships in 2 parcels:</p><p>Parcel 1/2: Z 333 =
+3333 313 (storage boxes)</p><p>Parcel 2/2: Z 333 3333 314 (label =
+maker)</p><p>Track your order in the app.</p></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">You received this =
+e-mail because you have an account with us.</td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_ghxxxx.fake--

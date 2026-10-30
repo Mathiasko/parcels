@@ -1,0 +1,53 @@
+Delivered-To: tomas.bezpecny@example.sk
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fakec9;
+        Fri, 6 Nov 2026 07:30:06 +0100
+Return-Path: <bezpecnost@packeta-overenie.example.com>
+Date: Fri, 6 Nov 2026 07:30:06 +0100
+From: Packeta <bezpecnost@packeta-overenie.example.com>
+To: =?utf-8?Q?Tom=C3=A1=C5=A1_Bezpe=C4=8Dn=C3=BD?= <tomas.bezpecny@example.sk>
+Subject: =?utf-8?Q?Overte_svoju_z=C3=A1si?=
+ =?utf-8?Q?elku_=E2=80=93_posledn=C3=A1?=
+ =?utf-8?Q?_v=C3=BDzva?=
+Message-ID: <tomas.m11.mail@packeta-overenie.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_c8xxxx.fake"
+
+------=_Part_alt_c8xxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Dobr=C3=BD de=C5=88,
+va=C5=A1a z=C3=A1sielka nemohla by=C5=A5 doru=C4=8Den=C3=A1. Overte adresu =
+a uhra=C4=8Fte 0,99 =E2=82=AC: https://packeta-overenie.example.com/
+Packeta
+
+------=_Part_alt_c8xxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>Overte svoju z=C3=A1sielku =E2=80=93 posledn=C3=A1 v=C3=BDzva</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#f=
+ff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">&#847;&zwnj;&nbsp=
+;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#444;padding:16px;color:#fff;font-size:20px"><i=
+mg src=3D"https://img.example.com/logo.png" alt=3D"Packeta" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Dobr=C3=BD de=C5=88,</p><p>va=C5=A1a =
+z=C3=A1sielka nemohla by=C5=A5 doru=C4=8Den=C3=A1. Overte adresu a =
+uhra=C4=8Fte 0,99 =E2=82=AC: https://packeta-overenie.example.=
+com/</p><p>Packeta</p></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">Tento e-mail bol =
+vygenerovan=C3=BD automaticky.</td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_c8xxxx.fake--

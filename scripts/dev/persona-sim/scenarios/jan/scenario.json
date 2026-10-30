@@ -1,0 +1,272 @@
+{
+ "meta": {
+  "away": [],
+  "firstRun": "welcome",
+  "id": "jan",
+  "fullName": "Ján Vymyslený",
+  "email": "jan.vymysleny@example.sk",
+  "digit": "2",
+  "day0": "2026-11-01",
+  "postcode": "99941",
+  "town": "Dolné Fiktívce"
+ },
+ "points": [],
+ "parcels": [
+  {
+   "owner": "me",
+   "key": "p1",
+   "carrier": "posta",
+   "number": "EB222222013SK",
+   "label": "book, COD, post office (must be collected by Fri 13 Nov 18:00)",
+   "events": [
+    {
+     "at": "D2 15:00",
+     "status": "pre_transit",
+     "text": "Podanie zásielky",
+     "location": "Bratislava 1"
+    },
+    {
+     "at": "D3 05:00",
+     "status": "in_transit",
+     "text": "Zásielka na ceste",
+     "location": "SPU Bratislava"
+    },
+    {
+     "at": "D5 10:20",
+     "status": "failed_attempt",
+     "text": "Adresát nezastihnutý, zásielka bude uložená na pošte",
+     "location": "Dolné Fiktívce"
+    }
+   ],
+   "ready": {
+    "at": "D5 11:00",
+    "text": "Uloženie zásielky na pošte",
+    "location": "Dolné Fiktívce",
+    "pickup": {
+     "kind": "post_office",
+     "name": "Pošta Dolné Fiktívce",
+     "street": "Hlavná 1",
+     "city": "Dolné Fiktívce",
+     "postalCode": "99941"
+    },
+    "till": "D12 18:00",
+    "hours": "post",
+    "where": "Pošta Dolné Fiktívce",
+    "needsId": true
+   },
+   "collect": {
+    "lagMin": 1140,
+    "text": "Dodanie zásielky",
+    "location": "Dolné Fiktívce"
+   },
+   "expire": {
+    "returningText": "Vrátenie zásielky odosielateľovi",
+    "returnedText": "Zásielka vrátená odosielateľovi",
+    "returnAfterH": 30
+   },
+   "cod": "18,50 €"
+  },
+  {
+   "owner": "me",
+   "key": "p2",
+   "carrier": "dpd",
+   "number": "01505222222202",
+   "label": "Lekáreň Zdravie Online # L-55102 via DPD (door)",
+   "events": [
+    {
+     "at": "D8 15:00",
+     "status": "pre_transit",
+     "text": "Údaje o zásielke boli prijaté",
+     "location": "Bratislava"
+    },
+    {
+     "at": "D9 00:00",
+     "status": "in_transit",
+     "text": "Zásielka na ceste",
+     "location": "Senec Hub"
+    },
+    {
+     "at": "D9 06:50",
+     "status": "out_for_delivery",
+     "text": "Kuriér doručuje",
+     "location": "Dolné Fiktívce"
+    },
+    {
+     "at": "D9 10:40",
+     "status": "delivered",
+     "text": "Doručené",
+     "location": "Dolné Fiktívce"
+    }
+   ]
+  }
+ ],
+ "mails": [
+  {
+   "id": "m01",
+   "at": "D-2 18:20",
+   "about": "order confirmation, no number (not labelled)",
+   "spec": {
+    "from": "Knihy Pre Vás <objednavky@knihyprevas.example.sk>",
+    "subject": "Potvrdenie objednávky č. 2026-11873",
+    "to": "=?utf-8?Q?J=C3=A1n_Vymyslen=C3=BD?= <jan.vymysleny@example.sk>",
+    "messageId": "<jan.m01.mail@knihyprevas.example.sk>",
+    "text": "Dobrý deň,\n\nďakujeme za objednávku č. 2026-11873.\nKniha: Atlas húb Slovenska (2. vydanie)\nDoprava: Slovenská pošta – balík na adresu\nPlatba: dobierka 18,50 €\n\nKnihy Pre Vás\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Potvrdenie objednávky č. 2026-11873</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Knihy Pre Vás\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>ďakujeme za objednávku č. 2026-11873.</p><p>Kniha: Atlas húb Slovenska (2. vydanie)</p><p>Doprava: Slovenská pošta – balík na adresu</p><p>Platba: dobierka 18,50 €</p><p>Knihy Pre Vás</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "jan.vymysleny@example.sk"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m02",
+   "at": "D2 10:05",
+   "about": "p1 shop dispatch with the posta number",
+   "spec": {
+    "from": "Knihy Pre Vás <objednavky@knihyprevas.example.sk>",
+    "subject": "Vaša objednávka č. 2026-11873 bola odoslaná",
+    "to": "=?utf-8?Q?J=C3=A1n_Vymyslen=C3=BD?= <jan.vymysleny@example.sk>",
+    "messageId": "<jan.m02.ship-2026-11873@knihyprevas.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. 2026-11873 bola práve odoslaná.\nSpôsob doručenia: Slovenská pošta – balík na adresu (dobierka 18,50 €)\nPodacie číslo: EB222222013SK\n\nObsah zásielky:\n - Atlas húb Slovenska (2. vydanie)\n\n\nĎakujeme za nákup!\nTím Knihy Pre Vás\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Knihy Pre Vás</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka 2026-11873 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Knihy Pre Vás\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>2026-11873</strong> bola práve odoslaná.</p><p>Spôsob doručenia: Slovenská pošta – balík na adresu (dobierka 18,50 €)</p><p>Podacie číslo: EB222222013SK</p><table><tr><td>Atlas húb Slovenska (2. vydanie)</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Knihy Pre Vás. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "jan.vymysleny@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m03",
+   "at": "D5 11:25",
+   "about": "p1: posta stored, until 13.11.2026, COD 18,50 €",
+   "spec": {
+    "from": "Slovenská pošta <notifikacie@posta.sk>",
+    "subject": "Oznámenie o uložení zásielky EB222222013SK",
+    "to": "=?utf-8?Q?J=C3=A1n_Vymyslen=C3=BD?= <jan.vymysleny@example.sk>",
+    "messageId": "<jan.m03.EB222222013SK-ready@posta.sk>",
+    "text": "Slovenská pošta, a. s.\n\nVážená pani / Vážený pán,\n\noznamujeme Vám, že zásielka adresovaná na Vaše meno je uložená na pošte.\n\nPodacie číslo: EB222222013SK\nMiesto uloženia: Pošta Dolné Fiktívce\nHlavná 1, 999 41 Dolné Fiktívce\nZásielka je uložená do: 13.11.2026\nSuma na úhradu (dobierka): 18,50 €\n\nPri preberaní zásielky na pošte predložte doklad totožnosti a uveďte podacie číslo zásielky.\nSlovenská pošta nikdy nežiada platbu poplatkov e-mailom ani SMS správou.\n\nTáto správa bola vygenerovaná automaticky, neodpovedajte na ňu.\nSlovenská pošta, a. s., Poštová 9, 999 99 Testovo\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Slovenská pošta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#f0b400;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">oznamujeme Vám, že zásielka adresovaná na Vaše meno je uložená na pošte.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#f0b400;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Slovenská pošta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Vážená pani / Vážený pán,</p><p>oznamujeme Vám, že zásielka adresovaná na Vaše meno je uložená na pošte.</p><table>\n<tr><td>Podacie číslo:</td><td><strong>EB222222013SK</strong></td></tr>\n<tr><td>Miesto uloženia:</td><td>Pošta Dolné Fiktívce<br>Hlavná 1, 999 41 Dolné Fiktívce</td></tr>\n<tr><td>Zásielka je uložená do:</td><td>13.11.2026</td></tr>\n<tr><td>Suma na úhradu (dobierka):</td><td>18,50 €</td></tr>\n</table>\n<p>Pri preberaní zásielky na pošte predložte doklad totožnosti a uveďte podacie číslo zásielky.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Slovenská pošta, a. s., Poštová 9, 999 99 Testovo. Táto správa bola vygenerovaná automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "jan.vymysleny@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m04",
+   "at": "D9 10:00",
+   "cond": {
+    "notCollected": "p1"
+   },
+   "about": "p1: posta reminder 3 days before (only if not collected)",
+   "spec": {
+    "from": "Slovenská pošta <notifikacie@posta.sk>",
+    "subject": "Pripomienka: zásielka EB222222013SK čaká na pošte",
+    "to": "=?utf-8?Q?J=C3=A1n_Vymyslen=C3=BD?= <jan.vymysleny@example.sk>",
+    "messageId": "<jan.m04.EB222222013SK-rem@posta.sk>",
+    "text": "Slovenská pošta, a. s.\n\nVážená pani / Vážený pán,\n\npripomíname Vám, že zásielka adresovaná na Vaše meno je stále uložená. Ak si ju nevyzdvihnete v úložnej lehote, vrátime ju odosielateľovi.\n\nPodacie číslo: EB222222013SK\nMiesto uloženia: Pošta Dolné Fiktívce\nHlavná 1, 999 41 Dolné Fiktívce\nZásielka je uložená do: 13.11.2026\nSuma na úhradu (dobierka): 18,50 €\n\nPri preberaní zásielky na pošte predložte doklad totožnosti a uveďte podacie číslo zásielky.\nSlovenská pošta nikdy nežiada platbu poplatkov e-mailom ani SMS správou.\n\nTáto správa bola vygenerovaná automaticky, neodpovedajte na ňu.\nSlovenská pošta, a. s., Poštová 9, 999 99 Testovo\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Slovenská pošta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#f0b400;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">pripomíname Vám, že zásielka adresovaná na Vaše meno je stále uložená. Ak si ju nevyzdvihnete v úložnej lehote, vrátime ju odosielateľovi.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#f0b400;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Slovenská pošta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Vážená pani / Vážený pán,</p><p>pripomíname Vám, že zásielka adresovaná na Vaše meno je stále uložená. Ak si ju nevyzdvihnete v úložnej lehote, vrátime ju odosielateľovi.</p><table>\n<tr><td>Podacie číslo:</td><td><strong>EB222222013SK</strong></td></tr>\n<tr><td>Miesto uloženia:</td><td>Pošta Dolné Fiktívce<br>Hlavná 1, 999 41 Dolné Fiktívce</td></tr>\n<tr><td>Zásielka je uložená do:</td><td>13.11.2026</td></tr>\n<tr><td>Suma na úhradu (dobierka):</td><td>18,50 €</td></tr>\n</table>\n<p>Pri preberaní zásielky na pošte predložte doklad totožnosti a uveďte podacie číslo zásielky.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Slovenská pošta, a. s., Poštová 9, 999 99 Testovo. Táto správa bola vygenerovaná automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "jan.vymysleny@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m05",
+   "at": "D3 16:40",
+   "about": "bank statement (not labelled)",
+   "spec": {
+    "from": "Banka Fiktívna <info@bankafiktivna.example.sk>",
+    "subject": "Váš výpis z účtu za október 2026",
+    "to": "=?utf-8?Q?J=C3=A1n_Vymyslen=C3=BD?= <jan.vymysleny@example.sk>",
+    "messageId": "<jan.m05.mail@bankafiktivna.example.sk>",
+    "text": "Vážený klient,\nváš výpis z účtu za október je pripravený v internetbankingu.\nBanka Fiktívna\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Váš výpis z účtu za október 2026</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Banka Fiktívna\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Vážený klient,</p><p>váš výpis z účtu za október je pripravený v internetbankingu.</p><p>Banka Fiktívna</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "jan.vymysleny@example.sk"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m06",
+   "at": "D4 19:10",
+   "about": "grandson, personal (not labelled)",
+   "spec": {
+    "from": "Tomáško <tomasko.vnuk@example.com>",
+    "subject": "Ahoj dedko",
+    "to": "=?utf-8?Q?J=C3=A1n_Vymyslen=C3=BD?= <jan.vymysleny@example.sk>",
+    "messageId": "<jan.m06.mail@example.com>",
+    "text": "Ahoj dedko,\nv sobotu prídeme. Mamka hovorí, že ti objednala tie kvapky z lekárne, prídu kuriérom.\nTomáško\n",
+    "deliveredTo": "jan.vymysleny@example.sk"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m07",
+   "at": "D6 08:15",
+   "about": "PHISHING look-alike DPD (labelled)",
+   "spec": {
+    "from": "DPD <info@dpd-sk.example.net>",
+    "subject": "Vaša zásielka čaká na doplatenie poštovného 1,50 €",
+    "to": "=?utf-8?Q?J=C3=A1n_Vymyslen=C3=BD?= <jan.vymysleny@example.sk>",
+    "messageId": "<jan.m07.mail@dpd-sk.example.net>",
+    "text": "Dobrý deň,\nvašu zásielku nebolo možné doručiť, pretože nebolo uhradené poštovné 1,50 €.\nZaplaťte do 24 hodín: https://dpd-sk.example.net/platba\nDPD\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Vaša zásielka čaká na doplatenie poštovného 1,50 €</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vašu zásielku nebolo možné doručiť, pretože nebolo uhradené poštovné 1,50 €.</p><p>Zaplaťte do 24 hodín: https://dpd-sk.example.net/platba</p><p>DPD</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "jan.vymysleny@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m08",
+   "at": "D8 13:00",
+   "about": "p2 pharmacy dispatch (ordered by his daughter)",
+   "spec": {
+    "from": "Lekáreň Zdravie Online <eshop@lekarenzdravie.example.sk>",
+    "subject": "Objednávka č. L-55102 bola odoslaná",
+    "to": "=?utf-8?Q?J=C3=A1n_Vymyslen=C3=BD?= <jan.vymysleny@example.sk>",
+    "messageId": "<jan.m08.ship-L-55102@lekarenzdravie.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. L-55102 bola práve odoslaná.\nPrepravca: DPD (kuriér na adresu)\nČíslo zásielky DPD: 01505222222202\n\nObsah zásielky:\n - Očné kvapky 10 ml\n - Vitamín D3\n\n\nĎakujeme za nákup!\nTím Lekáreň Zdravie Online\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Lekáreň Zdravie Online</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka L-55102 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Lekáreň Zdravie Online\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>L-55102</strong> bola práve odoslaná.</p><p>Prepravca: DPD (kuriér na adresu)</p><p>Číslo zásielky DPD: 01505222222202</p><table><tr><td>Očné kvapky 10 ml</td></tr><tr><td>Vitamín D3</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Lekáreň Zdravie Online. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "jan.vymysleny@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m09",
+   "at": "D9 07:25",
+   "about": "p2: DPD Predict for day 9",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Vaša zásielka bude doručená dnes",
+    "to": "=?utf-8?Q?J=C3=A1n_Vymyslen=C3=BD?= <jan.vymysleny@example.sk>",
+    "messageId": "<jan.m09.01505222222202-pred-9@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka bude doručená dnes v čase 10:15 – 11:15. Kuriér Jozef vás bude kontaktovať na čísle, ktoré ste uviedli pri objednávke. Kontakt na kuriéra: +421 900 000 212.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša zásielka bude doručená dnes v čase <strong>10:15 – 11:15</strong>. Kuriér Jozef vás bude kontaktovať na čísle, ktoré ste uviedli pri objednávke. Kontakt na kuriéra: +421 900 000 212.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Lekáreň Zdravie Online # L-55102</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505222222202</td></tr></table></td></tr>\n\n\n\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "jan.vymysleny@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m10",
+   "at": "D9 10:52",
+   "about": "p2: delivered to the door",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Vaša zásielka bola doručená",
+    "to": "=?utf-8?Q?J=C3=A1n_Vymyslen=C3=BD?= <jan.vymysleny@example.sk>",
+    "messageId": "<jan.m10.01505222222202-del-9@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka bola úspešne doručená. Ďakujeme, že ste využili služby DPD.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša zásielka bola úspešne doručená. Ďakujeme, že ste využili služby DPD.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Lekáreň Zdravie Online # L-55102</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505222222202</td></tr></table></td></tr>\n\n\n\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "jan.vymysleny@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m11",
+   "at": "D10 07:00",
+   "about": "newsletter (not labelled)",
+   "spec": {
+    "from": "Záhradkár <noviny@zahradkar.example.sk>",
+    "subject": "Záhradkár: čo robiť v záhrade v novembri",
+    "to": "=?utf-8?Q?J=C3=A1n_Vymyslen=C3=BD?= <jan.vymysleny@example.sk>",
+    "messageId": "<jan.m11.mail@zahradkar.example.sk>",
+    "text": "Novembrové práce v záhrade.\nOdhlásiť odber\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Záhradkár: čo robiť v záhrade v novembri</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Záhradkár\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Novembrové práce v záhrade.</p><p>Odhlásiť odber</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "jan.vymysleny@example.sk"
+   },
+   "labelled": false
+  }
+ ]
+}

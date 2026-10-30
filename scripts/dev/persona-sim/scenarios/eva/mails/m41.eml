@@ -1,0 +1,58 @@
+Delivered-To: eva.cestovna@example.sk
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake1w;
+        Thu, 12 Nov 2026 09:10:12 +0100
+Return-Path: <dorucenie@packeta-zasielky.example.com>
+Date: Thu, 12 Nov 2026 09:10:12 +0100
+From: Packeta <dorucenie@packeta-zasielky.example.com>
+To: =?utf-8?Q?Eva_Cestovn=C3=A1?= <eva.cestovna@example.sk>
+Subject: =?utf-8?Q?Va=C5=A1a_z=C3=A1sielka_ne?=
+ =?utf-8?Q?mohla_by=C5=A5_doru=C4=8De?=
+ =?utf-8?Q?n=C3=A1_=E2=80=93_potvr=C4=8Fte_?=
+ =?utf-8?Q?adresu?=
+Message-ID: <eva.m41.mail@packeta-zasielky.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_1vxxxx.fake"
+
+------=_Part_alt_1vxxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Dobr=C3=BD de=C5=88,
+va=C5=A1a z=C3=A1sielka Z 999 9999 997 nemohla by=C5=A5 doru=C4=8Den=C3=A1 =
+pre ne=C3=BApln=C3=BA adresu.
+Potvr=C4=8Fte adresu a uhra=C4=8Fte 0,49 =E2=82=AC do 12 hod=C3=ADn: =
+https://packeta-zasielky.example.com/
+Packeta
+
+------=_Part_alt_1vxxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>Va=C5=A1a z=C3=A1sielka nemohla by=C5=A5 doru=C4=8Den=C3=A1 =
+=E2=80=93 potvr=C4=8Fte adresu</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#f=
+ff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">&#847;&zwnj;&nbsp=
+;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#444;padding:16px;color:#fff;font-size:20px"><i=
+mg src=3D"https://img.example.com/logo.png" alt=3D"Packeta" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Dobr=C3=BD de=C5=88,</p><p>va=C5=A1a =
+z=C3=A1sielka Z 999 9999 997 nemohla by=C5=A5 doru=C4=8Den=C3=A1 pre =
+ne=C3=BApln=C3=BA adresu.</p><p>Potvr=C4=8Fte adresu a uhra=C4=8Fte 0,49 =
+=E2=82=AC do 12 hod=C3=ADn: https://packeta-zasielky.example.=
+com/</p><p>Packeta</p></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">Tento e-mail bol =
+vygenerovan=C3=BD automaticky.</td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_1vxxxx.fake--

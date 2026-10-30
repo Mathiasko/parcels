@@ -1,3 +1,4 @@
 # Mail fixtures are RFC 5322 messages: line endings are CRLF and must survive byte-for-byte.
 test/fixtures/mail/*.eml -text
 test/fixtures/fake-mail/*.eml -text
+scripts/dev/persona-sim/scenarios/*/mails/*.eml -text

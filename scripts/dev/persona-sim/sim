@@ -1,0 +1,4 @@
+#!/bin/bash
+# The persona simulator's command. See README.md in this folder.
+N="${N:-$HOME/.nvm/versions/node/v24.21.0/bin}"
+exec "$N/node" "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sim.mjs" "$@"

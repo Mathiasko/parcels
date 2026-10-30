@@ -1,0 +1,49 @@
+Delivered-To: lucia.vymyslena@example.cz
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake3z;
+        Fri, 13 Nov 2026 08:00:13 +0100
+Return-Path: <no-reply@vinted.example.cz>
+Date: Fri, 13 Nov 2026 08:00:13 +0100
+From: Vinted <no-reply@vinted.example.cz>
+To: =?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>
+Subject: =?utf-8?Q?Nezapome=C5=88_potvrdi?=
+ =?utf-8?Q?t,_=C5=BEe_je_v=C5=A1e_v_p?=
+ =?utf-8?Q?o=C5=99=C3=A1dku?=
+Message-ID: <lucia.m34.mail@vinted.example.cz>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_3yxxxx.fake"
+
+------=_Part_alt_3yxxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Potvr=C4=8F p=C5=99evzet=C3=AD bal=C3=AD=C4=8Dku do 2 dn=C5=AF.
+
+------=_Part_alt_3yxxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>Nezapome=C5=88 potvrdit, =C5=BEe je v=C5=A1e v =
+po=C5=99=C3=A1dku</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#f=
+ff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">&#847;&zwnj;&nbsp=
+;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#444;padding:16px;color:#fff;font-size:20px"><i=
+mg src=3D"https://img.example.com/logo.png" alt=3D"Vinted" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Potvr=C4=8F p=C5=99evzet=C3=AD =
+bal=C3=AD=C4=8Dku do 2 dn=C5=AF.</p></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">Tento e-mail bol =
+vygenerovan=C3=BD automaticky.</td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_3yxxxx.fake--

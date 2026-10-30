@@ -1,0 +1,925 @@
+{
+ "meta": {
+  "away": [],
+  "firstRun": "move-in",
+  "id": "power",
+  "fullName": "Peter Mocný",
+  "email": "peter.mocny@example.com",
+  "digit": "4",
+  "day0": "2026-11-01",
+  "postcode": "99991",
+  "town": "Fiktívny Hrádok",
+  "clone": "/Users/peter/parcels"
+ },
+ "points": [
+  {
+   "name": "Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)",
+   "street": "Hradná 3",
+   "zip": "999 91",
+   "city": "Fiktívny Hrádok"
+  }
+ ],
+ "parcels": [
+  {
+   "key": "w1",
+   "carrier": "packeta",
+   "number": "Z4444444401",
+   "label": "memory card (Z-BOX)",
+   "events": [
+    {
+     "at": "D-2 16:00",
+     "status": "pre_transit",
+     "text": "Zásielka bola podaná odosielateľom."
+    },
+    {
+     "at": "D-1 04:00",
+     "status": "in_transit",
+     "text": "Zásielka je na ceste."
+    }
+   ],
+   "ready": {
+    "at": "D2 08:30",
+    "text": "Zásielka bola uložená v Z-BOXe a čaká na vyzdvihnutie.",
+    "pickup": {
+     "kind": "zbox",
+     "name": "Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)",
+     "street": "Hradná 3",
+     "city": "Fiktívny Hrádok"
+    },
+    "till": "D9 23:59",
+    "code": "818203",
+    "hours": "24/7",
+    "where": "Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)"
+   },
+   "collect": {
+    "lagMin": 3,
+    "text": "Zásielka bola vyzdvihnutá."
+   },
+   "expire": {
+    "returningText": "Zásielka nebola vyzdvihnutá v úložnej dobe, vraciame ju odosielateľovi.",
+    "returnedText": "Zásielka bola vrátená odosielateľovi."
+   }
+  },
+  {
+   "key": "w2",
+   "carrier": "packeta",
+   "number": "Z4444444402",
+   "label": "soldering tips (same Z-BOX as w1)",
+   "events": [
+    {
+     "at": "D0 09:00",
+     "status": "pre_transit",
+     "text": "Zásielka bola podaná odosielateľom."
+    },
+    {
+     "at": "D0 21:00",
+     "status": "in_transit",
+     "text": "Zásielka je na ceste."
+    }
+   ],
+   "ready": {
+    "at": "D2 10:15",
+    "text": "Zásielka bola uložená v Z-BOXe a čaká na vyzdvihnutie.",
+    "pickup": {
+     "kind": "zbox",
+     "name": "Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)",
+     "street": "Hradná 3",
+     "city": "Fiktívny Hrádok"
+    },
+    "till": "D9 23:59",
+    "code": "017466",
+    "hours": "24/7",
+    "where": "Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)"
+   },
+   "collect": {
+    "lagMin": 3,
+    "text": "Zásielka bola vyzdvihnutá."
+   },
+   "expire": {
+    "returningText": "Zásielka nebola vyzdvihnutá v úložnej dobe, vraciame ju odosielateľovi.",
+    "returnedText": "Zásielka bola vrátená odosielateľovi."
+   }
+  },
+  {
+   "owner": "me",
+   "key": "w3",
+   "carrier": "dpd",
+   "number": "01505444444403",
+   "label": "Dielňa Pro # DP-2001 via DPD (door)",
+   "events": [
+    {
+     "at": "D2 14:00",
+     "status": "pre_transit",
+     "text": "Údaje o zásielke boli prijaté",
+     "location": "Bratislava"
+    },
+    {
+     "at": "D2 23:00",
+     "status": "in_transit",
+     "text": "Zásielka na ceste",
+     "location": "Senec Hub"
+    },
+    {
+     "at": "D4 06:50",
+     "status": "out_for_delivery",
+     "text": "Kuriér doručuje",
+     "location": "Fiktívny Hrádok"
+    },
+    {
+     "at": "D4 11:00",
+     "status": "delivered",
+     "text": "Doručené",
+     "location": "Fiktívny Hrádok"
+    }
+   ]
+  },
+  {
+   "owner": "me",
+   "key": "w4",
+   "carrier": "dpd",
+   "number": "01505444444404",
+   "label": "Dielňa Pro # DP-2001 via DPD (door)",
+   "events": [
+    {
+     "at": "D2 14:00",
+     "status": "pre_transit",
+     "text": "Údaje o zásielke boli prijaté",
+     "location": "Bratislava"
+    },
+    {
+     "at": "D2 23:00",
+     "status": "in_transit",
+     "text": "Zásielka na ceste",
+     "location": "Senec Hub"
+    },
+    {
+     "at": "D4 06:50",
+     "status": "out_for_delivery",
+     "text": "Kuriér doručuje",
+     "location": "Fiktívny Hrádok"
+    },
+    {
+     "at": "D4 11:01",
+     "status": "delivered",
+     "text": "Doručené",
+     "location": "Fiktívny Hrádok"
+    }
+   ]
+  },
+  {
+   "owner": "me",
+   "key": "w5",
+   "carrier": "gls",
+   "number": "90444444405",
+   "label": "Elektro Svet via GLS (door)",
+   "events": [
+    {
+     "at": "D3 12:00",
+     "status": "pre_transit",
+     "text": "Údaje o balíku boli zaregistrované"
+    },
+    {
+     "at": "D3 23:00",
+     "status": "in_transit",
+     "text": "Balík je na ceste",
+     "location": "Sered"
+    },
+    {
+     "at": "D5 06:40",
+     "status": "out_for_delivery",
+     "text": "Balík je na doručení"
+    },
+    {
+     "at": "D5 09:45",
+     "status": "delivered",
+     "text": "Balík bol doručený"
+    }
+   ]
+  },
+  {
+   "owner": "me",
+   "key": "w6",
+   "carrier": "sps",
+   "number": "7034444444444406",
+   "label": "Nábytok Domov via SPS (door)",
+   "events": [
+    {
+     "at": "D5 10:00",
+     "status": "pre_transit",
+     "text": "Zásielka prevzatá od odosielateľa"
+    },
+    {
+     "at": "D5 23:00",
+     "status": "in_transit",
+     "text": "Zásielka na triediacom centre"
+    },
+    {
+     "at": "D6 07:05",
+     "status": "out_for_delivery",
+     "text": "Zásielka na doručení"
+    },
+    {
+     "at": "D6 13:30",
+     "status": "delivered",
+     "text": "Zásielka doručená"
+    }
+   ]
+  },
+  {
+   "owner": "me",
+   "key": "w7",
+   "carrier": "posta",
+   "number": "EB444444074SK",
+   "label": "registered letter-parcel at the post office",
+   "events": [
+    {
+     "at": "D5 08:00",
+     "status": "pre_transit",
+     "text": "Podanie zásielky",
+     "location": "Bratislava 1"
+    },
+    {
+     "at": "D5 22:00",
+     "status": "in_transit",
+     "text": "Zásielka na ceste",
+     "location": "SPU Bratislava"
+    }
+   ],
+   "ready": {
+    "at": "D7 10:30",
+    "text": "Uloženie zásielky na pošte",
+    "location": "Fiktívny Hrádok",
+    "pickup": {
+     "kind": "post_office",
+     "name": "Pošta Fiktívny Hrádok",
+     "street": "Námestie 1",
+     "city": "Fiktívny Hrádok",
+     "postalCode": "99991"
+    },
+    "till": "D17 18:00",
+    "hours": "post",
+    "where": "Pošta Fiktívny Hrádok",
+    "needsId": true
+   },
+   "collect": {
+    "lagMin": 1140,
+    "text": "Dodanie zásielky",
+    "location": "Fiktívny Hrádok"
+   },
+   "expire": {
+    "returningText": "Vrátenie zásielky odosielateľovi",
+    "returnedText": "Zásielka vrátená odosielateľovi",
+    "returnAfterH": 30
+   }
+  },
+  {
+   "owner": "me",
+   "key": "w8",
+   "carrier": "dhl",
+   "number": "JJD000444444444408",
+   "label": "tools from Germany (DHL Express, email only)",
+   "events": [],
+   "emailOnly": true
+  },
+  {
+   "key": "w9",
+   "carrier": "packeta",
+   "number": "Z4444444409",
+   "label": "tripod (Z-BOX)",
+   "events": [
+    {
+     "at": "D9 17:00",
+     "status": "pre_transit",
+     "text": "Zásielka bola podaná odosielateľom."
+    },
+    {
+     "at": "D10 05:00",
+     "status": "in_transit",
+     "text": "Zásielka je na ceste."
+    }
+   ],
+   "ready": {
+    "at": "D11 08:20",
+    "text": "Zásielka bola uložená v Z-BOXe a čaká na vyzdvihnutie.",
+    "pickup": {
+     "kind": "zbox",
+     "name": "Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)",
+     "street": "Hradná 3",
+     "city": "Fiktívny Hrádok"
+    },
+    "till": "D18 23:59",
+    "code": "302958",
+    "hours": "24/7",
+    "where": "Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)"
+   },
+   "collect": {
+    "lagMin": 3,
+    "text": "Zásielka bola vyzdvihnutá."
+   },
+   "expire": {
+    "returningText": "Zásielka nebola vyzdvihnutá v úložnej dobe, vraciame ju odosielateľovi.",
+    "returnedText": "Zásielka bola vrátená odosielateľovi."
+   }
+  },
+  {
+   "key": "w10",
+   "carrier": "gls",
+   "number": "90444444410",
+   "label": "drill bits (GLS ParcelShop)",
+   "events": [
+    {
+     "at": "D10 15:00",
+     "status": "pre_transit",
+     "text": "Údaje o balíku boli zaregistrované"
+    },
+    {
+     "at": "D11 02:00",
+     "status": "in_transit",
+     "text": "Balík je na ceste",
+     "location": "Sered"
+    }
+   ],
+   "ready": {
+    "at": "D12 10:30",
+    "text": "Balík bol doručený do GLS ParcelShopu",
+    "till": "D19 23:59",
+    "code": "914270",
+    "hours": "shop",
+    "where": "GLS ParcelShop Železiarstvo Klinec",
+    "noPickupInApi": true
+   },
+   "collect": {
+    "lagMin": 4,
+    "text": "Balík bol vyzdvihnutý"
+   },
+   "expire": {
+    "returningText": "Balík sa vracia odosielateľovi",
+    "returnedText": "Balík bol vrátený odosielateľovi"
+   }
+  }
+ ],
+ "mails": [
+  {
+   "id": "m01",
+   "at": "D-40 10:00",
+   "about": "old: collected 40 days ago",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola vyzdvihnutá",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m01.mail@packeta.sk>",
+    "text": "Zásielka Z 444 4444 490\n\nDobrý deň,\nvaša zásielka od odosielateľa Knihomoľ s.r.o. bola úspešne vyzdvihnutá.\ntím Packety\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásielka bola vyzdvihnutá</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta Slovakia\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásielka Z 444 4444 490</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Knihomoľ s.r.o. bola úspešne vyzdvihnutá.</p><p>tím Packety</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m02",
+   "at": "D-3 09:00",
+   "about": "w1 in flight at move-in",
+   "spec": {
+    "from": "Foto Hrádok <eshop@fotohradok.example.sk>",
+    "subject": "Objednávka FH-551 bola odoslaná",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m02.ship-FH-551@fotohradok.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. FH-551 bola práve odoslaná.\nDoprava: Packeta – Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)\nČíslo zásielky: Z 444 4444 401\n\nObsah zásielky:\n - Pamäťová karta 128 GB\n\n\nĎakujeme za nákup!\nTím Foto Hrádok\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Foto Hrádok</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka FH-551 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Foto Hrádok\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>FH-551</strong> bola práve odoslaná.</p><p>Doprava: Packeta – Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)</p><p>Číslo zásielky: Z 444 4444 401</p><table><tr><td>Pamäťová karta 128 GB</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Foto Hrádok. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m03",
+   "at": "D-2 16:08",
+   "about": "w1: Packeta accepted",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola prijatá do prepravy",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m03.Z4444444401-acc@packeta.sk>",
+    "text": "Zásielka Z 444 4444 401\n           \n                    Dobrý deň,\n                    odosielateľ\n                        Foto Hrádok\n                    nám práve\n                    odovzdal vašu zásielku,\n                    ktorá vám bude doručená do Z-BOXu.\n                             \n\n                Miesto, kde bude vaša zásielka uložená\n\n\n                            Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)\n\n                                      Hradná 3 999 91 Fiktívny Hrádok\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n\n        Zaplatené\n                                        Číslo zásielky Z 444 4444 401\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 401&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 401</p><p>Dobrý deň,</p><p>odosielateľ Foto Hrádok nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu.</p>\n\n<p><strong>Miesto, kde bude vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)</td></tr><tr><td>Hradná 3 999 91 Fiktívny Hrádok</td></tr></table>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 401</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444401\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m04",
+   "at": "D2 08:34",
+   "about": "w1: Packeta ready, code 818203, until 10.11.2026",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka je pripravená na vyzdvihnutie",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m04.Z4444444401-ready@packeta.sk>",
+    "text": "Zásielka Z 444 4444 401\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa\n                        Foto Hrádok\n                    je pre vás\n                    pripravená na vyzdvihnutie v Z-BOXe.\n                             \n          Kód pre otvorenie schránky\n                8 \n\n                1 \n\n                8 \n\n                2 \n\n                0 \n\n                3 \n\n                Miesto, kde je vaša zásielka uložená\n\n\n                            Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)\n\n                                      Hradná 3 999 91 Fiktívny Hrádok\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n                            Na vyzdvihnutie najneskôr do 10.11.2026 23:59.\n\n        Zaplatené\n                                        Číslo zásielky Z 444 4444 401\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 401&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 401</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Foto Hrádok je pre vás pripravená na vyzdvihnutie v Z-BOXe.</p>\n<p>Kód pre otvorenie schránky</p><table><tr><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">8</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">1</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">8</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">2</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">0</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">3</td></tr></table>\n<p><strong>Miesto, kde je vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)</td></tr><tr><td>Hradná 3 999 91 Fiktívny Hrádok</td></tr></table><p>Na vyzdvihnutie najneskôr do 10.11.2026 23:59.</p>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 401</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444401\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m05",
+   "at": "D8 10:00",
+   "cond": {
+    "notCollected": "w1"
+   },
+   "about": "w1: reminder, day before the deadline (only if not collected)",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Pripomíname: zásielka na vás čaká v Z-BOXe",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m05.Z4444444401-rem@packeta.sk>",
+    "text": "Zásielka Z 444 4444 401\n           \n                    Dobrý deň,\n                    pripomíname, že vaša zásielka od odosielateľa\n                        Foto Hrádok\n                    je pre vás\n                    stále pripravená na vyzdvihnutie v Z-BOXe. Nezabudnite si ju vyzdvihnúť do 10.11.2026.\n                             \n          Kód pre otvorenie schránky\n                8 \n\n                1 \n\n                8 \n\n                2 \n\n                0 \n\n                3 \n\n                Miesto, kde je vaša zásielka uložená\n\n\n                            Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)\n\n                                      Hradná 3 999 91 Fiktívny Hrádok\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n                            Na vyzdvihnutie najneskôr do 10.11.2026 23:59.\n\n        Zaplatené\n                                        Číslo zásielky Z 444 4444 401\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 401&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 401</p><p>Dobrý deň,</p><p>pripomíname, že vaša zásielka od odosielateľa Foto Hrádok je pre vás stále pripravená na vyzdvihnutie v Z-BOXe. Nezabudnite si ju vyzdvihnúť do 10.11.2026.</p>\n<p>Kód pre otvorenie schránky</p><table><tr><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">8</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">1</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">8</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">2</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">0</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">3</td></tr></table>\n<p><strong>Miesto, kde je vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)</td></tr><tr><td>Hradná 3 999 91 Fiktívny Hrádok</td></tr></table><p>Na vyzdvihnutie najneskôr do 10.11.2026 23:59.</p>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 401</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444401\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m06",
+   "trigger": {
+    "afterCollect": "w1",
+    "min": 6
+   },
+   "about": "w1: picked-up confirmation (after sim collect)",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola vyzdvihnutá",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m06.Z4444444401-picked@packeta.sk>",
+    "text": "Zásielka Z 444 4444 401\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa Foto Hrádok bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybrali Packetu.\n                             \n\n\n\n                                        Číslo zásielky Z 444 4444 401\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 401&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 401</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Foto Hrádok bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybrali Packetu.</p>\n\n\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 401</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444401\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m07",
+   "at": "D10 09:30",
+   "cond": {
+    "notCollected": "w1"
+   },
+   "about": "w1: not collected in time, returning",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bude vrátená odosielateľovi",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m07.Z4444444401-ret@packeta.sk>",
+    "text": "Zásielka Z 444 4444 401\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa Foto Hrádok nebola vyzdvihnutá v úložnej dobe, a preto ju vraciame odosielateľovi. Ak ste zásielku platili na dobierku, nič neplatíte.\n                             \n\n\n\n                                        Číslo zásielky Z 444 4444 401\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 401&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 401</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Foto Hrádok nebola vyzdvihnutá v úložnej dobe, a preto ju vraciame odosielateľovi. Ak ste zásielku platili na dobierku, nič neplatíte.</p>\n\n\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 401</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444401\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m08",
+   "at": "D-6 04:00",
+   "about": "w2 AliExpress with a Packeta number",
+   "spec": {
+    "from": "AliExpress <transaction@notice.aliexpress.example.com>",
+    "subject": "Your order 8194444400000002 has been shipped",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m08.en-8194444400000002@notice.aliexpress.example.com>",
+    "text": "Hi Peter,\n\nGood news! Your order 8194444400000002 has been shipped.\nCarrier: Cainiao → Packeta\nTracking number: Z4444444402\nEstimated delivery: Nov 3 - Nov 10\n\nItems:\n - Soldering tips x10\n\nTrack your order in the app.\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Your order 8194444400000002 has been shipped</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"AliExpress\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Hi Peter,</p><p>Good news! Your order 8194444400000002 has been shipped.</p><p>Carrier: Cainiao → Packeta</p><p>Tracking number: Z4444444402</p><p>Estimated delivery: Nov 3 - Nov 10</p><p>Items:</p><p> - Soldering tips x10</p><p>Track your order in the app.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">You received this e-mail because you have an account with us.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m09",
+   "at": "D0 09:08",
+   "about": "w2: Packeta accepted",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola prijatá do prepravy",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m09.Z4444444402-acc@packeta.sk>",
+    "text": "Zásielka Z 444 4444 402\n           \n                    Dobrý deň,\n                    odosielateľ\n                        AliExpress (Cainiao)\n                    nám práve\n                    odovzdal vašu zásielku,\n                    ktorá vám bude doručená do Z-BOXu.\n                             \n\n                Miesto, kde bude vaša zásielka uložená\n\n\n                            Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)\n\n                                      Hradná 3 999 91 Fiktívny Hrádok\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n\n        Zaplatené\n                                        Číslo zásielky Z 444 4444 402\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 402&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 402</p><p>Dobrý deň,</p><p>odosielateľ AliExpress (Cainiao) nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu.</p>\n\n<p><strong>Miesto, kde bude vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)</td></tr><tr><td>Hradná 3 999 91 Fiktívny Hrádok</td></tr></table>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 402</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444402\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m10",
+   "at": "D2 10:19",
+   "about": "w2: Packeta ready, code 017466, until 10.11.2026",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka je pripravená na vyzdvihnutie",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m10.Z4444444402-ready@packeta.sk>",
+    "text": "Zásielka Z 444 4444 402\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa\n                        AliExpress (Cainiao)\n                    je pre vás\n                    pripravená na vyzdvihnutie v Z-BOXe.\n                             \n          Kód pre otvorenie schránky\n                0 \n\n                1 \n\n                7 \n\n                4 \n\n                6 \n\n                6 \n\n                Miesto, kde je vaša zásielka uložená\n\n\n                            Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)\n\n                                      Hradná 3 999 91 Fiktívny Hrádok\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n                            Na vyzdvihnutie najneskôr do 10.11.2026 23:59.\n\n        Zaplatené\n                                        Číslo zásielky Z 444 4444 402\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 402&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 402</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa AliExpress (Cainiao) je pre vás pripravená na vyzdvihnutie v Z-BOXe.</p>\n<p>Kód pre otvorenie schránky</p><table><tr><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">0</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">1</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">7</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">4</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">6</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">6</td></tr></table>\n<p><strong>Miesto, kde je vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)</td></tr><tr><td>Hradná 3 999 91 Fiktívny Hrádok</td></tr></table><p>Na vyzdvihnutie najneskôr do 10.11.2026 23:59.</p>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 402</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444402\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m11",
+   "at": "D8 10:00",
+   "cond": {
+    "notCollected": "w2"
+   },
+   "about": "w2: reminder, day before the deadline (only if not collected)",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Pripomíname: zásielka na vás čaká v Z-BOXe",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m11.Z4444444402-rem@packeta.sk>",
+    "text": "Zásielka Z 444 4444 402\n           \n                    Dobrý deň,\n                    pripomíname, že vaša zásielka od odosielateľa\n                        AliExpress (Cainiao)\n                    je pre vás\n                    stále pripravená na vyzdvihnutie v Z-BOXe. Nezabudnite si ju vyzdvihnúť do 10.11.2026.\n                             \n          Kód pre otvorenie schránky\n                0 \n\n                1 \n\n                7 \n\n                4 \n\n                6 \n\n                6 \n\n                Miesto, kde je vaša zásielka uložená\n\n\n                            Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)\n\n                                      Hradná 3 999 91 Fiktívny Hrádok\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n                            Na vyzdvihnutie najneskôr do 10.11.2026 23:59.\n\n        Zaplatené\n                                        Číslo zásielky Z 444 4444 402\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 402&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 402</p><p>Dobrý deň,</p><p>pripomíname, že vaša zásielka od odosielateľa AliExpress (Cainiao) je pre vás stále pripravená na vyzdvihnutie v Z-BOXe. Nezabudnite si ju vyzdvihnúť do 10.11.2026.</p>\n<p>Kód pre otvorenie schránky</p><table><tr><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">0</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">1</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">7</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">4</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">6</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">6</td></tr></table>\n<p><strong>Miesto, kde je vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)</td></tr><tr><td>Hradná 3 999 91 Fiktívny Hrádok</td></tr></table><p>Na vyzdvihnutie najneskôr do 10.11.2026 23:59.</p>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 402</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444402\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m12",
+   "trigger": {
+    "afterCollect": "w2",
+    "min": 6
+   },
+   "about": "w2: picked-up confirmation (after sim collect)",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola vyzdvihnutá",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m12.Z4444444402-picked@packeta.sk>",
+    "text": "Zásielka Z 444 4444 402\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa AliExpress (Cainiao) bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybrali Packetu.\n                             \n\n\n\n                                        Číslo zásielky Z 444 4444 402\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 402&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 402</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa AliExpress (Cainiao) bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybrali Packetu.</p>\n\n\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 402</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444402\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m13",
+   "at": "D10 09:30",
+   "cond": {
+    "notCollected": "w2"
+   },
+   "about": "w2: not collected in time, returning",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bude vrátená odosielateľovi",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m13.Z4444444402-ret@packeta.sk>",
+    "text": "Zásielka Z 444 4444 402\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa AliExpress (Cainiao) nebola vyzdvihnutá v úložnej dobe, a preto ju vraciame odosielateľovi. Ak ste zásielku platili na dobierku, nič neplatíte.\n                             \n\n\n\n                                        Číslo zásielky Z 444 4444 402\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 402&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 402</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa AliExpress (Cainiao) nebola vyzdvihnutá v úložnej dobe, a preto ju vraciame odosielateľovi. Ak ste zásielku platili na dobierku, nič neplatíte.</p>\n\n\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 402</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444402\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m14",
+   "at": "D2 15:00",
+   "about": "w3+w4: carrier mail naming TWO parcels",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Vaša zásielka (2 balíky) je na ceste",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m14.multi@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša objednávka bola rozdelená do 2 balíkov, ktoré vám doručíme spoločne.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša objednávka bola rozdelená do 2 balíkov, ktoré vám doručíme spoločne.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Dielňa Pro # DP-2001</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505444444403, 01505444444404</td></tr></table></td></tr>\n\n\n\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m15",
+   "at": "D4 07:25",
+   "about": "w3: DPD Predict for day 4",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Vaša zásielka bude doručená dnes",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m15.01505444444403-pred-4@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka bude doručená dnes v čase 10:30 – 11:30. Kuriér Marek vás bude kontaktovať na čísle, ktoré ste uviedli pri objednávke. Kontakt na kuriéra: +421 900 000 101.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša zásielka bude doručená dnes v čase <strong>10:30 – 11:30</strong>. Kuriér Marek vás bude kontaktovať na čísle, ktoré ste uviedli pri objednávke. Kontakt na kuriéra: +421 900 000 101.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Dielňa Pro # DP-2001</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505444444403</td></tr></table></td></tr>\n\n\n\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m16",
+   "at": "D4 11:12",
+   "about": "w3: delivered to the door",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Vaša zásielka bola doručená",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m16.01505444444403-del-4@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka bola úspešne doručená. Ďakujeme, že ste využili služby DPD.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša zásielka bola úspešne doručená. Ďakujeme, že ste využili služby DPD.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Dielňa Pro # DP-2001</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505444444403</td></tr></table></td></tr>\n\n\n\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m17",
+   "at": "D4 07:25",
+   "about": "w4: DPD Predict for day 4",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Vaša zásielka bude doručená dnes",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m17.01505444444404-pred-4@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka bude doručená dnes v čase 10:30 – 11:30. Kuriér Marek vás bude kontaktovať na čísle, ktoré ste uviedli pri objednávke. Kontakt na kuriéra: +421 900 000 101.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša zásielka bude doručená dnes v čase <strong>10:30 – 11:30</strong>. Kuriér Marek vás bude kontaktovať na čísle, ktoré ste uviedli pri objednávke. Kontakt na kuriéra: +421 900 000 101.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Dielňa Pro # DP-2001</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505444444404</td></tr></table></td></tr>\n\n\n\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m18",
+   "at": "D4 11:13",
+   "about": "w4: delivered to the door",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Vaša zásielka bola doručená",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m18.01505444444404-del-4@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka bola úspešne doručená. Ďakujeme, že ste využili služby DPD.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša zásielka bola úspešne doručená. Ďakujeme, že ste využili služby DPD.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Dielňa Pro # DP-2001</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505444444404</td></tr></table></td></tr>\n\n\n\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m19",
+   "at": "D3 10:00",
+   "about": "w5 GLS, zero-padded number in the shop mail",
+   "spec": {
+    "from": "Elektro Svet <objednavky@elektrosvet.example.sk>",
+    "subject": "Objednávka č. 2026110777 bola odoslaná",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m19.ship-2026110777@elektrosvet.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. 2026110777 bola práve odoslaná.\nPrepravca: GLS (kuriér na adresu)\nČíslo balíka: 090444444405\n\nObsah zásielky:\n - Multimeter\n\n\nĎakujeme za nákup!\nTím Elektro Svet\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Elektro Svet</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka 2026110777 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Elektro Svet\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>2026110777</strong> bola práve odoslaná.</p><p>Prepravca: GLS (kuriér na adresu)</p><p>Číslo balíka: 090444444405</p><table><tr><td>Multimeter</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Elektro Svet. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m20",
+   "at": "D3 12:20",
+   "about": "w5: GLS accepted",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Balík 90444444405 sme prevzali od odosielateľa",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m20.90444444405-acc@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík sme prevzali od odosielateľa a je na ceste k vám. Predpokladaný dátum doručenia vám oznámime v ďalšom e-maile.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík sme prevzali od odosielateľa a je na ceste k vám. Predpokladaný dátum doručenia vám oznámime v ďalšom e-maile.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90444444405</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Elektro Svet</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90444444405\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m21",
+   "at": "D5 07:10",
+   "about": "w5: GLS out for delivery today",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Váš balík 90444444405 je na ceste",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m21.90444444405-tr@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík je na ceste. Doručíme ho dnes medzi 9:00 a 12:00. Ak vám termín nevyhovuje, môžete ho zmeniť cez FlexDelivery.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík je na ceste. Doručíme ho dnes medzi 9:00 a 12:00. Ak vám termín nevyhovuje, môžete ho zmeniť cez FlexDelivery.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90444444405</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Elektro Svet</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90444444405\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m22",
+   "at": "D5 09:54",
+   "about": "w5: GLS delivered to the door",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Balík 90444444405 bol doručený",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m22.90444444405-del@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík bol úspešne doručený. Ďakujeme, že ste využili služby GLS.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík bol úspešne doručený. Ďakujeme, že ste využili služby GLS.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90444444405</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Elektro Svet</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90444444405\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m23",
+   "at": "D6 07:40",
+   "about": "w6: SPS courier today",
+   "spec": {
+    "from": "serv@sps-sro.sk",
+    "subject": "Doručenie zásielky 7034444444444406 dnes",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m23.7034444444444406-today@sps-sro.sk>",
+    "text": "body { font-family: Tahoma, Verdana, Arial, Helvetica, Chicago, Sans-serif; font-size: 12px; margin: 0px; padding: 4px; }p { text-align: justify }tr, td { font-size: 12px; }h1 {color: #ffffff; font-size: 14px; background: #455560; padding: 4px 5px; border-left: 20px solid #f89829; }\nVážený zákazník,\nvaša zásielka cislo 7034444444444406 od Nábytok Domov bude dnes doručená kuriérom na adresu. Suma na úhradu (dobierka): 89,90 €. Kuriér: 0900 000 404.\n\nPrevádzkovateľom je spoločnosť Slovak Parcel Service s.r.o., IČO: 31 329 217 (ďalej len ako \"Prevádzkovateľ\"). Prevádzkovateľa môžete kontaktovať na adrese Senecká cesta 1, 900 28 Ivanka pri Dunaji.\n\nS pozdravom,\nkuriérska spoločnosť\nProsím, neodpovedajte na doručenú správu e-mailom, pre kontakt použite informácie na webovej stránke.\n",
+    "html": "<html><head><style>body { font-family: Tahoma, Verdana, Arial, Helvetica, Chicago, Sans-serif; font-size: 12px; margin: 0px; padding: 4px; }p { text-align: justify }tr, td { font-size: 12px; }h1 {color: #ffffff; font-size: 14px; background: #455560; padding: 4px 5px; border-left: 20px solid #f89829; }</style></head><body><div class=\"obsah\"><h1>Slovak Parcel Service</h1><p>Vážený zákazník,</p><p>vaša zásielka cislo 7034444444444406 od Nábytok Domov bude dnes doručená kuriérom na adresu. Suma na úhradu (dobierka): 89,90 €. Kuriér: 0900 000 404.</p><p>Prevádzkovateľom je spoločnosť Slovak Parcel Service s.r.o., IČO: 31 329 217 (ďalej len ako \"Prevádzkovateľ\"). Prevádzkovateľa môžete kontaktovať na adrese Senecká cesta 1, 900 28 Ivanka pri Dunaji.<br><br>S pozdravom,<br>kuriérska spoločnosť<br>Prosím, neodpovedajte na doručenú správu e-mailom, pre kontakt použite informácie na webovej stránke.</p></div></body></html>",
+    "encoding": "quoted-printable",
+    "charset": "windows-1250",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m24",
+   "at": "D7 10:55",
+   "about": "w7: posta stored, until 18.11.2026",
+   "spec": {
+    "from": "Slovenská pošta <notifikacie@posta.sk>",
+    "subject": "Oznámenie o uložení zásielky EB444444074SK",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m24.EB444444074SK-ready@posta.sk>",
+    "text": "Slovenská pošta, a. s.\n\nVážená pani / Vážený pán,\n\noznamujeme Vám, že zásielka adresovaná na Vaše meno je uložená na pošte.\n\nPodacie číslo: EB444444074SK\nMiesto uloženia: Pošta Fiktívny Hrádok\nNámestie 1, 999 91 Fiktívny Hrádok\nZásielka je uložená do: 18.11.2026\n\nPri preberaní zásielky na pošte predložte doklad totožnosti a uveďte podacie číslo zásielky.\nSlovenská pošta nikdy nežiada platbu poplatkov e-mailom ani SMS správou.\n\nTáto správa bola vygenerovaná automaticky, neodpovedajte na ňu.\nSlovenská pošta, a. s., Poštová 9, 999 99 Testovo\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Slovenská pošta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#f0b400;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">oznamujeme Vám, že zásielka adresovaná na Vaše meno je uložená na pošte.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#f0b400;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Slovenská pošta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Vážená pani / Vážený pán,</p><p>oznamujeme Vám, že zásielka adresovaná na Vaše meno je uložená na pošte.</p><table>\n<tr><td>Podacie číslo:</td><td><strong>EB444444074SK</strong></td></tr>\n<tr><td>Miesto uloženia:</td><td>Pošta Fiktívny Hrádok<br>Námestie 1, 999 91 Fiktívny Hrádok</td></tr>\n<tr><td>Zásielka je uložená do:</td><td>18.11.2026</td></tr>\n\n</table>\n<p>Pri preberaní zásielky na pošte predložte doklad totožnosti a uveďte podacie číslo zásielky.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Slovenská pošta, a. s., Poštová 9, 999 99 Testovo. Táto správa bola vygenerovaná automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m25",
+   "at": "D14 10:00",
+   "cond": {
+    "notCollected": "w7"
+   },
+   "about": "w7: posta reminder 3 days before (only if not collected)",
+   "spec": {
+    "from": "Slovenská pošta <notifikacie@posta.sk>",
+    "subject": "Pripomienka: zásielka EB444444074SK čaká na pošte",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m25.EB444444074SK-rem@posta.sk>",
+    "text": "Slovenská pošta, a. s.\n\nVážená pani / Vážený pán,\n\npripomíname Vám, že zásielka adresovaná na Vaše meno je stále uložená. Ak si ju nevyzdvihnete v úložnej lehote, vrátime ju odosielateľovi.\n\nPodacie číslo: EB444444074SK\nMiesto uloženia: Pošta Fiktívny Hrádok\nNámestie 1, 999 91 Fiktívny Hrádok\nZásielka je uložená do: 18.11.2026\n\nPri preberaní zásielky na pošte predložte doklad totožnosti a uveďte podacie číslo zásielky.\nSlovenská pošta nikdy nežiada platbu poplatkov e-mailom ani SMS správou.\n\nTáto správa bola vygenerovaná automaticky, neodpovedajte na ňu.\nSlovenská pošta, a. s., Poštová 9, 999 99 Testovo\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Slovenská pošta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#f0b400;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">pripomíname Vám, že zásielka adresovaná na Vaše meno je stále uložená. Ak si ju nevyzdvihnete v úložnej lehote, vrátime ju odosielateľovi.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#f0b400;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Slovenská pošta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Vážená pani / Vážený pán,</p><p>pripomíname Vám, že zásielka adresovaná na Vaše meno je stále uložená. Ak si ju nevyzdvihnete v úložnej lehote, vrátime ju odosielateľovi.</p><table>\n<tr><td>Podacie číslo:</td><td><strong>EB444444074SK</strong></td></tr>\n<tr><td>Miesto uloženia:</td><td>Pošta Fiktívny Hrádok<br>Námestie 1, 999 91 Fiktívny Hrádok</td></tr>\n<tr><td>Zásielka je uložená do:</td><td>18.11.2026</td></tr>\n\n</table>\n<p>Pri preberaní zásielky na pošte predložte doklad totožnosti a uveďte podacie číslo zásielky.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Slovenská pošta, a. s., Poštová 9, 999 99 Testovo. Táto správa bola vygenerovaná automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m26",
+   "at": "D8 09:00",
+   "about": "w8: DHL dispatched",
+   "spec": {
+    "from": "DHL Express <noreply@dhl.com>",
+    "subject": "DHL On Demand Delivery: Your shipment JJD000444444444408 is on its way",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m26.JJD000444444444408-ship@dhl.com>",
+    "text": "DHL Express\n\nYour shipment from FAKE TOOLS GMBH (Germany) is on its way and will be delivered on Wednesday, 11 November 2026.\n\nWaybill number: JJD000444444444408\nPieces: 1\nWeight: 1.2 kg\nCustomer service: +421 900 000 303\n\nTrack your shipment: https://www.dhl.com/sk-en/home/tracking.html?tracking-id=JJD000444444444408\n\nThis is an automatically generated email. Please do not reply.\nDHL Express (Slovakia), spol. s r. o.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DHL Express</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ffcc00;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Your shipment from FAKE TOOLS GMBH (Germany) is on its way and will be delivered on Wednesday, 11 November 2026.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ffcc00;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DHL\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Your shipment from FAKE TOOLS GMBH (Germany) is on its way and will be delivered on Wednesday, 11 November 2026.</p><table><tr><td>Waybill number</td><td><strong>JJD000444444444408</strong></td></tr><tr><td>Pieces</td><td>1</td></tr><tr><td>Weight</td><td>1.2 kg</td></tr><tr><td>Customer service</td><td>+421 900 000 303</td></tr></table><p><a class=\"btn\" href=\"https://www.dhl.com/sk-en/home/tracking.html?tracking-id=JJD000444444444408\">Track shipment</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">This is an automatically generated email. Please do not reply. DHL Express (Slovakia), spol. s r. o.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m27",
+   "at": "D10 12:40",
+   "about": "w8: DHL delivered",
+   "spec": {
+    "from": "DHL Express <noreply@dhl.com>",
+    "subject": "Your DHL shipment JJD000444444444408 has been delivered",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m27.JJD000444444444408-del@dhl.com>",
+    "text": "DHL Express\n\nYour shipment has been delivered. Signed for by: MOCNY.\n\nWaybill number: JJD000444444444408\n\n\nTrack your shipment: https://www.dhl.com/sk-en/home/tracking.html?tracking-id=JJD000444444444408\n\nThis is an automatically generated email. Please do not reply.\nDHL Express (Slovakia), spol. s r. o.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DHL Express</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ffcc00;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Your shipment has been delivered. Signed for by: MOCNY.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ffcc00;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DHL\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Your shipment has been delivered. Signed for by: MOCNY.</p><table><tr><td>Waybill number</td><td><strong>JJD000444444444408</strong></td></tr></table><p><a class=\"btn\" href=\"https://www.dhl.com/sk-en/home/tracking.html?tracking-id=JJD000444444444408\">Track shipment</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">This is an automatically generated email. Please do not reply. DHL Express (Slovakia), spol. s r. o.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m28",
+   "at": "D9 11:00",
+   "about": "w9 Z-BOX",
+   "spec": {
+    "from": "Foto Hrádok <eshop@fotohradok.example.sk>",
+    "subject": "Objednávka FH-580 bola odoslaná",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m28.ship-FH-580@fotohradok.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. FH-580 bola práve odoslaná.\nDoprava: Packeta – Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)\nČíslo zásielky: Z 444 4444 409\n\nObsah zásielky:\n - Statív\n\n\nĎakujeme za nákup!\nTím Foto Hrádok\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Foto Hrádok</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka FH-580 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Foto Hrádok\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>FH-580</strong> bola práve odoslaná.</p><p>Doprava: Packeta – Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)</p><p>Číslo zásielky: Z 444 4444 409</p><table><tr><td>Statív</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Foto Hrádok. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m29",
+   "at": "D9 17:08",
+   "about": "w9: Packeta accepted",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola prijatá do prepravy",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m29.Z4444444409-acc@packeta.sk>",
+    "text": "Zásielka Z 444 4444 409\n           \n                    Dobrý deň,\n                    odosielateľ\n                        Foto Hrádok\n                    nám práve\n                    odovzdal vašu zásielku,\n                    ktorá vám bude doručená do Z-BOXu.\n                             \n\n                Miesto, kde bude vaša zásielka uložená\n\n\n                            Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)\n\n                                      Hradná 3 999 91 Fiktívny Hrádok\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n\n        Zaplatené\n                                        Číslo zásielky Z 444 4444 409\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 409&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 409</p><p>Dobrý deň,</p><p>odosielateľ Foto Hrádok nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu.</p>\n\n<p><strong>Miesto, kde bude vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)</td></tr><tr><td>Hradná 3 999 91 Fiktívny Hrádok</td></tr></table>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 409</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444409\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m30",
+   "at": "D11 08:24",
+   "about": "w9: Packeta ready, code 302958, until 19.11.2026",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka je pripravená na vyzdvihnutie",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m30.Z4444444409-ready@packeta.sk>",
+    "text": "Zásielka Z 444 4444 409\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa\n                        Foto Hrádok\n                    je pre vás\n                    pripravená na vyzdvihnutie v Z-BOXe.\n                             \n          Kód pre otvorenie schránky\n                3 \n\n                0 \n\n                2 \n\n                9 \n\n                5 \n\n                8 \n\n                Miesto, kde je vaša zásielka uložená\n\n\n                            Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)\n\n                                      Hradná 3 999 91 Fiktívny Hrádok\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n                            Na vyzdvihnutie najneskôr do 19.11.2026 23:59.\n\n        Zaplatené\n                                        Číslo zásielky Z 444 4444 409\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 409&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 409</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Foto Hrádok je pre vás pripravená na vyzdvihnutie v Z-BOXe.</p>\n<p>Kód pre otvorenie schránky</p><table><tr><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">3</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">0</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">2</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">9</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">5</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">8</td></tr></table>\n<p><strong>Miesto, kde je vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Fiktívny Hrádok, Hradná 3 (Billa)</td></tr><tr><td>Hradná 3 999 91 Fiktívny Hrádok</td></tr></table><p>Na vyzdvihnutie najneskôr do 19.11.2026 23:59.</p>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 409</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444409\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m32",
+   "trigger": {
+    "afterCollect": "w9",
+    "min": 6
+   },
+   "about": "w9: picked-up confirmation (after sim collect)",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola vyzdvihnutá",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m32.Z4444444409-picked@packeta.sk>",
+    "text": "Zásielka Z 444 4444 409\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa Foto Hrádok bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybrali Packetu.\n                             \n\n\n\n                                        Číslo zásielky Z 444 4444 409\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 444 4444 409&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 444 4444 409</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Foto Hrádok bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybrali Packetu.</p>\n\n\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 444 4444 409</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z4444444409\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m34",
+   "at": "D10 13:00",
+   "about": "w10 GLS ParcelShop",
+   "spec": {
+    "from": "Železiarstvo Online <eshop@zeleziarstvo.example.sk>",
+    "subject": "Objednávka ZO-12 bola odoslaná",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m34.ship-ZO-12@zeleziarstvo.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. ZO-12 bola práve odoslaná.\nDoprava: GLS ParcelShop Železiarstvo Klinec\nČíslo balíka: 90444444410\n\nObsah zásielky:\n - Vrtáky sada\n\n\nĎakujeme za nákup!\nTím Železiarstvo Online\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Železiarstvo Online</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka ZO-12 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Železiarstvo Online\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>ZO-12</strong> bola práve odoslaná.</p><p>Doprava: GLS ParcelShop Železiarstvo Klinec</p><p>Číslo balíka: 90444444410</p><table><tr><td>Vrtáky sada</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Železiarstvo Online. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m35",
+   "at": "D10 15:20",
+   "about": "w10: GLS accepted",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Balík 90444444410 sme prevzali od odosielateľa",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m35.90444444410-acc@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík sme prevzali od odosielateľa a je na ceste k vám. Predpokladaný dátum doručenia vám oznámime v ďalšom e-maile.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík sme prevzali od odosielateľa a je na ceste k vám. Predpokladaný dátum doručenia vám oznámime v ďalšom e-maile.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90444444410</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Železiarstvo Online</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90444444410\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m36",
+   "at": "D12 10:37",
+   "about": "w10: GLS ready, PIN 914270, until 20. 11. 2026",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Balík 90444444410 je pripravený k vyzdvihnutiu",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m36.90444444410-ready@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík sme práve doručili do odberného miesta. Balík si môžete vyzdvihnúť najneskôr dňa 20. 11. 2026. Pre vydanie balíka použite PIN kód 914270.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík sme práve doručili do odberného miesta. Balík si môžete vyzdvihnúť najneskôr dňa 20. 11. 2026. Pre vydanie balíka použite PIN kód 914270.</p>\n\n<p style=\"font-size:18px\">PIN kód: 914270</p>\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90444444410</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Železiarstvo Online</td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odberné miesto:<br><strong>GLS ParcelShop Železiarstvo Klinec,<br>Dielenská 8,<br>99991, Fiktívny Hrádok</strong></td></tr>\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90444444410\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m38",
+   "trigger": {
+    "afterCollect": "w10",
+    "min": 8
+   },
+   "about": "w10: GLS collected",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Balík 90444444410 bol doručený",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m38.90444444410-del@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík bol úspešne doručený. Ďakujeme, že ste využili služby GLS.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík bol úspešne doručený. Ďakujeme, že ste využili služby GLS.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90444444410</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Železiarstvo Online</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90444444410\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m39",
+   "at": "D6 09:00",
+   "about": "newsletter (not labelled)",
+   "spec": {
+    "from": "Hacker News Digest <digest@hn.example.com>",
+    "subject": "Top stories this week",
+    "to": "=?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>",
+    "messageId": "<power.m39.mail@hn.example.com>",
+    "text": "Top stories.\n",
+    "deliveredTo": "peter.mocny@example.com"
+   },
+   "labelled": false
+  }
+ ]
+}

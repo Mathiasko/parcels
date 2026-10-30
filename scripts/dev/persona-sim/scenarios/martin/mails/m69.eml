@@ -1,0 +1,61 @@
+Delivered-To: martin@bicyklefiktiv.example.sk
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake6z;
+        Wed, 11 Nov 2026 10:00:11 +0100
+Return-Path: <noreply@bicyklefiktiv.example.sk>
+Date: Wed, 11 Nov 2026 10:00:11 +0100
+From: =?utf-8?Q?Bicykle_Fikt=C3=ADv_=E2=80=93?=
+ =?utf-8?Q?_e-shop?= <noreply@bicyklefiktiv.example.sk>
+To: =?utf-8?Q?Bicykle_Fikt=C3=ADv?= <martin@bicyklefiktiv.example.sk>
+Subject: =?utf-8?Q?K=C3=B3pia:_Va=C5=A1a_obje?=
+ =?utf-8?Q?dn=C3=A1vka_=C4=8D._1045_b?=
+ =?utf-8?Q?ola_odoslan=C3=A1?=
+Message-ID: <martin.m69.mail@bicyklefiktiv.example.sk>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_6yxxxx.fake"
+
+------=_Part_alt_6yxxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Dobr=C3=BD de=C5=88 Peter Pomal=C3=BD,
+
+va=C5=A1a objedn=C3=A1vka =C4=8D. 1045 bola odoslan=C3=A1.
+Sp=C3=B4sob doru=C4=8Denia: Packeta =E2=80=93 Z-BOX Pre=C5=A1ov-Fikt=C3=ADv
+=C4=8C=C3=ADslo z=C3=A1sielky: Z 666 6666 634
+
+=C4=8Eakujeme za n=C3=A1kup!
+Bicykle Fikt=C3=ADv s.r.o.
+
+------=_Part_alt_6yxxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>K=C3=B3pia: Va=C5=A1a objedn=C3=A1vka =C4=8D. 1045 bola =
+odoslan=C3=A1</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#f=
+ff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">&#847;&zwnj;&nbsp=
+;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#444;padding:16px;color:#fff;font-size:20px"><i=
+mg src=3D"https://img.example.com/logo.png" alt=3D"Bicykle Fikt=C3=ADv =
+=E2=80=93 e-shop" width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Dobr=C3=BD de=C5=88 Peter Pomal=C3=BD,=
+</p><p>va=C5=A1a objedn=C3=A1vka =C4=8D. 1045 bola odoslan=C3=A1.=
+</p><p>Sp=C3=B4sob doru=C4=8Denia: Packeta =E2=80=93 Z-BOX =
+Pre=C5=A1ov-Fikt=C3=ADv</p><p>=C4=8C=C3=ADslo z=C3=A1sielky: Z 666 6666 =
+634</p><p>=C4=8Eakujeme za n=C3=A1kup!</p><p>Bicykle Fikt=C3=ADv s.r.o.=
+</p></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">Tento e-mail bol =
+vygenerovan=C3=BD automaticky.</td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_6yxxxx.fake--

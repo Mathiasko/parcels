@@ -1,0 +1,1276 @@
+{
+ "meta": {
+  "away": [],
+  "firstRun": "welcome",
+  "id": "petra",
+  "fullName": "Petra Smyšlená",
+  "email": "petra.smyslena@example.sk",
+  "digit": "5",
+  "day0": "2026-11-01",
+  "postcode": "99951",
+  "town": "Testovce"
+ },
+ "points": [
+  {
+   "name": "Z-BOX Testovce, Školská 2 (ZŠ)",
+   "street": "Školská 2",
+   "zip": "999 51",
+   "city": "Testovce"
+  }
+ ],
+ "parcels": [
+  {
+   "owner": "me",
+   "key": "p01",
+   "carrier": "alza",
+   "number": "ALZA1051500001",
+   "label": "Alza #1 AlzaBox",
+   "emailOnly": true,
+   "events": [],
+   "ready": {
+    "at": "D2 16:00",
+    "text": "AlzaBox",
+    "till": "D5 23:59",
+    "code": "557120",
+    "hours": "24/7",
+    "where": "AlzaBox Testovce – Tesco"
+   },
+   "collect": {
+    "lagMin": 1,
+    "text": "Vyzdvihnuté"
+   }
+  },
+  {
+   "key": "p02",
+   "carrier": "packeta",
+   "number": "Z5555555502",
+   "label": "Notino #1",
+   "events": [
+    {
+     "at": "D1 19:00",
+     "status": "pre_transit",
+     "text": "Zásielka bola podaná odosielateľom."
+    },
+    {
+     "at": "D2 07:00",
+     "status": "in_transit",
+     "text": "Zásielka je na ceste."
+    }
+   ],
+   "ready": {
+    "at": "D3 09:10",
+    "text": "Zásielka bola uložená v Z-BOXe a čaká na vyzdvihnutie.",
+    "pickup": {
+     "kind": "zbox",
+     "name": "Z-BOX Testovce, Školská 2 (ZŠ)",
+     "street": "Školská 2",
+     "city": "Testovce"
+    },
+    "till": "D10 23:59",
+    "code": "341208",
+    "hours": "24/7",
+    "where": "Z-BOX Testovce, Školská 2 (ZŠ)"
+   },
+   "collect": {
+    "lagMin": 3,
+    "text": "Zásielka bola vyzdvihnutá."
+   },
+   "expire": {
+    "returningText": "Zásielka nebola vyzdvihnutá v úložnej dobe, vraciame ju odosielateľovi.",
+    "returnedText": "Zásielka bola vrátená odosielateľovi."
+   }
+  },
+  {
+   "owner": "me",
+   "key": "p03",
+   "carrier": "sps",
+   "number": "SK0FAKE26PETR00003",
+   "label": "Bambulka #1 (balíkovo)",
+   "events": [
+    {
+     "at": "D2 15:00",
+     "status": "pre_transit",
+     "text": "Zásielka prevzatá od odosielateľa"
+    },
+    {
+     "at": "D3 04:00",
+     "status": "in_transit",
+     "text": "Zásielka na triediacom centre"
+    }
+   ],
+   "ready": {
+    "at": "D3 13:00",
+    "text": "Zásielka v odbernom mieste",
+    "pickup": {
+     "kind": "parcelshop"
+    },
+    "till": "D8 18:00",
+    "code": "774421",
+    "hours": "shop",
+    "where": "BALÍKOVO Testovce – Potraviny Jednota"
+   },
+   "collect": {
+    "lagMin": 10,
+    "text": "Zásielka vydaná príjemcovi"
+   },
+   "expire": {
+    "returningText": "Zásielka sa vracia odosielateľovi",
+    "returnedText": "Zásielka vrátená odosielateľovi"
+   }
+  },
+  {
+   "key": "p04",
+   "carrier": "dpd",
+   "number": "01505555555504",
+   "label": "kids shoes (to be returned)",
+   "events": [
+    {
+     "at": "D2 16:00",
+     "status": "pre_transit",
+     "text": "Údaje o zásielke boli prijaté",
+     "location": "Bratislava"
+    },
+    {
+     "at": "D3 02:00",
+     "status": "in_transit",
+     "text": "Zásielka na ceste",
+     "location": "Senec Hub"
+    }
+   ],
+   "ready": {
+    "at": "D3 11:30",
+    "text": "Uložené v Pickup Station",
+    "location": "Testovce",
+    "pickup": {
+     "kind": "locker",
+     "name": "Pickup Station Testovce (Tesco)",
+     "street": "Obchodná 1",
+     "city": "Testovce",
+     "postalCode": "99951"
+    },
+    "till": "D10 23:59",
+    "code": "610045",
+    "hours": "24/7",
+    "where": "Pickup Station Testovce (Tesco)"
+   },
+   "collect": {
+    "lagMin": 2,
+    "text": "Vyzdvihnuté v Pickup Station",
+    "location": "Testovce"
+   },
+   "expire": {
+    "returningText": "Zásielka sa vracia odosielateľovi",
+    "returnedText": "Zásielka vrátená odosielateľovi"
+   }
+  },
+  {
+   "owner": "me",
+   "key": "p05",
+   "carrier": "packeta",
+   "number": "Z5555555505",
+   "label": "RETURN of the shoes (Petra sends it)",
+   "events": [
+    {
+     "at": "D6 10:00",
+     "status": "pre_transit",
+     "text": "Zásielka bola podaná odosielateľom."
+    },
+    {
+     "at": "D6 20:00",
+     "status": "in_transit",
+     "text": "Zásielka je na ceste."
+    },
+    {
+     "at": "D8 14:00",
+     "status": "delivered",
+     "text": "Zásielka bola doručená príjemcovi."
+    }
+   ]
+  },
+  {
+   "owner": "me",
+   "key": "p06",
+   "carrier": "gls",
+   "number": "90555555506",
+   "label": "Alza.sk via GLS (door)",
+   "events": [
+    {
+     "at": "D4 10:00",
+     "status": "pre_transit",
+     "text": "Údaje o balíku boli zaregistrované"
+    },
+    {
+     "at": "D4 21:00",
+     "status": "in_transit",
+     "text": "Balík je na ceste",
+     "location": "Sered"
+    },
+    {
+     "at": "D5 06:40",
+     "status": "out_for_delivery",
+     "text": "Balík je na doručení"
+    },
+    {
+     "at": "D5 10:15",
+     "status": "delivered",
+     "text": "Balík bol doručený"
+    }
+   ]
+  },
+  {
+   "key": "p07",
+   "carrier": "gls",
+   "number": "90555555507",
+   "label": "Notino #2 (GLS ParcelShop)",
+   "events": [
+    {
+     "at": "D4 18:00",
+     "status": "pre_transit",
+     "text": "Údaje o balíku boli zaregistrované"
+    },
+    {
+     "at": "D5 05:00",
+     "status": "in_transit",
+     "text": "Balík je na ceste",
+     "location": "Sered"
+    }
+   ],
+   "ready": {
+    "at": "D6 10:00",
+    "text": "Balík bol doručený do GLS ParcelShopu",
+    "till": "D13 23:59",
+    "code": "228801",
+    "hours": "shop",
+    "where": "GLS ParcelShop Drogéria Kvietok",
+    "noPickupInApi": true
+   },
+   "collect": {
+    "lagMin": 4,
+    "text": "Balík bol vyzdvihnutý"
+   },
+   "expire": {
+    "returningText": "Balík sa vracia odosielateľovi",
+    "returnedText": "Balík bol vrátený odosielateľovi"
+   }
+  },
+  {
+   "owner": "me",
+   "key": "p08",
+   "carrier": "posta",
+   "number": "EB555555082SK",
+   "label": "Diskont (BalíkoBOX, 3 days)",
+   "events": [
+    {
+     "at": "D7 20:00",
+     "status": "pre_transit",
+     "text": "Podanie zásielky",
+     "location": "Bratislava 1"
+    },
+    {
+     "at": "D8 10:00",
+     "status": "in_transit",
+     "text": "Zásielka na ceste",
+     "location": "SPU Bratislava"
+    }
+   ],
+   "ready": {
+    "at": "D8 12:00",
+    "text": "Uloženie zásielky v BalíkoBOXe",
+    "location": "Testovce",
+    "pickup": {
+     "kind": "locker",
+     "name": "BalíkoBOX Testovce – Pošta",
+     "street": "Poštová 2",
+     "city": "Testovce",
+     "postalCode": "99951"
+    },
+    "till": "D11 23:59",
+    "code": "450091",
+    "hours": "24/7",
+    "where": "BalíkoBOX Testovce – Pošta",
+    "needsId": false
+   },
+   "collect": {
+    "lagMin": 20,
+    "text": "Dodanie zásielky",
+    "location": "Testovce"
+   },
+   "expire": {
+    "returningText": "Vrátenie zásielky odosielateľovi",
+    "returnedText": "Zásielka vrátená odosielateľovi",
+    "returnAfterH": 6
+   }
+  },
+  {
+   "owner": "me",
+   "key": "p09",
+   "carrier": "sps",
+   "number": "7035555555555509",
+   "label": "Bambulka via SPS (door)",
+   "events": [
+    {
+     "at": "D8 14:00",
+     "status": "pre_transit",
+     "text": "Zásielka prevzatá od odosielateľa"
+    },
+    {
+     "at": "D9 03:00",
+     "status": "in_transit",
+     "text": "Zásielka na triediacom centre"
+    },
+    {
+     "at": "D9 07:05",
+     "status": "out_for_delivery",
+     "text": "Zásielka na doručení"
+    },
+    {
+     "at": "D9 13:40",
+     "status": "delivered",
+     "text": "Zásielka doručená"
+    }
+   ]
+  },
+  {
+   "key": "p10",
+   "carrier": "packeta",
+   "number": "Z5555555510",
+   "label": "Notino #3",
+   "events": [
+    {
+     "at": "D9 08:00",
+     "status": "pre_transit",
+     "text": "Zásielka bola podaná odosielateľom."
+    },
+    {
+     "at": "D9 20:00",
+     "status": "in_transit",
+     "text": "Zásielka je na ceste."
+    }
+   ],
+   "ready": {
+    "at": "D10 08:30",
+    "text": "Zásielka bola uložená v Z-BOXe a čaká na vyzdvihnutie.",
+    "pickup": {
+     "kind": "zbox",
+     "name": "Z-BOX Testovce, Školská 2 (ZŠ)",
+     "street": "Školská 2",
+     "city": "Testovce"
+    },
+    "till": "D17 23:59",
+    "code": "902114",
+    "hours": "24/7",
+    "where": "Z-BOX Testovce, Školská 2 (ZŠ)"
+   },
+   "collect": {
+    "lagMin": 3,
+    "text": "Zásielka bola vyzdvihnutá."
+   },
+   "expire": {
+    "returningText": "Zásielka nebola vyzdvihnutá v úložnej dobe, vraciame ju odosielateľovi.",
+    "returnedText": "Zásielka bola vrátená odosielateľovi."
+   }
+  },
+  {
+   "key": "p11",
+   "carrier": "packeta",
+   "number": "Z5555555511",
+   "label": "Kocúrik blocks (same Z-BOX, same day as p10)",
+   "events": [
+    {
+     "at": "D9 10:00",
+     "status": "pre_transit",
+     "text": "Zásielka bola podaná odosielateľom."
+    },
+    {
+     "at": "D9 22:00",
+     "status": "in_transit",
+     "text": "Zásielka je na ceste."
+    }
+   ],
+   "ready": {
+    "at": "D10 09:40",
+    "text": "Zásielka bola uložená v Z-BOXe a čaká na vyzdvihnutie.",
+    "pickup": {
+     "kind": "zbox",
+     "name": "Z-BOX Testovce, Školská 2 (ZŠ)",
+     "street": "Školská 2",
+     "city": "Testovce"
+    },
+    "till": "D17 23:59",
+    "code": "117395",
+    "hours": "24/7",
+    "where": "Z-BOX Testovce, Školská 2 (ZŠ)"
+   },
+   "collect": {
+    "lagMin": 3,
+    "text": "Zásielka bola vyzdvihnutá."
+   },
+   "expire": {
+    "returningText": "Zásielka nebola vyzdvihnutá v úložnej dobe, vraciame ju odosielateľovi.",
+    "returnedText": "Zásielka bola vrátená odosielateľovi."
+   }
+  },
+  {
+   "owner": "me",
+   "key": "p12",
+   "carrier": "dpd",
+   "number": "01505555555512",
+   "label": "Hračky Kocúrik # K-7781 via DPD (door)",
+   "events": [
+    {
+     "at": "D9 09:00",
+     "status": "pre_transit",
+     "text": "Údaje o zásielke boli prijaté",
+     "location": "Bratislava"
+    },
+    {
+     "at": "D9 18:00",
+     "status": "in_transit",
+     "text": "Zásielka na ceste",
+     "location": "Senec Hub"
+    },
+    {
+     "at": "D10 06:50",
+     "status": "out_for_delivery",
+     "text": "Kuriér doručuje",
+     "location": "Testovce"
+    },
+    {
+     "at": "D10 11:05",
+     "status": "delivered",
+     "text": "Doručené",
+     "location": "Testovce"
+    }
+   ]
+  },
+  {
+   "owner": "me",
+   "key": "p13",
+   "carrier": "alza",
+   "number": "ALZA1051500013",
+   "label": "Alza #3 AlzaBox",
+   "emailOnly": true,
+   "events": [],
+   "ready": {
+    "at": "D12 17:30",
+    "text": "AlzaBox",
+    "till": "D15 23:59",
+    "code": "803366",
+    "hours": "24/7",
+    "where": "AlzaBox Testovce – Tesco"
+   },
+   "collect": {
+    "lagMin": 1,
+    "text": "Vyzdvihnuté"
+   }
+  }
+ ],
+ "mails": [
+  {
+   "id": "m01",
+   "at": "D-1 21:10",
+   "about": "Alza confirmation (not labelled)",
+   "spec": {
+    "from": "Alza.sk <objednavky@alza.example.sk>",
+    "subject": "Potvrdenie objednávky 1051500001",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m01.mail@alza.example.sk>",
+    "text": "Dobrý deň,\nprijali sme vašu objednávku 1051500001.\nSpôsob doručenia: AlzaBox Testovce – Tesco\nAlza.sk\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Potvrdenie objednávky 1051500001</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Alza.sk\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>prijali sme vašu objednávku 1051500001.</p><p>Spôsob doručenia: AlzaBox Testovce – Tesco</p><p>Alza.sk</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m02",
+   "at": "D2 16:03",
+   "about": "p01: AlzaBox ready, code 557120, until 06.11.2026 (Alza's own delivery: no carrier, no tracking number)",
+   "spec": {
+    "from": "Alza.sk <objednavky@alza.example.sk>",
+    "subject": "Objednávka 1051500001 je pripravená na vyzdvihnutie v AlzaBoxe",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m02.alza-1051500001-ready@alza.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka 1051500001 je pripravená na vyzdvihnutie v AlzaBox Testovce – Tesco.\nKód pre vyzdvihnutie: 557120\nVyzdvihnite si ju do 06.11.2026.\nObsah: Detská zubná kefka, Batérie AA\n\nAlza.sk\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Objednávka 1051500001 je pripravená na vyzdvihnutie v AlzaBoxe</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#1a73e8;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#1a73e8;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Alza.sk\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka 1051500001 je pripravená na vyzdvihnutie v AlzaBox Testovce – Tesco.</p><p>Kód pre vyzdvihnutie: 557120</p><p>Vyzdvihnite si ju do 06.11.2026.</p><p>Obsah: Detská zubná kefka, Batérie AA</p><p>Alza.sk</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m03",
+   "at": "D5 09:00",
+   "cond": {
+    "notCollected": "p01"
+   },
+   "about": "p01: AlzaBox last day (only if not collected)",
+   "spec": {
+    "from": "Alza.sk <objednavky@alza.example.sk>",
+    "subject": "Posledný deň na vyzdvihnutie objednávky 1051500001",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m03.alza-1051500001-last@alza.example.sk>",
+    "text": "Dobrý deň,\n\ndnes je posledný deň, kedy si môžete vyzdvihnúť objednávku 1051500001 v AlzaBox Testovce – Tesco.\nKód pre vyzdvihnutie: 557120\n\nAlza.sk\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Posledný deň na vyzdvihnutie objednávky 1051500001</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#1a73e8;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#1a73e8;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Alza.sk\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>dnes je posledný deň, kedy si môžete vyzdvihnúť objednávku 1051500001 v AlzaBox Testovce – Tesco.</p><p>Kód pre vyzdvihnutie: 557120</p><p>Alza.sk</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m04",
+   "trigger": {
+    "afterCollect": "p01",
+    "min": 2
+   },
+   "about": "p01: AlzaBox collected",
+   "spec": {
+    "from": "Alza.sk <objednavky@alza.example.sk>",
+    "subject": "Objednávka 1051500001 bola vyzdvihnutá",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m04.alza-1051500001-done@alza.example.sk>",
+    "text": "Dobrý deň,\n\nďakujeme, objednávku 1051500001 ste si vyzdvihli.\nOhodnoťte svoj nákup a získajte AlzaKredit.\n\nAlza.sk\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Objednávka 1051500001 bola vyzdvihnutá</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#1a73e8;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#1a73e8;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Alza.sk\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>ďakujeme, objednávku 1051500001 ste si vyzdvihli.</p><p>Ohodnoťte svoj nákup a získajte AlzaKredit.</p><p>Alza.sk</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m05",
+   "at": "D0 20:05",
+   "about": "Notino confirmation (not labelled)",
+   "spec": {
+    "from": "Notino <objednavky@notino.example.sk>",
+    "subject": "Ďakujeme za objednávku 26-880101",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m05.mail@notino.example.sk>",
+    "text": "Dobrý deň,\nďakujeme za objednávku 26-880101. O odoslaní vás budeme informovať.\nNotino\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Ďakujeme za objednávku 26-880101</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Notino\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>ďakujeme za objednávku 26-880101. O odoslaní vás budeme informovať.</p><p>Notino</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m06",
+   "at": "D1 11:30",
+   "about": "p02 Notino dispatch",
+   "spec": {
+    "from": "Notino <objednavky@notino.example.sk>",
+    "subject": "Vaša objednávka 26-880101 bola odoslaná",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m06.ship-26-880101@notino.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. 26-880101 bola práve odoslaná.\nDoprava: Packeta – Z-BOX Testovce, Školská 2 (ZŠ)\nČíslo zásielky: Z 555 5555 502\n\nObsah zásielky:\n - Krém na ruky 75 ml\n - Parfumovaná voda 30 ml\n\n\nĎakujeme za nákup!\nTím Notino\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Notino</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka 26-880101 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Notino\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>26-880101</strong> bola práve odoslaná.</p><p>Doprava: Packeta – Z-BOX Testovce, Školská 2 (ZŠ)</p><p>Číslo zásielky: Z 555 5555 502</p><table><tr><td>Krém na ruky 75 ml</td></tr><tr><td>Parfumovaná voda 30 ml</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Notino. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m07",
+   "at": "D1 19:08",
+   "about": "p02: Packeta accepted",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola prijatá do prepravy",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m07.Z5555555502-acc@packeta.sk>",
+    "text": "Zásielka Z 555 5555 502\n           \n                    Dobrý deň,\n                    odosielateľ\n                        Notino\n                    nám práve\n                    odovzdal vašu zásielku,\n                    ktorá vám bude doručená do Z-BOXu.\n                             \n\n                Miesto, kde bude vaša zásielka uložená\n\n\n                            Z-BOX Testovce, Školská 2 (ZŠ)\n\n                                      Školská 2 999 51 Testovce\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n\n        Zaplatené\n                                        Číslo zásielky Z 555 5555 502\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 555 5555 502&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 555 5555 502</p><p>Dobrý deň,</p><p>odosielateľ Notino nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu.</p>\n\n<p><strong>Miesto, kde bude vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Testovce, Školská 2 (ZŠ)</td></tr><tr><td>Školská 2 999 51 Testovce</td></tr></table>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 555 5555 502</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z5555555502\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m08",
+   "at": "D3 09:14",
+   "about": "p02: Packeta ready, code 341208, until 11.11.2026",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka je pripravená na vyzdvihnutie",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m08.Z5555555502-ready@packeta.sk>",
+    "text": "Zásielka Z 555 5555 502\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa\n                        Notino\n                    je pre vás\n                    pripravená na vyzdvihnutie v Z-BOXe.\n                             \n          Kód pre otvorenie schránky\n                3 \n\n                4 \n\n                1 \n\n                2 \n\n                0 \n\n                8 \n\n                Miesto, kde je vaša zásielka uložená\n\n\n                            Z-BOX Testovce, Školská 2 (ZŠ)\n\n                                      Školská 2 999 51 Testovce\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n                            Na vyzdvihnutie najneskôr do 11.11.2026 23:59.\n\n        Zaplatené\n                                        Číslo zásielky Z 555 5555 502\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 555 5555 502&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 555 5555 502</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Notino je pre vás pripravená na vyzdvihnutie v Z-BOXe.</p>\n<p>Kód pre otvorenie schránky</p><table><tr><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">3</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">4</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">1</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">2</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">0</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">8</td></tr></table>\n<p><strong>Miesto, kde je vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Testovce, Školská 2 (ZŠ)</td></tr><tr><td>Školská 2 999 51 Testovce</td></tr></table><p>Na vyzdvihnutie najneskôr do 11.11.2026 23:59.</p>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 555 5555 502</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z5555555502\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m09",
+   "at": "D9 10:00",
+   "cond": {
+    "notCollected": "p02"
+   },
+   "about": "p02: reminder, day before the deadline (only if not collected)",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Pripomíname: zásielka na vás čaká v Z-BOXe",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m09.Z5555555502-rem@packeta.sk>",
+    "text": "Zásielka Z 555 5555 502\n           \n                    Dobrý deň,\n                    pripomíname, že vaša zásielka od odosielateľa\n                        Notino\n                    je pre vás\n                    stále pripravená na vyzdvihnutie v Z-BOXe. Nezabudnite si ju vyzdvihnúť do 11.11.2026.\n                             \n          Kód pre otvorenie schránky\n                3 \n\n                4 \n\n                1 \n\n                2 \n\n                0 \n\n                8 \n\n                Miesto, kde je vaša zásielka uložená\n\n\n                            Z-BOX Testovce, Školská 2 (ZŠ)\n\n                                      Školská 2 999 51 Testovce\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n                            Na vyzdvihnutie najneskôr do 11.11.2026 23:59.\n\n        Zaplatené\n                                        Číslo zásielky Z 555 5555 502\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 555 5555 502&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 555 5555 502</p><p>Dobrý deň,</p><p>pripomíname, že vaša zásielka od odosielateľa Notino je pre vás stále pripravená na vyzdvihnutie v Z-BOXe. Nezabudnite si ju vyzdvihnúť do 11.11.2026.</p>\n<p>Kód pre otvorenie schránky</p><table><tr><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">3</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">4</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">1</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">2</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">0</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">8</td></tr></table>\n<p><strong>Miesto, kde je vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Testovce, Školská 2 (ZŠ)</td></tr><tr><td>Školská 2 999 51 Testovce</td></tr></table><p>Na vyzdvihnutie najneskôr do 11.11.2026 23:59.</p>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 555 5555 502</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z5555555502\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m10",
+   "trigger": {
+    "afterCollect": "p02",
+    "min": 6
+   },
+   "about": "p02: picked-up confirmation (after sim collect)",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola vyzdvihnutá",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m10.Z5555555502-picked@packeta.sk>",
+    "text": "Zásielka Z 555 5555 502\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa Notino bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybrali Packetu.\n                             \n\n\n\n                                        Číslo zásielky Z 555 5555 502\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 555 5555 502&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 555 5555 502</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Notino bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybrali Packetu.</p>\n\n\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 555 5555 502</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z5555555502\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m11",
+   "at": "D11 09:30",
+   "cond": {
+    "notCollected": "p02"
+   },
+   "about": "p02: not collected in time, returning",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bude vrátená odosielateľovi",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m11.Z5555555502-ret@packeta.sk>",
+    "text": "Zásielka Z 555 5555 502\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa Notino nebola vyzdvihnutá v úložnej dobe, a preto ju vraciame odosielateľovi. Ak ste zásielku platili na dobierku, nič neplatíte.\n                             \n\n\n\n                                        Číslo zásielky Z 555 5555 502\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 555 5555 502&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 555 5555 502</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Notino nebola vyzdvihnutá v úložnej dobe, a preto ju vraciame odosielateľovi. Ak ste zásielku platili na dobierku, nič neplatíte.</p>\n\n\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 555 5555 502</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z5555555502\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m12",
+   "at": "D2 09:00",
+   "about": "p03 kids clothes via SPS balíkovo",
+   "spec": {
+    "from": "Bambulka – detská móda <obchod@bambulka.example.sk>",
+    "subject": "Objednávka č. B-2207 bola odoslaná",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m12.ship-B-2207@bambulka.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. B-2207 bola práve odoslaná.\nPrepravca: SPS – Slovak Parcel Service, výdaj na odbernom mieste BALÍKOVO\nČíslo zásielky: SK0FAKE26PETR00003\n\nObsah zásielky:\n - Zimná čiapka, detská\n - Pančucháče 2 ks\n\n\nĎakujeme za nákup!\nTím Bambulka\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Bambulka</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka B-2207 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Bambulka\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>B-2207</strong> bola práve odoslaná.</p><p>Prepravca: SPS – Slovak Parcel Service, výdaj na odbernom mieste BALÍKOVO</p><p>Číslo zásielky: SK0FAKE26PETR00003</p><table><tr><td>Zimná čiapka, detská</td></tr><tr><td>Pančucháče 2 ks</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Bambulka. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m13",
+   "at": "D3 13:10",
+   "about": "p03: SPS ready at balíkovo, code 774421",
+   "spec": {
+    "from": "serv@sps-sro.sk",
+    "subject": "Zasielka v odbernom mieste balikovo: SK0FAKE26PETR00003",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m13.SK0FAKE26PETR00003-ready@sps-sro.sk>",
+    "text": "body { font-family: Tahoma, Verdana, Arial, Helvetica, Chicago, Sans-serif; font-size: 12px; margin: 0px; padding: 4px; }p { text-align: justify }tr, td { font-size: 12px; }h1 {color: #ffffff; font-size: 14px; background: #455560; padding: 4px 5px; border-left: 20px solid #f89829; }\nVážený zákazník,\nvaša zásielka cislo SK0FAKE26PETR00003 od bambulka.example.sk je pripravená na vyzdvihnutie v odbernom mieste BALÍKOVO Testovce – Potraviny Jednota, Jarná 10, Testovce (https://www.sps-sro.sk/) do 09.11.2026 18:00. Verifikačný kód: 774421.\n\nPrevádzkovateľom je spoločnosť Slovak Parcel Service s.r.o., IČO: 31 329 217 (ďalej len ako \"Prevádzkovateľ\"). Prevádzkovateľa môžete kontaktovať na adrese Senecká cesta 1, 900 28 Ivanka pri Dunaji.\n\nS pozdravom,\nkuriérska spoločnosť\nProsím, neodpovedajte na doručenú správu e-mailom, pre kontakt použite informácie na webovej stránke.\n",
+    "html": "<html><head><style>body { font-family: Tahoma, Verdana, Arial, Helvetica, Chicago, Sans-serif; font-size: 12px; margin: 0px; padding: 4px; }p { text-align: justify }tr, td { font-size: 12px; }h1 {color: #ffffff; font-size: 14px; background: #455560; padding: 4px 5px; border-left: 20px solid #f89829; }</style></head><body><div class=\"obsah\"><h1>Slovak Parcel Service</h1><p>Vážený zákazník,</p><p>vaša zásielka cislo SK0FAKE26PETR00003 od bambulka.example.sk je pripravená na vyzdvihnutie v odbernom mieste BALÍKOVO Testovce – Potraviny Jednota, Jarná 10, Testovce (https://www.sps-sro.sk/) do 09.11.2026 18:00. Verifikačný kód: 774421.</p><p>Prevádzkovateľom je spoločnosť Slovak Parcel Service s.r.o., IČO: 31 329 217 (ďalej len ako \"Prevádzkovateľ\"). Prevádzkovateľa môžete kontaktovať na adrese Senecká cesta 1, 900 28 Ivanka pri Dunaji.<br><br>S pozdravom,<br>kuriérska spoločnosť<br>Prosím, neodpovedajte na doručenú správu e-mailom, pre kontakt použite informácie na webovej stránke.</p></div></body></html>",
+    "encoding": "base64",
+    "charset": "windows-1250",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m14",
+   "trigger": {
+    "afterCollect": "p03",
+    "min": 15
+   },
+   "about": "p03: SPS collected",
+   "spec": {
+    "from": "serv@sps-sro.sk",
+    "subject": "Zasielka SK0FAKE26PETR00003 bola dorucena",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m14.SK0FAKE26PETR00003-del@sps-sro.sk>",
+    "text": "body { font-family: Tahoma, Verdana, Arial, Helvetica, Chicago, Sans-serif; font-size: 12px; margin: 0px; padding: 4px; }p { text-align: justify }tr, td { font-size: 12px; }h1 {color: #ffffff; font-size: 14px; background: #455560; padding: 4px 5px; border-left: 20px solid #f89829; }\nVážený zákazník,\nvaša zásielka cislo SK0FAKE26PETR00003 bola vyzdvihnutá v odbernom mieste balíkovo. Ďakujeme.\n\nPrevádzkovateľom je spoločnosť Slovak Parcel Service s.r.o., IČO: 31 329 217 (ďalej len ako \"Prevádzkovateľ\"). Prevádzkovateľa môžete kontaktovať na adrese Senecká cesta 1, 900 28 Ivanka pri Dunaji.\n\nS pozdravom,\nkuriérska spoločnosť\nProsím, neodpovedajte na doručenú správu e-mailom, pre kontakt použite informácie na webovej stránke.\n",
+    "html": "<html><head><style>body { font-family: Tahoma, Verdana, Arial, Helvetica, Chicago, Sans-serif; font-size: 12px; margin: 0px; padding: 4px; }p { text-align: justify }tr, td { font-size: 12px; }h1 {color: #ffffff; font-size: 14px; background: #455560; padding: 4px 5px; border-left: 20px solid #f89829; }</style></head><body><div class=\"obsah\"><h1>Slovak Parcel Service</h1><p>Vážený zákazník,</p><p>vaša zásielka cislo SK0FAKE26PETR00003 bola vyzdvihnutá v odbernom mieste balíkovo. Ďakujeme.</p><p>Prevádzkovateľom je spoločnosť Slovak Parcel Service s.r.o., IČO: 31 329 217 (ďalej len ako \"Prevádzkovateľ\"). Prevádzkovateľa môžete kontaktovať na adrese Senecká cesta 1, 900 28 Ivanka pri Dunaji.<br><br>S pozdravom,<br>kuriérska spoločnosť<br>Prosím, neodpovedajte na doručenú správu e-mailom, pre kontakt použite informácie na webovej stránke.</p></div></body></html>",
+    "encoding": "quoted-printable",
+    "charset": "windows-1250",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m15",
+   "at": "D2 10:10",
+   "about": "p04 kids shoes via DPD station (later returned)",
+   "spec": {
+    "from": "Topánočky <info@topanocky.example.sk>",
+    "subject": "Vaša objednávka T-9001 bola odoslaná",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m15.ship-T-9001@topanocky.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. T-9001 bola práve odoslaná.\nDoprava: DPD Pickup Station Testovce (Tesco)\nČíslo balíka: 01505555555504\n\nObsah zásielky:\n - Zimné topánky, detské, veľ. 31\n\n\nĎakujeme za nákup!\nTím Topánočky\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Topánočky</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka T-9001 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Topánočky\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>T-9001</strong> bola práve odoslaná.</p><p>Doprava: DPD Pickup Station Testovce (Tesco)</p><p>Číslo balíka: 01505555555504</p><table><tr><td>Zimné topánky, detské, veľ. 31</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Topánočky. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m16",
+   "at": "D2 16:30",
+   "about": "p04: DPD on its way to the station",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Vaša zásielka je na ceste do Pickup Station",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m16.01505555555504-tr@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka je na ceste. Akonáhle bude pripravená v samoobslužnom boxe Pickup Station, budeme vás informovať.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša zásielka je na ceste. Akonáhle bude pripravená v samoobslužnom boxe Pickup Station, budeme vás informovať.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Topánočky s.r.o. # T-9001</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505555555504</td></tr></table></td></tr>\n\n\n\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m17",
+   "at": "D3 11:36",
+   "about": "p04: DPD station ready, PIN 610045, until 11.11.2026",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Informácia o uložení zásielky v samoobslužnom boxe Pickup Station",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m17.01505555555504-ps@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka bola uložená v samoobslužnom boxe Pickup Station a je pripravená na vyzdvihnutie.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša zásielka bola uložená v samoobslužnom boxe Pickup Station a je pripravená na vyzdvihnutie.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Topánočky s.r.o. # T-9001</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505555555504</td></tr></table></td></tr>\n<tr><td>Adresa samoobslužného boxu Pickup Station: Pickup Station Testovce (Tesco),<br>Obchodná 1,<br>999 51 Testovce</td><td>&nbsp;&nbsp;Otváracie hodiny: Pondelok - Nedeľa: 00:01 - 23:59</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Pre vyzdvihnutie zásielky použite PIN: <strong>610045</strong> <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vašu zásielku si môžete vyzdvihnúť najneskôr dňa<br>11.11.2026</td></tr>\n<tr><td><a href=\"https://www.dpdgroup.com/\">Zobraziť odberné miesto Pickup Station na mape</a></td></tr>\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m18",
+   "at": "D9 09:00",
+   "cond": {
+    "notCollected": "p04"
+   },
+   "about": "p04: DPD station reminder (same subject, only if not collected)",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Informácia o uložení zásielky v samoobslužnom boxe Pickup Station",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m18.01505555555504-ps2@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka stále čaká na vyzdvihnutie v samoobslužnom boxe Pickup Station. Jej úložná doba sa blíži ku koncu.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša zásielka stále čaká na vyzdvihnutie v samoobslužnom boxe Pickup Station. Jej úložná doba sa blíži ku koncu.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Topánočky s.r.o. # T-9001</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505555555504</td></tr></table></td></tr>\n<tr><td>Adresa samoobslužného boxu Pickup Station: Pickup Station Testovce (Tesco),<br>Obchodná 1,<br>999 51 Testovce</td><td>&nbsp;&nbsp;Otváracie hodiny: Pondelok - Nedeľa: 00:01 - 23:59</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Pre vyzdvihnutie zásielky použite PIN: <strong>610045</strong> <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vašu zásielku si môžete vyzdvihnúť najneskôr dňa<br>11.11.2026</td></tr>\n<tr><td><a href=\"https://www.dpdgroup.com/\">Zobraziť odberné miesto Pickup Station na mape</a></td></tr>\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m19",
+   "trigger": {
+    "afterCollect": "p04",
+    "min": 5
+   },
+   "about": "p04: DPD collected confirmation",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Vaša zásielka bola doručená",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m19.01505555555504-del@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka bola úspešne doručená. Ďakujeme, že ste využili služby DPD.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša zásielka bola úspešne doručená. Ďakujeme, že ste využili služby DPD.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Topánočky s.r.o. # T-9001</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505555555504</td></tr></table></td></tr>\n\n\n\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m20",
+   "at": "D2 12:00",
+   "about": "school (not labelled)",
+   "spec": {
+    "from": "ZŠ Testovce <skola@zstestovce.example.sk>",
+    "subject": "Rodičovské združenie vo štvrtok",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m20.mail@zstestovce.example.sk>",
+    "text": "Vážení rodičia,\nrodičovské združenie bude vo štvrtok o 16:30.\nZŠ Testovce\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Rodičovské združenie vo štvrtok</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"ZŠ Testovce\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Vážení rodičia,</p><p>rodičovské združenie bude vo štvrtok o 16:30.</p><p>ZŠ Testovce</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m21",
+   "at": "D5 09:20",
+   "about": "return instructions with the Packeta return number (labelled? subject has no shipping word)",
+   "spec": {
+    "from": "Topánočky <info@topanocky.example.sk>",
+    "subject": "Vrátenie tovaru k objednávke T-9001",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m21.mail@topanocky.example.sk>",
+    "text": "Dobrý deň,\nvrátenie tovaru sme zaevidovali. Zásielku podajte do 14 dní v ktoromkoľvek Z-BOXe alebo výdajnom mieste Packeta.\nKód na podanie: R-555505\nČíslo zásielky na vrátenie: Z 555 5555 505\n\nTopánočky\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Vrátenie tovaru k objednávke T-9001</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Topánočky\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vrátenie tovaru sme zaevidovali. Zásielku podajte do 14 dní v ktoromkoľvek Z-BOXe alebo výdajnom mieste Packeta.</p><p>Kód na podanie: R-555505</p><p>Číslo zásielky na vrátenie: Z 555 5555 505</p><p>Topánočky</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m22",
+   "at": "D6 10:05",
+   "about": "p05: return parcel handed in (persona is the SENDER)",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka Z 555 5555 505 bola podaná",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m22.Z5555555505-sent@packeta.sk>",
+    "text": "Zásielka Z 555 5555 505\n\nDobrý deň,\nvaša zásielka pre príjemcu Topánočky s.r.o. bola podaná v Z-BOX Testovce, Školská 2 (ZŠ) a je na ceste.\n\nČíslo zásielky Z 555 5555 505\ntím Packety\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásielka Z 555 5555 505 bola podaná</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta Slovakia\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásielka Z 555 5555 505</p><p>Dobrý deň,</p><p>vaša zásielka pre príjemcu Topánočky s.r.o. bola podaná v Z-BOX Testovce, Školská 2 (ZŠ) a je na ceste.</p><p>Číslo zásielky Z 555 5555 505</p><p>tím Packety</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m23",
+   "at": "D8 14:06",
+   "about": "p05: return delivered to the shop",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka Z 555 5555 505 bola doručená príjemcovi",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m23.Z5555555505-deliv@packeta.sk>",
+    "text": "Zásielka Z 555 5555 505\n\nDobrý deň,\nvaša zásielka pre príjemcu Topánočky s.r.o. bola úspešne doručená.\n\ntím Packety\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Zásielka Z 555 5555 505 bola doručená príjemcovi</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta Slovakia\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zásielka Z 555 5555 505</p><p>Dobrý deň,</p><p>vaša zásielka pre príjemcu Topánočky s.r.o. bola úspešne doručená.</p><p>tím Packety</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m24",
+   "at": "D4 08:30",
+   "about": "p06 Alza via GLS courier",
+   "spec": {
+    "from": "Alza.sk <objednavky@alza.example.sk>",
+    "subject": "Objednávka 1051500006 bola odoslaná",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m24.ship-1051500006@alza.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. 1051500006 bola práve odoslaná.\nDopravca: GLS (kuriér na adresu)\nČíslo balíka: 90555555506\n\nObsah zásielky:\n - Mixér ponorný\n - Detský pohár 3 ks\n\n\nĎakujeme za nákup!\nTím Alza.sk\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Alza.sk</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka 1051500006 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Alza.sk\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>1051500006</strong> bola práve odoslaná.</p><p>Dopravca: GLS (kuriér na adresu)</p><p>Číslo balíka: 90555555506</p><table><tr><td>Mixér ponorný</td></tr><tr><td>Detský pohár 3 ks</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Alza.sk. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m25",
+   "at": "D4 10:20",
+   "about": "p06: GLS accepted",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Balík 90555555506 sme prevzali od odosielateľa",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m25.90555555506-acc@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík sme prevzali od odosielateľa a je na ceste k vám. Predpokladaný dátum doručenia vám oznámime v ďalšom e-maile.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík sme prevzali od odosielateľa a je na ceste k vám. Predpokladaný dátum doručenia vám oznámime v ďalšom e-maile.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90555555506</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Alza.sk</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90555555506\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m26",
+   "at": "D5 07:10",
+   "about": "p06: GLS out for delivery today",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Váš balík 90555555506 je na ceste",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m26.90555555506-tr@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík je na ceste. Doručíme ho dnes medzi 9:00 a 12:00. Ak vám termín nevyhovuje, môžete ho zmeniť cez FlexDelivery.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík je na ceste. Doručíme ho dnes medzi 9:00 a 12:00. Ak vám termín nevyhovuje, môžete ho zmeniť cez FlexDelivery.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90555555506</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Alza.sk</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90555555506\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m27",
+   "at": "D5 10:24",
+   "about": "p06: GLS delivered to the door",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Balík 90555555506 bol doručený",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m27.90555555506-del@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík bol úspešne doručený. Ďakujeme, že ste využili služby GLS.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík bol úspešne doručený. Ďakujeme, že ste využili služby GLS.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90555555506</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Alza.sk</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90555555506\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m28",
+   "at": "D4 15:00",
+   "about": "p07 Notino #2 via GLS ParcelShop",
+   "spec": {
+    "from": "Notino <objednavky@notino.example.sk>",
+    "subject": "Vaša objednávka 26-880133 bola odoslaná",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m28.ship-26-880133@notino.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. 26-880133 bola práve odoslaná.\nDoprava: GLS ParcelShop Drogéria Kvietok\nČíslo balíka: 90555555507\n\nObsah zásielky:\n - Šampón pre deti\n\n\nĎakujeme za nákup!\nTím Notino\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Notino</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka 26-880133 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Notino\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>26-880133</strong> bola práve odoslaná.</p><p>Doprava: GLS ParcelShop Drogéria Kvietok</p><p>Číslo balíka: 90555555507</p><table><tr><td>Šampón pre deti</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Notino. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m29",
+   "at": "D4 18:20",
+   "about": "p07: GLS accepted",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Balík 90555555507 sme prevzali od odosielateľa",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m29.90555555507-acc@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík sme prevzali od odosielateľa a je na ceste k vám. Predpokladaný dátum doručenia vám oznámime v ďalšom e-maile.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík sme prevzali od odosielateľa a je na ceste k vám. Predpokladaný dátum doručenia vám oznámime v ďalšom e-maile.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90555555507</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Notino</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90555555507\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m30",
+   "at": "D6 10:07",
+   "about": "p07: GLS ready, PIN 228801, until 14. 11. 2026",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Balík 90555555507 je pripravený k vyzdvihnutiu",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m30.90555555507-ready@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík sme práve doručili do odberného miesta. Balík si môžete vyzdvihnúť najneskôr dňa 14. 11. 2026. Pre vydanie balíka použite PIN kód 228801.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík sme práve doručili do odberného miesta. Balík si môžete vyzdvihnúť najneskôr dňa 14. 11. 2026. Pre vydanie balíka použite PIN kód 228801.</p>\n\n<p style=\"font-size:18px\">PIN kód: 228801</p>\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90555555507</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Notino</td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odberné miesto:<br><strong>GLS ParcelShop Drogéria Kvietok,<br>Mierová 4,<br>99951, Testovce</strong></td></tr>\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90555555507\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m31",
+   "at": "D12 10:00",
+   "cond": {
+    "notCollected": "p07"
+   },
+   "about": "p07: GLS last-chance reminder (only if not collected)",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Posledná možnosť vyzdvihnúť balík 90555555507",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m31.90555555507-rem@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík na vás stále čaká v odbernom mieste. Posledná možnosť vyzdvihnutia je 14. 11. 2026. Pre vydanie balíka použite PIN kód 228801.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík na vás stále čaká v odbernom mieste. Posledná možnosť vyzdvihnutia je 14. 11. 2026. Pre vydanie balíka použite PIN kód 228801.</p>\n\n<p style=\"font-size:18px\">PIN kód: 228801</p>\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90555555507</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Notino</td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odberné miesto:<br><strong>GLS ParcelShop Drogéria Kvietok,<br>Mierová 4,<br>99951, Testovce</strong></td></tr>\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90555555507\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m32",
+   "trigger": {
+    "afterCollect": "p07",
+    "min": 8
+   },
+   "about": "p07: GLS collected",
+   "spec": {
+    "from": "GLS Slovakia <noreply@gls-slovakia.sk>",
+    "subject": "Balík 90555555507 bol doručený",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m32.90555555507-del@gls-slovakia.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>GLS</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#061ab1;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Váš balík bol úspešne doručený. Ďakujeme, že ste využili služby GLS.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#061ab1;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"logo GLS\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>Váš balík bol úspešne doručený. Ďakujeme, že ste využili služby GLS.</p>\n\n\n<table><tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Číslo balíka:<br><strong>90555555507</strong></td></tr>\n<tr><td><img alt=\"modrá odrážka\" src=\"https://picture.gls-czech.com/images/emailing/dot--sky-blue.png\"> Odosielateľ:<br>Notino</td></tr>\n\n</table><p><a class=\"btn\" href=\"https://gls-group.eu/SK/sk/sledovanie-zasielok.html?match=90555555507\">Detail zásielky</a></p>\n<p>Nenašli ste riešenie vašej situácie? Kontaktujte prosím zákaznícky servis na adrese info@gls-slovakia.sk. Pre rýchlejšie vyriešenie vašej požiadavky uveďte číslo balíka.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Na tento e-mail, prosím, neodpovedajte, je generovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m33",
+   "at": "D5 07:00",
+   "about": "Alza newsletter (not labelled)",
+   "spec": {
+    "from": "Alza.sk <newsletter@alza.example.sk>",
+    "subject": "Black Friday v Alze začína už teraz",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m33.mail@alza.example.sk>",
+    "text": "Zľavy až 50 %.\nOdhlásiť\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Black Friday v Alze začína už teraz</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Alza.sk\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Zľavy až 50 %.</p><p>Odhlásiť</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m34",
+   "at": "D7 18:00",
+   "about": "p08 posta BalíkoBOX, 3 days",
+   "spec": {
+    "from": "Diskont Online <eshop@diskont.example.sk>",
+    "subject": "Objednávka D-44120 bola odoslaná",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m34.ship-D-44120@diskont.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. D-44120 bola práve odoslaná.\nSpôsob doručenia: Slovenská pošta – BalíkoBOX\nPodacie číslo: EB555555082SK\n\nObsah zásielky:\n - Pracie gély 3 ks\n\n\nĎakujeme za nákup!\nTím Diskont Online\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Diskont Online</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka D-44120 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Diskont Online\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>D-44120</strong> bola práve odoslaná.</p><p>Spôsob doručenia: Slovenská pošta – BalíkoBOX</p><p>Podacie číslo: EB555555082SK</p><table><tr><td>Pracie gély 3 ks</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Diskont Online. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m35",
+   "at": "D8 12:25",
+   "about": "p08: posta stored, until 12.11.2026 23:59",
+   "spec": {
+    "from": "Slovenská pošta <notifikacie@posta.sk>",
+    "subject": "Zásielka EB555555082SK je uložená v BalíkoBOXe",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m35.EB555555082SK-ready@posta.sk>",
+    "text": "Slovenská pošta, a. s.\n\nVážená pani / Vážený pán,\n\nVaša zásielka bola uložená v BalíkoBOXe. Vyzdvihnite si ju do 3 dní.\n\nPodacie číslo: EB555555082SK\nMiesto uloženia: BalíkoBOX Testovce – Pošta\nPoštová 2, 999 51 Testovce\nZásielka je uložená do: 12.11.2026 23:59\nPIN kód na otvorenie schránky: 450091\n\nPri preberaní zásielky na pošte predložte doklad totožnosti a uveďte podacie číslo zásielky.\nSlovenská pošta nikdy nežiada platbu poplatkov e-mailom ani SMS správou.\n\nTáto správa bola vygenerovaná automaticky, neodpovedajte na ňu.\nSlovenská pošta, a. s., Poštová 9, 999 99 Testovo\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Slovenská pošta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#f0b400;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka bola uložená v BalíkoBOXe. Vyzdvihnite si ju do 3 dní.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#f0b400;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Slovenská pošta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Vážená pani / Vážený pán,</p><p>Vaša zásielka bola uložená v BalíkoBOXe. Vyzdvihnite si ju do 3 dní.</p><table>\n<tr><td>Podacie číslo:</td><td><strong>EB555555082SK</strong></td></tr>\n<tr><td>Miesto uloženia:</td><td>BalíkoBOX Testovce – Pošta<br>Poštová 2, 999 51 Testovce</td></tr>\n<tr><td>Zásielka je uložená do:</td><td>12.11.2026 23:59</td></tr>\n\n<tr><td>PIN kód na otvorenie schránky:</td><td><strong>450091</strong></td></tr></table>\n<p>Pri preberaní zásielky na pošte predložte doklad totožnosti a uveďte podacie číslo zásielky.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Slovenská pošta, a. s., Poštová 9, 999 99 Testovo. Táto správa bola vygenerovaná automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m36",
+   "at": "D10 10:00",
+   "cond": {
+    "notCollected": "p08"
+   },
+   "about": "p08: posta reminder 1 days before (only if not collected)",
+   "spec": {
+    "from": "Slovenská pošta <notifikacie@posta.sk>",
+    "subject": "Pripomienka: zásielka EB555555082SK čaká na pošte",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m36.EB555555082SK-rem@posta.sk>",
+    "text": "Slovenská pošta, a. s.\n\nVážená pani / Vážený pán,\n\npripomíname Vám, že zásielka adresovaná na Vaše meno je stále uložená. Ak si ju nevyzdvihnete v úložnej lehote, vrátime ju odosielateľovi.\n\nPodacie číslo: EB555555082SK\nMiesto uloženia: BalíkoBOX Testovce – Pošta\nPoštová 2, 999 51 Testovce\nZásielka je uložená do: 12.11.2026 23:59\nPIN kód na otvorenie schránky: 450091\n\nPri preberaní zásielky na pošte predložte doklad totožnosti a uveďte podacie číslo zásielky.\nSlovenská pošta nikdy nežiada platbu poplatkov e-mailom ani SMS správou.\n\nTáto správa bola vygenerovaná automaticky, neodpovedajte na ňu.\nSlovenská pošta, a. s., Poštová 9, 999 99 Testovo\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Slovenská pošta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#f0b400;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">pripomíname Vám, že zásielka adresovaná na Vaše meno je stále uložená. Ak si ju nevyzdvihnete v úložnej lehote, vrátime ju odosielateľovi.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#f0b400;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Slovenská pošta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Vážená pani / Vážený pán,</p><p>pripomíname Vám, že zásielka adresovaná na Vaše meno je stále uložená. Ak si ju nevyzdvihnete v úložnej lehote, vrátime ju odosielateľovi.</p><table>\n<tr><td>Podacie číslo:</td><td><strong>EB555555082SK</strong></td></tr>\n<tr><td>Miesto uloženia:</td><td>BalíkoBOX Testovce – Pošta<br>Poštová 2, 999 51 Testovce</td></tr>\n<tr><td>Zásielka je uložená do:</td><td>12.11.2026 23:59</td></tr>\n\n<tr><td>PIN kód na otvorenie schránky:</td><td><strong>450091</strong></td></tr></table>\n<p>Pri preberaní zásielky na pošte predložte doklad totožnosti a uveďte podacie číslo zásielky.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Slovenská pošta, a. s., Poštová 9, 999 99 Testovo. Táto správa bola vygenerovaná automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m37",
+   "at": "D8 09:00",
+   "about": "p09 Bambulka #2 via SPS courier",
+   "spec": {
+    "from": "Bambulka – detská móda <obchod@bambulka.example.sk>",
+    "subject": "Objednávka č. B-2231 bola odoslaná",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m37.ship-B-2231@bambulka.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. B-2231 bola práve odoslaná.\nPrepravca: SPS – kuriér na adresu\nČíslo zásielky: 7035555555555509\n\nObsah zásielky:\n - Zimná bunda, detská 116\n\n\nĎakujeme za nákup!\nTím Bambulka\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Bambulka</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka B-2231 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Bambulka\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>B-2231</strong> bola práve odoslaná.</p><p>Prepravca: SPS – kuriér na adresu</p><p>Číslo zásielky: 7035555555555509</p><table><tr><td>Zimná bunda, detská 116</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Bambulka. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m38",
+   "at": "D9 07:40",
+   "about": "p09: SPS courier today",
+   "spec": {
+    "from": "serv@sps-sro.sk",
+    "subject": "Doručenie zásielky 7035555555555509 dnes",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m38.7035555555555509-today@sps-sro.sk>",
+    "text": "body { font-family: Tahoma, Verdana, Arial, Helvetica, Chicago, Sans-serif; font-size: 12px; margin: 0px; padding: 4px; }p { text-align: justify }tr, td { font-size: 12px; }h1 {color: #ffffff; font-size: 14px; background: #455560; padding: 4px 5px; border-left: 20px solid #f89829; }\nVážený zákazník,\nvaša zásielka cislo 7035555555555509 od Bambulka bude dnes doručená kuriérom na adresu. Kuriér: 0900 000 202.\n\nPrevádzkovateľom je spoločnosť Slovak Parcel Service s.r.o., IČO: 31 329 217 (ďalej len ako \"Prevádzkovateľ\"). Prevádzkovateľa môžete kontaktovať na adrese Senecká cesta 1, 900 28 Ivanka pri Dunaji.\n\nS pozdravom,\nkuriérska spoločnosť\nProsím, neodpovedajte na doručenú správu e-mailom, pre kontakt použite informácie na webovej stránke.\n",
+    "html": "<html><head><style>body { font-family: Tahoma, Verdana, Arial, Helvetica, Chicago, Sans-serif; font-size: 12px; margin: 0px; padding: 4px; }p { text-align: justify }tr, td { font-size: 12px; }h1 {color: #ffffff; font-size: 14px; background: #455560; padding: 4px 5px; border-left: 20px solid #f89829; }</style></head><body><div class=\"obsah\"><h1>Slovak Parcel Service</h1><p>Vážený zákazník,</p><p>vaša zásielka cislo 7035555555555509 od Bambulka bude dnes doručená kuriérom na adresu. Kuriér: 0900 000 202.</p><p>Prevádzkovateľom je spoločnosť Slovak Parcel Service s.r.o., IČO: 31 329 217 (ďalej len ako \"Prevádzkovateľ\"). Prevádzkovateľa môžete kontaktovať na adrese Senecká cesta 1, 900 28 Ivanka pri Dunaji.<br><br>S pozdravom,<br>kuriérska spoločnosť<br>Prosím, neodpovedajte na doručenú správu e-mailom, pre kontakt použite informácie na webovej stránke.</p></div></body></html>",
+    "encoding": "quoted-printable",
+    "charset": "windows-1250",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m39",
+   "at": "D8 20:00",
+   "about": "p10 Notino #3",
+   "spec": {
+    "from": "Notino <objednavky@notino.example.sk>",
+    "subject": "Vaša objednávka 26-880190 bola odoslaná",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m39.ship-26-880190@notino.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. 26-880190 bola práve odoslaná.\nDoprava: Packeta – Z-BOX Testovce, Školská 2 (ZŠ)\nČíslo zásielky: Z 555 5555 510\n\nObsah zásielky:\n - Telové mlieko\n\n\nĎakujeme za nákup!\nTím Notino\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Notino</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka 26-880190 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Notino\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>26-880190</strong> bola práve odoslaná.</p><p>Doprava: Packeta – Z-BOX Testovce, Školská 2 (ZŠ)</p><p>Číslo zásielky: Z 555 5555 510</p><table><tr><td>Telové mlieko</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Notino. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m40",
+   "at": "D9 08:08",
+   "about": "p10: Packeta accepted",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola prijatá do prepravy",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m40.Z5555555510-acc@packeta.sk>",
+    "text": "Zásielka Z 555 5555 510\n           \n                    Dobrý deň,\n                    odosielateľ\n                        Notino\n                    nám práve\n                    odovzdal vašu zásielku,\n                    ktorá vám bude doručená do Z-BOXu.\n                             \n\n                Miesto, kde bude vaša zásielka uložená\n\n\n                            Z-BOX Testovce, Školská 2 (ZŠ)\n\n                                      Školská 2 999 51 Testovce\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n\n        Zaplatené\n                                        Číslo zásielky Z 555 5555 510\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 555 5555 510&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 555 5555 510</p><p>Dobrý deň,</p><p>odosielateľ Notino nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu.</p>\n\n<p><strong>Miesto, kde bude vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Testovce, Školská 2 (ZŠ)</td></tr><tr><td>Školská 2 999 51 Testovce</td></tr></table>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 555 5555 510</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z5555555510\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m41",
+   "at": "D10 08:34",
+   "about": "p10: Packeta ready, code 902114, until 18.11.2026",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka je pripravená na vyzdvihnutie",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m41.Z5555555510-ready@packeta.sk>",
+    "text": "Zásielka Z 555 5555 510\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa\n                        Notino\n                    je pre vás\n                    pripravená na vyzdvihnutie v Z-BOXe.\n                             \n          Kód pre otvorenie schránky\n                9 \n\n                0 \n\n                2 \n\n                1 \n\n                1 \n\n                4 \n\n                Miesto, kde je vaša zásielka uložená\n\n\n                            Z-BOX Testovce, Školská 2 (ZŠ)\n\n                                      Školská 2 999 51 Testovce\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n                            Na vyzdvihnutie najneskôr do 18.11.2026 23:59.\n\n        Zaplatené\n                                        Číslo zásielky Z 555 5555 510\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 555 5555 510&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 555 5555 510</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Notino je pre vás pripravená na vyzdvihnutie v Z-BOXe.</p>\n<p>Kód pre otvorenie schránky</p><table><tr><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">9</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">0</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">2</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">1</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">1</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">4</td></tr></table>\n<p><strong>Miesto, kde je vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Testovce, Školská 2 (ZŠ)</td></tr><tr><td>Školská 2 999 51 Testovce</td></tr></table><p>Na vyzdvihnutie najneskôr do 18.11.2026 23:59.</p>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 555 5555 510</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z5555555510\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m43",
+   "trigger": {
+    "afterCollect": "p10",
+    "min": 6
+   },
+   "about": "p10: picked-up confirmation (after sim collect)",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola vyzdvihnutá",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m43.Z5555555510-picked@packeta.sk>",
+    "text": "Zásielka Z 555 5555 510\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa Notino bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybrali Packetu.\n                             \n\n\n\n                                        Číslo zásielky Z 555 5555 510\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 555 5555 510&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 555 5555 510</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Notino bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybrali Packetu.</p>\n\n\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 555 5555 510</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z5555555510\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m45",
+   "at": "D9 07:30",
+   "about": "p11 + p12: one mail, two carriers",
+   "spec": {
+    "from": "Hračky Kocúrik <eshop@kocurik.example.sk>",
+    "subject": "Vaša objednávka K-7781 bola rozdelená a odoslaná",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m45.ship-K-7781@kocurik.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka č. K-7781 bola práve odoslaná.\nČasť 1: Packeta Z-BOX Testovce, Školská 2 (ZŠ); časť 2: DPD kuriér na adresu\nPacketa: Z 555 5555 511\nDPD: 01505555555512\n\nObsah zásielky:\n - Stavebnica Kocky 500 ks\n - Bábika s kočíkom\n\n\nĎakujeme za nákup!\nTím Hračky Kocúrik\n\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Hračky Kocúrik</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Objednávka K-7781 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#2b7a3d;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Hračky Kocúrik\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka č. <strong>K-7781</strong> bola práve odoslaná.</p><p>Časť 1: Packeta Z-BOX Testovce, Školská 2 (ZŠ); časť 2: DPD kuriér na adresu</p><p>Packeta: Z 555 5555 511\nDPD: 01505555555512</p><table><tr><td>Stavebnica Kocky 500 ks</td></tr><tr><td>Bábika s kočíkom</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme za nákup! Tím Hračky Kocúrik. </td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m46",
+   "at": "D9 10:08",
+   "about": "p11: Packeta accepted",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola prijatá do prepravy",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m46.Z5555555511-acc@packeta.sk>",
+    "text": "Zásielka Z 555 5555 511\n           \n                    Dobrý deň,\n                    odosielateľ\n                        Hračky Kocúrik\n                    nám práve\n                    odovzdal vašu zásielku,\n                    ktorá vám bude doručená do Z-BOXu.\n                             \n\n                Miesto, kde bude vaša zásielka uložená\n\n\n                            Z-BOX Testovce, Školská 2 (ZŠ)\n\n                                      Školská 2 999 51 Testovce\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n\n        Zaplatené\n                                        Číslo zásielky Z 555 5555 511\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 555 5555 511&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 555 5555 511</p><p>Dobrý deň,</p><p>odosielateľ Hračky Kocúrik nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu.</p>\n\n<p><strong>Miesto, kde bude vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Testovce, Školská 2 (ZŠ)</td></tr><tr><td>Školská 2 999 51 Testovce</td></tr></table>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 555 5555 511</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z5555555511\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m47",
+   "at": "D10 09:44",
+   "about": "p11: Packeta ready, code 117395, until 18.11.2026",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka je pripravená na vyzdvihnutie",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m47.Z5555555511-ready@packeta.sk>",
+    "text": "Zásielka Z 555 5555 511\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa\n                        Hračky Kocúrik\n                    je pre vás\n                    pripravená na vyzdvihnutie v Z-BOXe.\n                             \n          Kód pre otvorenie schránky\n                1 \n\n                1 \n\n                7 \n\n                3 \n\n                9 \n\n                5 \n\n                Miesto, kde je vaša zásielka uložená\n\n\n                            Z-BOX Testovce, Školská 2 (ZŠ)\n\n                                      Školská 2 999 51 Testovce\n                                            Zobraziť na mape\n                            Po–Ne 00:00–23:59\n                            Na vyzdvihnutie najneskôr do 18.11.2026 23:59.\n\n        Zaplatené\n                                        Číslo zásielky Z 555 5555 511\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 555 5555 511&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 555 5555 511</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Hračky Kocúrik je pre vás pripravená na vyzdvihnutie v Z-BOXe.</p>\n<p>Kód pre otvorenie schránky</p><table><tr><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">1</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">1</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">7</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">3</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">9</td><td style=\"border:1px solid #ccc;padding:8px 12px;font-size:22px\">5</td></tr></table>\n<p><strong>Miesto, kde je vaša zásielka uložená</strong></p><table><tr><td>Z-BOX Testovce, Školská 2 (ZŠ)</td></tr><tr><td>Školská 2 999 51 Testovce</td></tr></table><p>Na vyzdvihnutie najneskôr do 18.11.2026 23:59.</p>\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 555 5555 511</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z5555555511\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m49",
+   "trigger": {
+    "afterCollect": "p11",
+    "min": 6
+   },
+   "about": "p11: picked-up confirmation (after sim collect)",
+   "spec": {
+    "from": "Packeta Slovakia <noreply@packeta.sk>",
+    "subject": "Zásielka bola vyzdvihnutá",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m49.Z5555555511-picked@packeta.sk>",
+    "text": "Zásielka Z 555 5555 511\n           \n                    Dobrý deň,\n                    vaša zásielka od odosielateľa Hračky Kocúrik bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybrali Packetu.\n                             \n\n\n\n                                        Číslo zásielky Z 555 5555 511\n                                        Sledovať zásielku\n                            Najčastejšie otázky\n                            Kontaktný formulár\n                Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu.\n                S pozdravom\n                tím Packety\n                Tento e-mail sa generuje automaticky a nedá sa naň odpovedať.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Packeta</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#ba1b02;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Zásielka Z 555 5555 511&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#ba1b02;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Packeta\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p style=\"font-size:12px;color:#999\">Zásielka Z 555 5555 511</p><p>Dobrý deň,</p><p>vaša zásielka od odosielateľa Hračky Kocúrik bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybrali Packetu.</p>\n\n\n<p>Zaplatené</p>\n<p>Číslo zásielky Z 555 5555 511</p><p><a class=\"btn\" href=\"https://tracking.packeta.com/sk/?id=Z5555555511\">Sledovať zásielku</a></p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Ďakujeme, že ste si pre doručenie vašej zásielky vybrali Packetu. Tento e-mail sa generuje automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m51",
+   "at": "D10 07:25",
+   "about": "p12: DPD Predict for day 10",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Vaša zásielka bude doručená dnes",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m51.01505555555512-pred-10@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka bude doručená dnes v čase 10:30 – 11:30. Kuriér Marek vás bude kontaktovať na čísle, ktoré ste uviedli pri objednávke. Kontakt na kuriéra: +421 900 000 101.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša zásielka bude doručená dnes v čase <strong>10:30 – 11:30</strong>. Kuriér Marek vás bude kontaktovať na čísle, ktoré ste uviedli pri objednávke. Kontakt na kuriéra: +421 900 000 101.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Hračky Kocúrik # K-7781</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505555555512</td></tr></table></td></tr>\n\n\n\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m52",
+   "at": "D10 11:17",
+   "about": "p12: delivered to the door",
+   "spec": {
+    "from": "\"DPD\" <no_reply@dpd.sk>",
+    "subject": "Vaša zásielka bola doručená",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m52.01505555555512-del-10@dpd.sk>",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>DPD</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">Vaša zásielka bola úspešne doručená. Ďakujeme, že ste využili služby DPD.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#dc0032;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"DPD\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><table width=\"100%\"><tr><td>Dobrý deň Jana Testová, <img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"> Vaša zásielka bola úspešne doručená. Ďakujeme, že ste využili služby DPD.</td></tr>\n<tr><td><img src=\"https://lib4u.dpd.sk/images/NP/spacer.gif\" width=\"1\" height=\"8\"></td></tr>\n<tr><td><table><tr><td>Odosielateľ: Hračky Kocúrik # K-7781</td><td>&nbsp;&nbsp;</td><td>Číslo balíka: 01505555555512</td></tr></table></td></tr>\n\n\n\n\n<tr><td>Dôležitá informácia k doručeniu: Vašu zásielku môže namiesto vás prevziať aj osoba, ktorej poskytnete PIN kód.</td></tr></table></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">DPD SK s.r.o., Testovská 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte nás na sociálnych sieťach. Stiahnite si aplikáciu myDPD.</td></tr>\n</table></td></tr></table></body></html>",
+    "htmlEncoding": "base64",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m53",
+   "at": "D11 18:30",
+   "about": "review request (not labelled)",
+   "spec": {
+    "from": "Hračky Kocúrik <eshop@kocurik.example.sk>",
+    "subject": "Ako ste boli spokojná s nákupom?",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m53.mail@kocurik.example.sk>",
+    "text": "Ohodnoťte nákup K-7781 a získajte 5 % zľavu.\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Ako ste boli spokojná s nákupom?</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#444;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Hračky Kocúrik\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Ohodnoťte nákup K-7781 a získajte 5 % zľavu.</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": false
+  },
+  {
+   "id": "m54",
+   "at": "D12 17:33",
+   "about": "p13: AlzaBox ready, code 803366, until 16.11.2026 (Alza's own delivery: no carrier, no tracking number)",
+   "spec": {
+    "from": "Alza.sk <objednavky@alza.example.sk>",
+    "subject": "Objednávka 1051500013 je pripravená na vyzdvihnutie v AlzaBoxe",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m54.alza-1051500013-ready@alza.example.sk>",
+    "text": "Dobrý deň,\n\nvaša objednávka 1051500013 je pripravená na vyzdvihnutie v AlzaBox Testovce – Tesco.\nKód pre vyzdvihnutie: 803366\nVyzdvihnite si ju do 16.11.2026.\nObsah: Adventný kalendár 2 ks\n\nAlza.sk\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Objednávka 1051500013 je pripravená na vyzdvihnutie v AlzaBoxe</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#1a73e8;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#1a73e8;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Alza.sk\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>vaša objednávka 1051500013 je pripravená na vyzdvihnutie v AlzaBox Testovce – Tesco.</p><p>Kód pre vyzdvihnutie: 803366</p><p>Vyzdvihnite si ju do 16.11.2026.</p><p>Obsah: Adventný kalendár 2 ks</p><p>Alza.sk</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": true
+  },
+  {
+   "id": "m56",
+   "trigger": {
+    "afterCollect": "p13",
+    "min": 2
+   },
+   "about": "p13: AlzaBox collected",
+   "spec": {
+    "from": "Alza.sk <objednavky@alza.example.sk>",
+    "subject": "Objednávka 1051500013 bola vyzdvihnutá",
+    "to": "=?utf-8?Q?Petra_Smy=C5=A1len=C3=A1?= <petra.smyslena@example.sk>",
+    "messageId": "<petra.m56.alza-1051500013-done@alza.example.sk>",
+    "text": "Dobrý deň,\n\nďakujeme, objednávku 1051500013 ste si vyzdvihli.\nOhodnoťte svoj nákup a získajte AlzaKredit.\n\nAlza.sk\n",
+    "html": "<!DOCTYPE html><html lang=\"sk\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\n<title>Objednávka 1051500013 bola vyzdvihnutá</title>\n<style>body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}td{font-size:14px;line-height:20px}.btn{background:#1a73e8;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only screen and (max-width:600px){.w{width:100%!important}}</style>\n</head><body>\n<span style=\"display:none;max-height:0;overflow:hidden\">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\n<table class=\"w\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\">\n<tr><td style=\"background:#1a73e8;padding:16px;color:#fff;font-size:20px\"><img src=\"https://img.example.com/logo.png\" alt=\"Alza.sk\" width=\"120\"></td></tr>\n<tr><td style=\"padding:24px\"><p>Dobrý deň,</p><p>ďakujeme, objednávku 1051500013 ste si vyzdvihli.</p><p>Ohodnoťte svoj nákup a získajte AlzaKredit.</p><p>Alza.sk</p></td></tr>\n<tr><td style=\"padding:16px;color:#888;font-size:11px\">Tento e-mail bol vygenerovaný automaticky.</td></tr>\n</table></td></tr></table></body></html>",
+    "deliveredTo": "petra.smyslena@example.sk"
+   },
+   "labelled": false
+  }
+ ]
+}

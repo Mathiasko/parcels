@@ -1,0 +1,14 @@
+Delivered-To: tomas.bezpecny@example.sk
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fakec7;
+        Wed, 4 Nov 2026 09:00:04 +0100
+Return-Path: <noreply@github.example.com>
+Date: Wed, 4 Nov 2026 09:00:04 +0100
+From: GitHub <noreply@github.example.com>
+To: =?utf-8?Q?Tom=C3=A1=C5=A1_Bezpe=C4=8Dn=C3=BD?= <tomas.bezpecny@example.sk>
+Subject: [fake-org/infra] Dependabot alert: 3 vulnerable dependencies
+Message-ID: <tomas.m10.mail@github.example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+3 new alerts in fake-org/infra.

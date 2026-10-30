@@ -13,3 +13,7 @@ spike/
 test/fixtures/fake-mail/shots/
 test/fixtures/fake-mail/html/
 test/fixtures/fake-mail/out/
+
+# persona simulator: screenshots from runs (the reports in results/*.md are kept)
+scripts/dev/persona-sim/results/*-shots/
+scripts/dev/persona-sim/dry-run/*.png

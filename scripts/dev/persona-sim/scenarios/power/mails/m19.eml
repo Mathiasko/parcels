@@ -1,0 +1,64 @@
+Delivered-To: peter.mocny@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fakeax;
+        Wed, 4 Nov 2026 10:00:04 +0100
+Return-Path: <objednavky@elektrosvet.example.sk>
+Date: Wed, 4 Nov 2026 10:00:04 +0100
+From: Elektro Svet <objednavky@elektrosvet.example.sk>
+To: =?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>
+Subject: =?utf-8?Q?Objedn=C3=A1vka_=C4=8D._20?=
+ =?utf-8?Q?26110777_bola_odos?=
+ =?utf-8?Q?lan=C3=A1?=
+Message-ID: <power.m19.ship-2026110777@elektrosvet.example.sk>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_awxxxx.fake"
+
+------=_Part_alt_awxxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Dobr=C3=BD de=C5=88,
+
+va=C5=A1a objedn=C3=A1vka =C4=8D. 2026110777 bola pr=C3=A1ve odoslan=C3=A1.
+Prepravca: GLS (kuri=C3=A9r na adresu)
+=C4=8C=C3=ADslo bal=C3=ADka: 090444444405
+
+Obsah z=C3=A1sielky:
+ - Multimeter
+
+
+=C4=8Eakujeme za n=C3=A1kup!
+T=C3=ADm Elektro Svet
+
+
+------=_Part_alt_awxxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>Elektro Svet</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color=
+:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">Objedn=C3=A1vka =
+2026110777 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp=
+;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#2b7a3d;padding:16px;color:#fff;font-size:20px"=
+><img src=3D"https://img.example.com/logo.png" alt=3D"Elektro Svet" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Dobr=C3=BD de=C5=88,</p><p>va=C5=A1a =
+objedn=C3=A1vka =C4=8D. <strong>2026110777</strong> bola pr=C3=A1ve =
+odoslan=C3=A1.</p><p>Prepravca: GLS (kuri=C3=A9r na =
+adresu)</p><p>=C4=8C=C3=ADslo bal=C3=ADka: 090444444405</p><table><tr><td>M=
+ultimeter</td></tr></table></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">=C4=8Eakujeme za =
+n=C3=A1kup! T=C3=ADm Elektro Svet. </td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_awxxxx.fake--

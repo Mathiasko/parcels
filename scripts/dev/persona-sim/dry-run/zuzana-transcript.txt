@@ -1,0 +1,1677 @@
+$ sim post app:welcome postcode=999 31
+The first-run page accepted it. The window now shows the dashboard at /settings (see: sim text /settings).
+
+$ sim post /settings imapUser=zuzana.fiktivna@example.com imapPass=abcd efgh ijkl mnop imapMailbox=parcels defaultPostalCode=99931 mapPreview=true pickupCalendar= imapHost=imap.gmail.com imapPort=993
+→ HTTP 303, the browser goes to /settings?saved=1&test=1
+
+PAGE /settings?saved=1&test=1  (HTTP 200)
+
+[Parcels → /] [In flight → /] [History → /history] [Attention → /attention] [Health → /health] [Settings → /settings] [Add parcel → /add]
+# Settings
+Connect your Gmail so parcels are added from your shipping emails, and set the postcode some carriers need. A save takes effect at once on these pages; the hourly check in the background picks it up on its next run.
+Saved.
+Connected
+zuzana.fiktivna@example.com — the label parcels has 6 messages.
+Signed in, the label is visible, and its emails can be read. Everything is in place: new shipping emails become parcels at the next hourly check.
+{form 1}
+## Gmail
+The app reads the emails Gmail files under one label, signing in with an App Password rather than your Google password. To stop reading mail, clear these fields and the mail server under Advanced.
+▸ How to connect Gmail — three steps, about five minutes   (collapsed; a click on it shows:)
+    • Label your shipping emails.
+    • Download the filter: [gmail-filter.xml → /gmail-filter.xml] . It goes to your Downloads folder.
+    • Open [Gmail’s filter settings → https://mail.google.com/mail/u/0/#settings/filters] (in Gmail: the gear icon → See all settings → Filters and Blocked Addresses). Signed in to more than one Google account? Check the address at the top right is the one you will enter below.
+    • At the bottom of the page, click Import filters.
+    • Click Choose File, pick gmail-filter.xml in Downloads, then click Open file.
+    • Gmail shows the filter it found. Tick Apply new filters to existing email — without it only mail that arrives from now on is labelled — then click Create filters.
+    • Open [Gmail’s label settings → https://mail.google.com/mail/u/0/#settings/labels] , find parcels under Labels, and make sure Show in IMAP is ticked.
+    • Make an App Password, which lets this app read that label without your Google password.
+    • [2-Step Verification → https://myaccount.google.com/signinoptions/twosv] has to be on. If it is off, turn it on first.
+    • Open [App passwords → https://myaccount.google.com/apppasswords] , type a name such as Parcels, and click Create.
+    • Google shows a 16-letter password once. Copy it.
+    • Paste it here. Enter your Gmail address and the App Password below and click Save settings. Saving tests the connection, and the answer appears at the top of this page.
+Gmail address [email field: "zuzana.fiktivna@example.com" (placeholder "you@gmail.com")]
+App Password (set) [password field] Saved, and never shown again. Leave this blank to keep it; type a new one to replace it.
+Gmail label [text field: "parcels"] The label your parcel emails are filed under. In Gmail's label settings it must have "Show in IMAP" ticked. A label inside another is written parent/child.
+## Parcels
+Default postcode [text field: "99931"] GLS and DPD need one to answer; a parcel can have its own.
+Pickup map [choice: On ▾] Off removes the map and stops looking addresses up online.
+Calendar for pickups [choice: The first one (now “Domov”) ▾] Where “Add to Calendar” puts a pickup. Calendar can sync it to your phone.
+▸ Advanced   (collapsed; a click on it shows:)
+    Nothing here normally needs changing.
+    Mail server [text field: "imap.gmail.com"]
+    Port [text field: "993"]
+    Parcels keeps its settings and data in Application Support/Parcels.
+    [button: Show in Finder]
+[button: Save settings]
+## Test the Gmail connection
+Signs in as zuzana.fiktivna@example.com and counts the emails under the label parcels, without changing or marking anything. It uses the settings as they are saved, not unsaved changes above.
+{form 2} [button: Test again]
+{form 3}
+
+LINKS (open with: sim text <path>)
+  Parcels → /
+  In flight → /
+  History → /history
+  Attention → /attention
+  Health → /health
+  Settings → /settings
+  Add parcel → /add
+  gmail-filter.xml → /gmail-filter.xml
+  Gmail’s filter settings → https://mail.google.com/mail/u/0/#settings/filters
+  Gmail’s label settings → https://mail.google.com/mail/u/0/#settings/labels
+  2-Step Verification → https://myaccount.google.com/signinoptions/twosv
+  App passwords → https://myaccount.google.com/apppasswords
+
+FORMS (submit with: sim post <action> name=value ...)
+  [form 1] POST /settings   (under "Settings")
+     field imapUser [email] = "zuzana.fiktivna@example.com"  label "Gmail address"
+     field imapPass [password] = ""  label "App Password (set)"
+     field imapMailbox [text] = "parcels"  label "Gmail label"
+     field defaultPostalCode [text, required] = "99931"  label "Default postcode"
+     field mapPreview [select] = "true"  label "Pickup map" options: true (On) | false (Off)
+     field pickupCalendar [select] = ""  label "Calendar for pickups" options:  (The first one (now “Domov”)) | Domov | Práca
+     field imapHost [text] = "imap.gmail.com"  label "Mail server"
+     field imapPort [text] = "993"  label "Port"
+     button "Save settings"
+     → as is, "Save settings": sim post /settings imapUser=zuzana.fiktivna@example.com imapPass='' imapMailbox=parcels defaultPostalCode=99931 mapPreview=true pickupCalendar='' imapHost=imap.gmail.com imapPort=993
+  [form 2] POST /settings/test#test   (under "Test the Gmail connection")
+     button "Test again"
+     → as is, "Test again": sim post /settings/test
+  [form 3] POST /app/reveal-data   (under "Test the Gmail connection")
+     button "Show in Finder"
+     → as is, "Show in Finder": sim post /app/reveal-data
+
+$ sim post /settings/test
+→ HTTP 200
+
+PAGE /settings/test  (HTTP 200)
+
+[Parcels → /] [In flight → /] [History → /history] [Attention → /attention] [Health → /health] [Settings → /settings] [Add parcel → /add]
+# Settings
+Connect your Gmail so parcels are added from your shipping emails, and set the postcode some carriers need. A save takes effect at once on these pages; the hourly check in the background picks it up on its next run.
+{form 1}
+## Gmail
+The app reads the emails Gmail files under one label, signing in with an App Password rather than your Google password. To stop reading mail, clear these fields and the mail server under Advanced.
+▸ How to connect Gmail — three steps, about five minutes   (collapsed; a click on it shows:)
+    • Label your shipping emails.
+    • Download the filter: [gmail-filter.xml → /gmail-filter.xml] . It goes to your Downloads folder.
+    • Open [Gmail’s filter settings → https://mail.google.com/mail/u/0/#settings/filters] (in Gmail: the gear icon → See all settings → Filters and Blocked Addresses). Signed in to more than one Google account? Check the address at the top right is the one you will enter below.
+    • At the bottom of the page, click Import filters.
+    • Click Choose File, pick gmail-filter.xml in Downloads, then click Open file.
+    • Gmail shows the filter it found. Tick Apply new filters to existing email — without it only mail that arrives from now on is labelled — then click Create filters.
+    • Open [Gmail’s label settings → https://mail.google.com/mail/u/0/#settings/labels] , find parcels under Labels, and make sure Show in IMAP is ticked.
+    • Make an App Password, which lets this app read that label without your Google password.
+    • [2-Step Verification → https://myaccount.google.com/signinoptions/twosv] has to be on. If it is off, turn it on first.
+    • Open [App passwords → https://myaccount.google.com/apppasswords] , type a name such as Parcels, and click Create.
+    • Google shows a 16-letter password once. Copy it.
+    • Paste it here. Enter your Gmail address and the App Password below and click Save settings. Saving tests the connection, and the answer appears at the top of this page.
+Gmail address [email field: "zuzana.fiktivna@example.com" (placeholder "you@gmail.com")]
+App Password (set) [password field] Saved, and never shown again. Leave this blank to keep it; type a new one to replace it.
+Gmail label [text field: "parcels"] The label your parcel emails are filed under. In Gmail's label settings it must have "Show in IMAP" ticked. A label inside another is written parent/child.
+## Parcels
+Default postcode [text field: "99931"] GLS and DPD need one to answer; a parcel can have its own.
+Pickup map [choice: On ▾] Off removes the map and stops looking addresses up online.
+Calendar for pickups [choice: The first one (now “Domov”) ▾] Where “Add to Calendar” puts a pickup. Calendar can sync it to your phone.
+▸ Advanced   (collapsed; a click on it shows:)
+    Nothing here normally needs changing.
+    Mail server [text field: "imap.gmail.com"]
+    Port [text field: "993"]
+    Parcels keeps its settings and data in Application Support/Parcels.
+    [button: Show in Finder]
+[button: Save settings]
+## Test the Gmail connection
+Connected
+zuzana.fiktivna@example.com — the label parcels has 6 messages.
+Signed in, the label is visible, and its emails can be read. Everything is in place: new shipping emails become parcels at the next hourly check.
+Signs in as zuzana.fiktivna@example.com and counts the emails under the label parcels, without changing or marking anything. It uses the settings as they are saved, not unsaved changes above.
+{form 2} [button: Test again]
+{form 3}
+
+LINKS (open with: sim text <path>)
+  Parcels → /
+  In flight → /
+  History → /history
+  Attention → /attention
+  Health → /health
+  Settings → /settings
+  Add parcel → /add
+  gmail-filter.xml → /gmail-filter.xml
+  Gmail’s filter settings → https://mail.google.com/mail/u/0/#settings/filters
+  Gmail’s label settings → https://mail.google.com/mail/u/0/#settings/labels
+  2-Step Verification → https://myaccount.google.com/signinoptions/twosv
+  App passwords → https://myaccount.google.com/apppasswords
+
+FORMS (submit with: sim post <action> name=value ...)
+  [form 1] POST /settings   (under "Settings")
+     field imapUser [email] = "zuzana.fiktivna@example.com"  label "Gmail address"
+     field imapPass [password] = ""  label "App Password (set)"
+     field imapMailbox [text] = "parcels"  label "Gmail label"
+     field defaultPostalCode [text, required] = "99931"  label "Default postcode"
+     field mapPreview [select] = "true"  label "Pickup map" options: true (On) | false (Off)
+     field pickupCalendar [select] = ""  label "Calendar for pickups" options:  (The first one (now “Domov”)) | Domov | Práca
+     field imapHost [text] = "imap.gmail.com"  label "Mail server"
+     field imapPort [text] = "993"  label "Port"
+     button "Save settings"
+     → as is, "Save settings": sim post /settings imapUser=zuzana.fiktivna@example.com imapPass='' imapMailbox=parcels defaultPostalCode=99931 mapPreview=true pickupCalendar='' imapHost=imap.gmail.com imapPort=993
+  [form 2] POST /settings/test#test   (under "Test the Gmail connection")
+     button "Test again"
+     → as is, "Test again": sim post /settings/test
+  [form 3] POST /app/reveal-data   (under "Test the Gmail connection")
+     button "Show in Finder"
+     → as is, "Show in Finder": sim post /app/reveal-data
+
+$ sim day
+══ Day 0 · Sunday 1 November 2026 ══
+20:30  Setup finished (simulated): Gmail is connected with an App Password, the filter is imported and the "parcels" label is visible over IMAP. Parcels now reads that label.
+Menu-bar icon (parcels ready to collect): evening 21:00 → 0
+Notifications (3):
+  20:30  [Parcels] In transit — AliExpress (Cainiao)
+         Zásielka je na ceste.
+         (clicking it opens /parcel/1)
+  20:30  [Parcels] Registered — SHEIN
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/2)
+  20:30  [Parcels] In transit — AliExpress (Cainiao)
+         Zásielka je na ceste.
+         (clicking it opens /parcel/3)
+New mail in Gmail: none
+
+══ Day 1 · Monday 2 November 2026 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 0 · midday 13:00 → 0 · evening 21:00 → 0
+Notifications (2):
+  07:00  [Parcels] In transit — SHEIN
+         Zásielka je na ceste.
+         (clicking it opens /parcel/2)
+  18:00  [Parcels] Registered — Temu
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/4)
+New mail in Gmail (4):
+  #8 09:05  Temu <orders@temu.example.com>   [label: parcels]
+      📦 Your Temu order has shipped
+      Hi Zuzana, Good news! Your order PO-211-33000003 has been shipped. Carrier: Packeta Tracking number: Z3333333303 Estimat…
+  #9 12:30  Temu <orders@temu.example.com>
+      🎁 Zuzana, your free gift is waiting – 3 days left!
+      Lightning deals up to -90 % Your free gift is waiting in the app. Unsubscribe
+  #10 18:08  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 303 Dobrý deň, odosielateľ TEMU nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu.…
+  #11 21:30  Temu <orders@temu.example.com>   [label: parcels]
+      📦 Your Temu order has shipped
+      Hi Zuzana, Good news! Your order PO-211-33000005 has been shipped. Carrier: GLS Tracking number: 90333333305 Estimated d…
+
+
+$ sim day
+══ Day 2 · Tuesday 3 November 2026 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 0 · midday 13:00 → 2 · evening 21:00 → 2
+Notifications (8):
+  07:00  [Parcels] In transit — Temu
+         Zásielka je na ceste.
+         (clicking it opens /parcel/4)
+  08:00  [Parcels] Registered — Temu
+         Údaje o balíku boli zaregistrované
+         (clicking it opens /parcel/5)
+  10:00  [Parcels] Ready for pickup — SHEIN
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Tue 10 Nov
+         (clicking it opens /parcel/2)
+  10:00  [Parcels] Ready for pickup — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Tue 10 Nov
+         (clicking it opens /parcel/3)
+  15:30  [Parcels] Still waiting for you · day 1 — SHEIN
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Tue 10 Nov
+         (clicking it opens /parcel/2)
+  15:30  [Parcels] Still waiting for you · day 1 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Tue 10 Nov
+         (clicking it opens /parcel/3)
+  19:00  [Parcels] In transit — Temu
+         Balík je na ceste
+         (clicking it opens /parcel/5)
+  19:00  [Parcels] Registered — SHEIN
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/6)
+New mail in Gmail (7):
+  #12 07:15  Temu <orders@temu.example.com>   [label: parcels]
+      📦 Zásielka zadarmo! Doprava zdarma na všetko
+      Doprava zadarmo na všetky objednávky tento týždeň! Kupón: TEMU-FREE-SHIP Platí do nedele.
+  #13 08:20  GLS Slovakia <noreply@gls-slovakia.sk>   [label: parcels]
+      Balík 90333333305 sme prevzali od odosielateľa
+      Váš balík sme prevzali od odosielateľa a je na ceste k vám. Predpokladaný dátum doručenia vám oznámime v ďalšom e-maile.…
+  #14 08:54  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 301 Dobrý deň, vaša zásielka od odosielateľa AliExpress (Cainiao) je pre vás pripravená na vyzdvihnu…
+  #15 09:39  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 302 Dobrý deň, vaša zásielka od odosielateľa SHEIN je pre vás pripravená na vyzdvihnutie v Z-BOXe. K…
+  #16 11:00  SHEIN <noreply@shein.example.com>   [label: parcels]
+      Your SHEIN order GSH33000006 has been shipped!
+      Hi ZUZANA, Good news! Your order GSH33000006 has been shipped. Carrier: Packeta Tracking number: Z3333333306 Estimated d…
+  #17 18:40  Packeta <info@packeta-sk.example.com>   [label: parcels]
+      Vaša zásielka čaká – uhraďte poplatok 1,99 €
+      Dobrý deň, vaša zásielka Z 333 3333 399 čaká v depe. Pre doručenie uhraďte poplatok 1,99 € na https://packeta-sk.example…
+  #18 19:08  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 306 Dobrý deň, odosielateľ SHEIN nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu…
+
+
+$ sim day
+══ Day 3 · Wednesday 4 November 2026 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 2 · midday 13:00 → 3 · evening 21:00 → 3
+Notifications (9):
+  07:00  [Parcels] Out for delivery — Temu
+         Balík je na doručení
+         (clicking it opens /parcel/5)
+  07:00  [Parcels] In transit — SHEIN
+         Zásielka je na ceste.
+         (clicking it opens /parcel/6)
+  08:00  [Parcels] Still waiting for you · day 2 — SHEIN
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Tue 10 Nov
+         (clicking it opens /parcel/2)
+  08:00  [Parcels] Still waiting for you · day 2 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Tue 10 Nov
+         (clicking it opens /parcel/3)
+  12:00  [Parcels] Delivered — Temu
+         Balík bol doručený
+         (clicking it opens /parcel/5)
+  13:00  [Parcels] Ready for pickup — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Wed 11 Nov
+         (clicking it opens /parcel/1)
+  15:30  [Parcels] Still waiting for you · day 1 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Wed 11 Nov
+         (clicking it opens /parcel/1)
+  15:30  [Parcels] Still waiting for you · day 2 — SHEIN
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Tue 10 Nov
+         (clicking it opens /parcel/2)
+  15:30  [Parcels] Still waiting for you · day 2 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Tue 10 Nov
+         (clicking it opens /parcel/3)
+New mail in Gmail (5):
+  #19 04:20  AliExpress <transaction@notice.aliexpress.example.com>   [label: parcels]
+      Your order 8193333300000009 has been shipped
+      Hi Zuzana, Good news! Your order 8193333300000009 has been shipped. Carrier: Cainiao Super Economy Global Tracking numbe…
+  #20 07:10  GLS Slovakia <noreply@gls-slovakia.sk>   [label: parcels]
+      Váš balík 90333333305 je na ceste
+      Váš balík je na ceste. Doručíme ho dnes medzi 10:00 a 13:00. Ak vám termín nevyhovuje, môžete ho zmeniť cez FlexDelivery…
+  #21 08:00  Móda Fiktívna <obchod@modafiktivna.example.sk>
+      Potvrdenie objednávky č. 2026-3307
+      Dobrý deň, ďakujeme za objednávku č. 2026-3307. Doprava: Packeta – výdajné miesto Trafika Pod Lipou Platba: na dobierku …
+  #22 11:29  GLS Slovakia <noreply@gls-slovakia.sk>   [label: parcels]
+      Balík 90333333305 bol doručený
+      Váš balík bol úspešne doručený. Ďakujeme, že ste využili služby GLS.͏‌ ͏‌ ͏‌ logo GLS [https://img.example.com/logo.png]…
+  #23 12:44  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 323 Dobrý deň, vaša zásielka od odosielateľa AliExpress (Cainiao) je pre vás pripravená na vyzdvihnu…
+
+
+$ sim day --until 07:40
+══ Day 4 · Thursday 5 November 2026 · until 07:40 ══
+Menu-bar icon (parcels ready to collect): (no reading in this stretch) · now 07:40 → 4
+Notifications (1):
+  07:00  [Parcels] Ready for pickup — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Thu 12 Nov
+         (clicking it opens /parcel/4)
+New mail in Gmail (1):
+  #24 06:59  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 303 Dobrý deň, vaša zásielka od odosielateľa TEMU je pre vás pripravená na vyzdvihnutie v Z-BOXe. Kó…
+
+
+$ sim text /
+PAGE /  (HTTP 200)
+
+[Parcels → /] [In flight → /] [History → /history] [Attention → /attention] [Health → /health] [Settings → /settings] [Add parcel → /add]
+# In flight
+{form 1} [button: Refresh now]
+5 in flight, 4 ready for pickup.
+## Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica
+Ready for pickup
+•
+### SHEIN
+Packeta · Z3333333302
+Collect by Tue 10 Nov · 5 days left
+▸ Add to Calendar   (collapsed; a click on it shows:)
+    {form 2}
+    Day
+    [ ] Today
+    [ ] Tomorrow
+    [ ] Sat 7 Nov
+    [ ] Sun 8 Nov
+    [ ] Mon 9 Nov
+    [x] Tue 10 Nov — last day
+    Time
+    [x] 9:00
+    [ ] 13:00
+    [ ] 17:00
+    [ ] Other
+    [button: Add to Calendar]
+Open the box with 530912
+{form 3} [button: Mark as collected]
+•
+### AliExpress (Cainiao)
+Packeta · Z3333333301
+Collect by Tue 10 Nov · 5 days left
+▸ Add to Calendar   (collapsed; a click on it shows:)
+    {form 4}
+    Day
+    [ ] Today
+    [ ] Tomorrow
+    [ ] Sat 7 Nov
+    [ ] Sun 8 Nov
+    [ ] Mon 9 Nov
+    [x] Tue 10 Nov — last day
+    Time
+    [x] 9:00
+    [ ] 13:00
+    [ ] 17:00
+    [ ] Other
+    [button: Add to Calendar]
+Open the box with 204417
+{form 5} [button: Mark as collected]
+•
+### Temu
+Packeta · Z3333333303
+Collect by Thu 12 Nov · 7 days left
+▸ Add to Calendar   (collapsed; a click on it shows:)
+    {form 6}
+    Day
+    [ ] Today
+    [ ] Tomorrow
+    [ ] Sat 7 Nov
+    [ ] Sun 8 Nov
+    [ ] Mon 9 Nov
+    [ ] Tue 10 Nov
+    [ ] Wed 11 Nov
+    [x] Thu 12 Nov — last day
+    Time
+    [x] 9:00
+    [ ] 13:00
+    [ ] 17:00
+    [ ] Other
+    [button: Add to Calendar]
+Open the box with 118274
+{form 7} [button: Mark as collected]
+[Open in Apple Maps → https://maps.apple.com/?q=Lesn%C3%A1%204%2C%2099931%20Fikt%C3%ADvna%20Bystrica]
+## Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica
+Ready for pickup
+•
+### AliExpress (Cainiao)
+Packeta · Z3333333323
+Collect by Wed 11 Nov · 6 days left
+▸ Add to Calendar   (collapsed; a click on it shows:)
+    {form 8}
+    Day
+    [ ] Today
+    [ ] Tomorrow
+    [ ] Sat 7 Nov
+    [ ] Sun 8 Nov
+    [ ] Mon 9 Nov
+    [ ] Tue 10 Nov
+    [x] Wed 11 Nov — last day
+    Time
+    [x] 9:00
+    [ ] 13:00
+    [ ] 17:00
+    [ ] Other
+    [button: Add to Calendar]
+Open the box with 771530
+{form 9} [button: Mark as collected]
+[Open in Apple Maps → https://maps.apple.com/?q=N%C3%A1mestie%20SNP%201%2C%2099931%20Fikt%C3%ADvna%20Bystrica]
+## SHEIN
+In transit
+• Packeta · Z3333333306
+Zásielka je na ceste.
+Since Wed 4 Nov, 07:00 · 1 day
+
+LINKS (open with: sim text <path>)
+  Parcels → /
+  In flight → /
+  History → /history
+  Attention → /attention
+  Health → /health
+  Settings → /settings
+  Add parcel → /add
+  Open in Apple Maps → https://maps.apple.com/?q=Lesn%C3%A1%204%2C%2099931%20Fikt%C3%ADvna%20Bystrica
+  Open in Apple Maps → https://maps.apple.com/?q=N%C3%A1mestie%20SNP%201%2C%2099931%20Fikt%C3%ADvna%20Bystrica
+
+FORMS (submit with: sim post <action> name=value ...)
+  [form 1] POST /refresh   (under "In flight")
+     button "Refresh now"
+     → as is, "Refresh now": sim post /refresh
+  [form 2] POST /parcel/2/calendar#cal-2   (under "SHEIN")
+     field back [hidden] = "home"
+     field day [radio] = "2026-11-05"  label "Today" (unchecked)
+     field day [radio] = "2026-11-06"  label "Tomorrow" (unchecked)
+     field day [radio] = "2026-11-07"  label "Sat 7 Nov" (unchecked)
+     field day [radio] = "2026-11-08"  label "Sun 8 Nov" (unchecked)
+     field day [radio] = "2026-11-09"  label "Mon 9 Nov" (unchecked)
+     field day [radio] = "2026-11-10"  label "Tue 10 Nov — last day" (checked)
+     field time [radio] = "09:00"  label "9:00" (checked)
+     field time [radio] = "13:00"  label "13:00" (unchecked)
+     field time [radio] = "17:00"  label "17:00" (unchecked)
+     field time [radio] = "other"  label "Other" (unchecked)
+     button "Add to Calendar"
+     → as is, "Add to Calendar": sim post /parcel/2/calendar back=home day=2026-11-10 time=09:00
+  [form 3] POST /parcel/2/collected   (under "SHEIN")
+     field back [hidden] = "home"
+     button "Mark as collected"
+     → as is, "Mark as collected": sim post /parcel/2/collected back=home
+  [form 4] POST /parcel/3/calendar#cal-3   (under "AliExpress (Cainiao)")
+     field back [hidden] = "home"
+     field day [radio] = "2026-11-05"  label "Today" (unchecked)
+     field day [radio] = "2026-11-06"  label "Tomorrow" (unchecked)
+     field day [radio] = "2026-11-07"  label "Sat 7 Nov" (unchecked)
+     field day [radio] = "2026-11-08"  label "Sun 8 Nov" (unchecked)
+     field day [radio] = "2026-11-09"  label "Mon 9 Nov" (unchecked)
+     field day [radio] = "2026-11-10"  label "Tue 10 Nov — last day" (checked)
+     field time [radio] = "09:00"  label "9:00" (checked)
+     field time [radio] = "13:00"  label "13:00" (unchecked)
+     field time [radio] = "17:00"  label "17:00" (unchecked)
+     field time [radio] = "other"  label "Other" (unchecked)
+     button "Add to Calendar"
+     → as is, "Add to Calendar": sim post /parcel/3/calendar back=home day=2026-11-10 time=09:00
+  [form 5] POST /parcel/3/collected   (under "AliExpress (Cainiao)")
+     field back [hidden] = "home"
+     button "Mark as collected"
+     → as is, "Mark as collected": sim post /parcel/3/collected back=home
+  [form 6] POST /parcel/4/calendar#cal-4   (under "Temu")
+     field back [hidden] = "home"
+     field day [radio] = "2026-11-05"  label "Today" (unchecked)
+     field day [radio] = "2026-11-06"  label "Tomorrow" (unchecked)
+     field day [radio] = "2026-11-07"  label "Sat 7 Nov" (unchecked)
+     field day [radio] = "2026-11-08"  label "Sun 8 Nov" (unchecked)
+     field day [radio] = "2026-11-09"  label "Mon 9 Nov" (unchecked)
+     field day [radio] = "2026-11-10"  label "Tue 10 Nov" (unchecked)
+     field day [radio] = "2026-11-11"  label "Wed 11 Nov" (unchecked)
+     field day [radio] = "2026-11-12"  label "Thu 12 Nov — last day" (checked)
+     field time [radio] = "09:00"  label "9:00" (checked)
+     field time [radio] = "13:00"  label "13:00" (unchecked)
+     field time [radio] = "17:00"  label "17:00" (unchecked)
+     field time [radio] = "other"  label "Other" (unchecked)
+     button "Add to Calendar"
+     → as is, "Add to Calendar": sim post /parcel/4/calendar back=home day=2026-11-12 time=09:00
+  [form 7] POST /parcel/4/collected   (under "Temu")
+     field back [hidden] = "home"
+     button "Mark as collected"
+     → as is, "Mark as collected": sim post /parcel/4/collected back=home
+  [form 8] POST /parcel/1/calendar#cal-1   (under "AliExpress (Cainiao)")
+     field back [hidden] = "home"
+     field day [radio] = "2026-11-05"  label "Today" (unchecked)
+     field day [radio] = "2026-11-06"  label "Tomorrow" (unchecked)
+     field day [radio] = "2026-11-07"  label "Sat 7 Nov" (unchecked)
+     field day [radio] = "2026-11-08"  label "Sun 8 Nov" (unchecked)
+     field day [radio] = "2026-11-09"  label "Mon 9 Nov" (unchecked)
+     field day [radio] = "2026-11-10"  label "Tue 10 Nov" (unchecked)
+     field day [radio] = "2026-11-11"  label "Wed 11 Nov — last day" (checked)
+     field time [radio] = "09:00"  label "9:00" (checked)
+     field time [radio] = "13:00"  label "13:00" (unchecked)
+     field time [radio] = "17:00"  label "17:00" (unchecked)
+     field time [radio] = "other"  label "Other" (unchecked)
+     button "Add to Calendar"
+     → as is, "Add to Calendar": sim post /parcel/1/calendar back=home day=2026-11-11 time=09:00
+  [form 9] POST /parcel/1/collected   (under "AliExpress (Cainiao)")
+     field back [hidden] = "home"
+     button "Mark as collected"
+     → as is, "Mark as collected": sim post /parcel/1/collected back=home
+
+$ sim collect 530912
+07:40  Z-BOX Fiktívna Bystrica, Lesná 4 (Billa): you enter 530912, a compartment opens - parcel collected.
+
+$ sim collect Z3333333301
+07:40  Z-BOX Fiktívna Bystrica, Lesná 4 (Billa): the box asks for the opening code; the parcel number alone does not open it.
+
+$ sim collect 204417
+07:40  Z-BOX Fiktívna Bystrica, Lesná 4 (Billa): you enter 204417, a compartment opens - parcel collected.
+
+$ sim collect 118274
+07:40  Z-BOX Fiktívna Bystrica, Lesná 4 (Billa): you enter 118274, a compartment opens - parcel collected.
+
+$ sim day
+══ Day 4 · Thursday 5 November 2026 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 1 · midday 13:00 → 1 · evening 21:00 → 1
+Notifications (7):
+  08:00  [Parcels] Still waiting for you · day 2 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Wed 11 Nov
+         (clicking it opens /parcel/1)
+  08:00  [Parcels] Delivered — SHEIN
+         Zásielka bola vyzdvihnutá.
+         (clicking it opens /parcel/2)
+  08:00  [Parcels] Delivered — AliExpress (Cainiao)
+         Zásielka bola vyzdvihnutá.
+         (clicking it opens /parcel/3)
+  08:00  [Parcels] Delivered — Temu
+         Zásielka bola vyzdvihnutá.
+         (clicking it opens /parcel/4)
+  15:30  [Parcels] Still waiting for you · day 2 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Wed 11 Nov
+         (clicking it opens /parcel/1)
+  16:00  [Parcels] Registered — Móda Fiktívna
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/8)
+  20:00  [Parcels] Registered — Temu
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/7)
+New mail in Gmail (7):
+  #25 07:46  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola vyzdvihnutá
+      Zásielka Z 333 3333 302 Dobrý deň, vaša zásielka od odosielateľa SHEIN bola úspešne vyzdvihnutá. Ďakujeme, že ste si vyb…
+  #26 07:46  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola vyzdvihnutá
+      Zásielka Z 333 3333 301 Dobrý deň, vaša zásielka od odosielateľa AliExpress (Cainiao) bola úspešne vyzdvihnutá. Ďakujeme…
+  #27 07:46  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola vyzdvihnutá
+      Zásielka Z 333 3333 303 Dobrý deň, vaša zásielka od odosielateľa TEMU bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybr…
+  #28 10:10  Temu <orders@temu.example.com>   [label: parcels]
+      📦 Your Temu order has shipped
+      Hi Zuzana, Good news! Your order PO-211-33000008 has been shipped. Carrier: Packeta Tracking number: Z 333 3333 308 Esti…
+  #29 14:00  Móda Fiktívna <obchod@modafiktivna.example.sk>   [label: parcels]
+      Objednávka č. 2026-3307 bola odoslaná
+      Dobrý deň, vaša objednávka č. 2026-3307 bola práve odoslaná. Spôsob doručenia: Packeta – výdajné miesto Trafika Pod Lipo…
+  #30 20:08  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 308 Dobrý deň, odosielateľ TEMU nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu.…
+  #31 22:00  Temu <orders@temu.example.com>   [label: parcels]
+      📦 Your Temu order has shipped
+      Hi Zuzana, Good news! Your order PO-211-33000024 has been shipped. Carrier: DPD Tracking number: 01505333333324 Estimate…
+
+
+$ sim text /attention
+PAGE /attention  (HTTP 200)
+
+[Parcels → /] [In flight → /] [History → /history] [Attention → /attention] [Health → /health] [Settings → /settings] [Add parcel → /add]
+# Attention
+## Emails that did not yield a parcel
+Assign one to a parcel, or dismiss it as junk. Dismissing takes it off this list and deletes the stored copy of the email; the mail in your mailbox is untouched.
+▸ Clear this queue (6 emails)   (collapsed; a click on it shows:)
+    These emails yielded no parcel and never will: dismissing them takes them off this list for good, and deletes this machine's stored copy of each one to get the disk back. The mail itself stays in your mailbox, and the record that it arrived is kept, so the next mail check will not bring it back.
+    {form 1} [button: Dismiss all 6 emails]
+    Or clear out one sender at a time:
+    •
+    {form 2} [button: Dismiss 4]
+    from transaction@notice.aliexpress.example.com
+### Your order 8193333300000009 has been shipped
+transaction@notice.aliexpress.example.com · Wed 4 Nov, 04:20 · no tracking number found in this message (its subject is about a shipment)
+▸ Assign to a parcel…   (collapsed; a click on it shows:)
+    {form 3}
+    Tracking number [text field]
+    Carrier [choice: Detect from number ▾]
+    Name [text field (placeholder "e.g. Shoes from Zalando")]
+    Postcode [text field (placeholder "99931 (default)")] Used by GLS and DPD.
+    [button: Assign to a parcel]
+{form 4} [button: Dismiss]
+### Vaša zásielka čaká – uhraďte poplatok 1,99 €
+info@packeta-sk.example.com · Tue 3 Nov, 18:40 · not tracked on its own: the sender calls itself Packeta but writes from packeta-sk.example.com, which is not one of Packeta's known addresses. Assign it if you trust it.
+▸ Assign to a parcel…   (collapsed; a click on it shows:)
+    {form 5}
+    Tracking number [text field]
+    Carrier [choice: Detect from number ▾]
+    Name [text field (placeholder "e.g. Shoes from Zalando")]
+    Postcode [text field (placeholder "99931 (default)")] Used by GLS and DPD.
+    [button: Assign to a parcel]
+{form 6} [button: Dismiss]
+### 📦 Zásielka zadarmo! Doprava zdarma na všetko
+orders@temu.example.com · Tue 3 Nov, 07:15 · no tracking number found in this message (its subject is about a shipment)
+▸ Assign to a parcel…   (collapsed; a click on it shows:)
+    {form 7}
+    Tracking number [text field]
+    Carrier [choice: Detect from number ▾]
+    Name [text field (placeholder "e.g. Shoes from Zalando")]
+    Postcode [text field (placeholder "99931 (default)")] Used by GLS and DPD.
+    [button: Assign to a parcel]
+{form 8} [button: Dismiss]
+### Your order 8193333300000001 has been shipped
+transaction@notice.aliexpress.example.com · 20 Oct, 03:10 · no tracking number found in this message (its subject is about a shipment)
+▸ Assign to a parcel…   (collapsed; a click on it shows:)
+    {form 9}
+    Tracking number [text field]
+    Carrier [choice: Detect from number ▾]
+    Name [text field (placeholder "e.g. Shoes from Zalando")]
+    Postcode [text field (placeholder "99931 (default)")] Used by GLS and DPD.
+    [button: Assign to a parcel]
+{form 10} [button: Dismiss]
+### Your order 8193333300000025 has been shipped
+transaction@notice.aliexpress.example.com · 16 Oct, 05:00 · no tracking number found in this message (its subject is about a shipment)
+▸ Assign to a parcel…   (collapsed; a click on it shows:)
+    {form 11}
+    Tracking number [text field]
+    Carrier [choice: Detect from number ▾]
+    Name [text field (placeholder "e.g. Shoes from Zalando")]
+    Postcode [text field (placeholder "99931 (default)")] Used by GLS and DPD.
+    [button: Assign to a parcel]
+{form 12} [button: Dismiss]
+### Your order 8193333300000004 has been shipped
+transaction@notice.aliexpress.example.com · 12 Oct, 02:40 · no tracking number found in this message (its subject is about a shipment)
+▸ Assign to a parcel…   (collapsed; a click on it shows:)
+    {form 13}
+    Tracking number [text field]
+    Carrier [choice: Detect from number ▾]
+    Name [text field (placeholder "e.g. Shoes from Zalando")]
+    Postcode [text field (placeholder "99931 (default)")] Used by GLS and DPD.
+    [button: Assign to a parcel]
+{form 14} [button: Dismiss]
+## Dormant parcels
+No tracking event for over 30 days, so they are no longer polled.
+None.
+
+LINKS (open with: sim text <path>)
+  Parcels → /
+  In flight → /
+  History → /history
+  Attention → /attention
+  Health → /health
+  Settings → /settings
+  Add parcel → /add
+
+FORMS (submit with: sim post <action> name=value ...)
+  [form 1] POST /attention/dismiss   (under "Emails that did not yield a parcel")
+     field up_to [hidden] = "17"
+     button "Dismiss all 6 emails"
+     → as is, "Dismiss all 6 emails": sim post /attention/dismiss up_to=17
+  [form 2] POST /attention/dismiss   (under "Emails that did not yield a parcel")
+     field up_to [hidden] = "17"
+     field from [hidden] = "transaction@notice.aliexpress.example.com"
+     button "Dismiss 4"
+     → as is, "Dismiss 4": sim post /attention/dismiss up_to=17 from=transaction@notice.aliexpress.example.com
+  [form 3] POST /attention/17/assign#m-17   (under "Your order 8193333300000009 has been shipped")
+     field number [text, required] = ""  label "Tracking number"
+     field carrier [select] = ""  label "Carrier" options:  (Detect from number) | posta (Slovenská pošta) | packeta (Packeta) | gls (GLS) | sps (SPS) | dpd (DPD) | dhl (DHL)
+     field label [text] = ""  label "Name"
+     field postcode [text] = ""  label "Postcode"
+     button "Assign to a parcel"
+     → as is, "Assign to a parcel": sim post /attention/17/assign number='' carrier='' label='' postcode=''
+  [form 4] POST /attention/17/dismiss#m-15   (under "Your order 8193333300000009 has been shipped")
+     button "Dismiss"
+     → as is, "Dismiss": sim post /attention/17/dismiss
+  [form 5] POST /attention/15/assign#m-15   (under "Vaša zásielka čaká – uhraďte poplatok 1,99 €")
+     field number [text, required] = ""  label "Tracking number"
+     field carrier [select] = ""  label "Carrier" options:  (Detect from number) | posta (Slovenská pošta) | packeta (Packeta) | gls (GLS) | sps (SPS) | dpd (DPD) | dhl (DHL)
+     field label [text] = ""  label "Name"
+     field postcode [text] = ""  label "Postcode"
+     button "Assign to a parcel"
+     → as is, "Assign to a parcel": sim post /attention/15/assign number='' carrier='' label='' postcode=''
+  [form 6] POST /attention/15/dismiss#m-10   (under "Vaša zásielka čaká – uhraďte poplatok 1,99 €")
+     button "Dismiss"
+     → as is, "Dismiss": sim post /attention/15/dismiss
+  [form 7] POST /attention/10/assign#m-10   (under "📦 Zásielka zadarmo! Doprava zdarma na všetko")
+     field number [text, required] = ""  label "Tracking number"
+     field carrier [select] = ""  label "Carrier" options:  (Detect from number) | posta (Slovenská pošta) | packeta (Packeta) | gls (GLS) | sps (SPS) | dpd (DPD) | dhl (DHL)
+     field label [text] = ""  label "Name"
+     field postcode [text] = ""  label "Postcode"
+     button "Assign to a parcel"
+     → as is, "Assign to a parcel": sim post /attention/10/assign number='' carrier='' label='' postcode=''
+  [form 8] POST /attention/10/dismiss#m-3   (under "📦 Zásielka zadarmo! Doprava zdarma na všetko")
+     button "Dismiss"
+     → as is, "Dismiss": sim post /attention/10/dismiss
+  [form 9] POST /attention/3/assign#m-3   (under "Your order 8193333300000001 has been shipped")
+     field number [text, required] = ""  label "Tracking number"
+     field carrier [select] = ""  label "Carrier" options:  (Detect from number) | posta (Slovenská pošta) | packeta (Packeta) | gls (GLS) | sps (SPS) | dpd (DPD) | dhl (DHL)
+     field label [text] = ""  label "Name"
+     field postcode [text] = ""  label "Postcode"
+     button "Assign to a parcel"
+     → as is, "Assign to a parcel": sim post /attention/3/assign number='' carrier='' label='' postcode=''
+  [form 10] POST /attention/3/dismiss#m-2   (under "Your order 8193333300000001 has been shipped")
+     button "Dismiss"
+     → as is, "Dismiss": sim post /attention/3/dismiss
+  [form 11] POST /attention/2/assign#m-2   (under "Your order 8193333300000025 has been shipped")
+     field number [text, required] = ""  label "Tracking number"
+     field carrier [select] = ""  label "Carrier" options:  (Detect from number) | posta (Slovenská pošta) | packeta (Packeta) | gls (GLS) | sps (SPS) | dpd (DPD) | dhl (DHL)
+     field label [text] = ""  label "Name"
+     field postcode [text] = ""  label "Postcode"
+     button "Assign to a parcel"
+     → as is, "Assign to a parcel": sim post /attention/2/assign number='' carrier='' label='' postcode=''
+  [form 12] POST /attention/2/dismiss#m-1   (under "Your order 8193333300000025 has been shipped")
+     button "Dismiss"
+     → as is, "Dismiss": sim post /attention/2/dismiss
+  [form 13] POST /attention/1/assign#m-1   (under "Your order 8193333300000004 has been shipped")
+     field number [text, required] = ""  label "Tracking number"
+     field carrier [select] = ""  label "Carrier" options:  (Detect from number) | posta (Slovenská pošta) | packeta (Packeta) | gls (GLS) | sps (SPS) | dpd (DPD) | dhl (DHL)
+     field label [text] = ""  label "Name"
+     field postcode [text] = ""  label "Postcode"
+     button "Assign to a parcel"
+     → as is, "Assign to a parcel": sim post /attention/1/assign number='' carrier='' label='' postcode=''
+  [form 14] POST /attention/1/dismiss#m-2   (under "Your order 8193333300000004 has been shipped")
+     button "Dismiss"
+     → as is, "Dismiss": sim post /attention/1/dismiss
+
+$ sim day
+══ Day 5 · Friday 6 November 2026 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 1 · midday 13:00 → 3 · evening 21:00 → 3
+Notifications (10):
+  07:00  [Parcels] In transit — Móda Fiktívna
+         Zásielka je na ceste.
+         (clicking it opens /parcel/8)
+  08:00  [Parcels] Still waiting for you · day 3 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Wed 11 Nov
+         (clicking it opens /parcel/1)
+  08:00  [Parcels] In transit — Temu
+         Zásielka je na ceste.
+         (clicking it opens /parcel/7)
+  09:00  [Parcels] Registered — Temu
+         Údaje o zásielke boli prijaté
+         (clicking it opens /parcel/9)
+  11:00  [Parcels] Ready for pickup — RB333333049CN
+         Pošta Fiktívna Bystrica 1, Poštová 3, Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/10)
+  13:00  [Parcels] Ready for pickup — SHEIN
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/6)
+  15:30  [Parcels] Still waiting for you · day 3 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Wed 11 Nov
+         (clicking it opens /parcel/1)
+  15:30  [Parcels] Still waiting for you · day 1 — SHEIN
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/6)
+  15:30  [Parcels] Still waiting for you · day 1 — RB333333049CN
+         Pošta Fiktívna Bystrica 1, Poštová 3, Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/10)
+  18:00  [Parcels] In transit — Temu
+         Zásielka na ceste
+         (clicking it opens /parcel/9)
+New mail in Gmail (4):
+  #32 09:30  Slovenská pošta <info@posta-sk.example.net>   [label: parcels]
+      Zásielka zadržaná na colnici – doplatok 2,40 €
+      Vážený zákazník, vaša zásielka zo zahraničia bola zadržaná na colnici. Uhraďte colný poplatok 2,40 € do 48 hodín: https:…
+  #33 10:35  Slovenská pošta <notifikacie@posta.sk>   [label: parcels]
+      Oznámenie o uložení zásielky RB333333049CN
+      Slovenská pošta, a. s. Vážená pani / Vážený pán, oznamujeme Vám, že zásielka adresovaná na Vaše meno je uložená na pošte…
+  #34 12:04  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 306 Dobrý deň, vaša zásielka od odosielateľa SHEIN je pre vás pripravená na vyzdvihnutie v Z-BOXe. K…
+  #35 15:00  SHEIN <noreply@shein.example.com>   [label: parcels]
+      Your SHEIN order GSH33000010 has been shipped!
+      Hi ZUZANA, Good news! Your order GSH33000010 has been shipped. Carrier: DPD Tracking number: 01505333333310 Estimated de…
+
+
+$ sim day --until 09:30
+══ Day 6 · Saturday 7 November 2026 · until 09:30 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 3 · now 09:30 → 3
+Notifications (5):
+  07:00  [Parcels] Out for delivery — Temu
+         Kuriér doručuje
+         (clicking it opens /parcel/9)
+  08:00  [Parcels] Still waiting for you · day 4 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Wed 11 Nov
+         (clicking it opens /parcel/1)
+  08:00  [Parcels] Still waiting for you · day 2 — SHEIN
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/6)
+  08:00  [Parcels] Still waiting for you · day 2 — RB333333049CN
+         Pošta Fiktívna Bystrica 1, Poštová 3, Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/10)
+  08:00  [Parcels] Registered — SHEIN
+         Údaje o zásielke boli prijaté
+         (clicking it opens /parcel/11)
+New mail in Gmail (3):
+  #36 07:25  DPD <no_reply@dpd.sk>   [label: parcels]
+      Vaša zásielka bude doručená dnes
+      Vaša zásielka bude doručená dnes v čase 10:00 – 11:00. Kuriér Marek vás bude kontaktovať na čísle, ktoré ste uviedli pri…
+  #37 08:00  SHEIN <noreply@shein.example.com>
+      New in: winter collection ❄️ up to 70 % off
+      New in this week. Extra 15 % with code WINTER15 Unsubscribe
+  #38 08:30  DPD <no_reply@dpd.sk>   [label: parcels]
+      Vaša zásielka je na ceste do Pickup Station
+      Vaša zásielka je na ceste. Akonáhle bude pripravená v samoobslužnom boxe Pickup Station, budeme vás informovať.͏‌ ͏‌ ͏‌ …
+
+
+$ sim collect RB333333049CN
+09:30  Pošta Fiktívna Bystrica 1: you show your ID and the number at the counter - parcel collected.
+
+$ sim text /
+PAGE /  (HTTP 200)
+
+[Parcels → /] [In flight → /] [History → /history] [Attention → /attention] [Health → /health] [Settings → /settings] [Add parcel → /add]
+# In flight
+{form 1} [button: Refresh now]
+7 in flight, 3 ready for pickup and 1 out for delivery.
+## Temu
+Out for delivery
+• DPD · 01505333333324
+Kuriér doručuje · Fiktívna Bystrica
+Since Sat 7 Nov, 06:50
+## Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica
+Ready for pickup
+•
+### AliExpress (Cainiao)
+Packeta · Z3333333323
+Collect by Wed 11 Nov · 4 days left
+▸ Add to Calendar   (collapsed; a click on it shows:)
+    {form 2}
+    Day
+    [ ] Today, from 13:00
+    [ ] Tomorrow
+    [ ] Mon 9 Nov
+    [ ] Tue 10 Nov
+    [x] Wed 11 Nov — last day
+    Time
+    [x] 9:00
+    [ ] 13:00
+    [ ] 17:00
+    [ ] Other
+    [button: Add to Calendar]
+Open the box with 771530
+{form 3} [button: Mark as collected]
+•
+### SHEIN
+Packeta · Z3333333306
+Collect by Fri 13 Nov · 6 days left
+▸ Add to Calendar   (collapsed; a click on it shows:)
+    {form 4}
+    Day
+    [ ] Today, from 13:00
+    [ ] Tomorrow
+    [ ] Mon 9 Nov
+    [ ] Tue 10 Nov
+    [ ] Wed 11 Nov
+    [ ] Thu 12 Nov
+    [x] Fri 13 Nov — last day
+    Time
+    [x] 9:00
+    [ ] 13:00
+    [ ] 17:00
+    [ ] Other
+    [button: Add to Calendar]
+Open the box with 662018
+{form 5} [button: Mark as collected]
+[Open in Apple Maps → https://maps.apple.com/?q=N%C3%A1mestie%20SNP%201%2C%2099931%20Fikt%C3%ADvna%20Bystrica]
+## Pošta Fiktívna Bystrica 1, Poštová 3, Fiktívna Bystrica
+Ready for pickup
+•
+### RB333333049CN
+Slovenská pošta
+Collect by Fri 13 Nov · 6 days left
+▸ Add to Calendar   (collapsed; a click on it shows:)
+    {form 6}
+    Day
+    [ ] Today, from 13:00
+    [ ] Tomorrow
+    [ ] Mon 9 Nov
+    [ ] Tue 10 Nov
+    [ ] Wed 11 Nov
+    [ ] Thu 12 Nov
+    [x] Fri 13 Nov — last day
+    Time
+    [x] 9:00
+    [ ] 13:00
+    [ ] 17:00
+    [ ] Other
+    [button: Add to Calendar]
+{form 7} [button: Mark as collected]
+[Open in Apple Maps → https://maps.apple.com/?q=Po%C5%A1tov%C3%A1%203%2C%2099931%20Fikt%C3%ADvna%20Bystrica]
+## SHEIN
+Registered
+• DPD · 01505333333310
+Údaje o zásielke boli prijaté · Bratislava
+Since Sat 7 Nov, 08:00
+## Temu
+In transit
+• Packeta · Z3333333308
+Zásielka je na ceste.
+Since Fri 6 Nov, 08:00 · 1 day
+## Móda Fiktívna
+In transit
+• Packeta · Z3333333307
+Zásielka je na ceste.
+Since Fri 6 Nov, 04:00 · 1 day
+
+LINKS (open with: sim text <path>)
+  Parcels → /
+  In flight → /
+  History → /history
+  Attention → /attention
+  Health → /health
+  Settings → /settings
+  Add parcel → /add
+  Open in Apple Maps → https://maps.apple.com/?q=N%C3%A1mestie%20SNP%201%2C%2099931%20Fikt%C3%ADvna%20Bystrica
+  Open in Apple Maps → https://maps.apple.com/?q=Po%C5%A1tov%C3%A1%203%2C%2099931%20Fikt%C3%ADvna%20Bystrica
+
+FORMS (submit with: sim post <action> name=value ...)
+  [form 1] POST /refresh   (under "In flight")
+     button "Refresh now"
+     → as is, "Refresh now": sim post /refresh
+  [form 2] POST /parcel/1/calendar#cal-1   (under "AliExpress (Cainiao)")
+     field back [hidden] = "home"
+     field day [radio] = "2026-11-07"  label "Today, from 13:00" (unchecked)
+     field day [radio] = "2026-11-08"  label "Tomorrow" (unchecked)
+     field day [radio] = "2026-11-09"  label "Mon 9 Nov" (unchecked)
+     field day [radio] = "2026-11-10"  label "Tue 10 Nov" (unchecked)
+     field day [radio] = "2026-11-11"  label "Wed 11 Nov — last day" (checked)
+     field time [radio] = "09:00"  label "9:00" (checked)
+     field time [radio] = "13:00"  label "13:00" (unchecked)
+     field time [radio] = "17:00"  label "17:00" (unchecked)
+     field time [radio] = "other"  label "Other" (unchecked)
+     button "Add to Calendar"
+     → as is, "Add to Calendar": sim post /parcel/1/calendar back=home day=2026-11-11 time=09:00
+  [form 3] POST /parcel/1/collected   (under "AliExpress (Cainiao)")
+     field back [hidden] = "home"
+     button "Mark as collected"
+     → as is, "Mark as collected": sim post /parcel/1/collected back=home
+  [form 4] POST /parcel/6/calendar#cal-6   (under "SHEIN")
+     field back [hidden] = "home"
+     field day [radio] = "2026-11-07"  label "Today, from 13:00" (unchecked)
+     field day [radio] = "2026-11-08"  label "Tomorrow" (unchecked)
+     field day [radio] = "2026-11-09"  label "Mon 9 Nov" (unchecked)
+     field day [radio] = "2026-11-10"  label "Tue 10 Nov" (unchecked)
+     field day [radio] = "2026-11-11"  label "Wed 11 Nov" (unchecked)
+     field day [radio] = "2026-11-12"  label "Thu 12 Nov" (unchecked)
+     field day [radio] = "2026-11-13"  label "Fri 13 Nov — last day" (checked)
+     field time [radio] = "09:00"  label "9:00" (checked)
+     field time [radio] = "13:00"  label "13:00" (unchecked)
+     field time [radio] = "17:00"  label "17:00" (unchecked)
+     field time [radio] = "other"  label "Other" (unchecked)
+     button "Add to Calendar"
+     → as is, "Add to Calendar": sim post /parcel/6/calendar back=home day=2026-11-13 time=09:00
+  [form 5] POST /parcel/6/collected   (under "SHEIN")
+     field back [hidden] = "home"
+     button "Mark as collected"
+     → as is, "Mark as collected": sim post /parcel/6/collected back=home
+  [form 6] POST /parcel/10/calendar#cal-10   (under "RB333333049CN")
+     field back [hidden] = "home"
+     field day [radio] = "2026-11-07"  label "Today, from 13:00" (unchecked)
+     field day [radio] = "2026-11-08"  label "Tomorrow" (unchecked)
+     field day [radio] = "2026-11-09"  label "Mon 9 Nov" (unchecked)
+     field day [radio] = "2026-11-10"  label "Tue 10 Nov" (unchecked)
+     field day [radio] = "2026-11-11"  label "Wed 11 Nov" (unchecked)
+     field day [radio] = "2026-11-12"  label "Thu 12 Nov" (unchecked)
+     field day [radio] = "2026-11-13"  label "Fri 13 Nov — last day" (checked)
+     field time [radio] = "09:00"  label "9:00" (checked)
+     field time [radio] = "13:00"  label "13:00" (unchecked)
+     field time [radio] = "17:00"  label "17:00" (unchecked)
+     field time [radio] = "other"  label "Other" (unchecked)
+     button "Add to Calendar"
+     → as is, "Add to Calendar": sim post /parcel/10/calendar back=home day=2026-11-13 time=09:00
+  [form 7] POST /parcel/10/collected   (under "RB333333049CN")
+     field back [hidden] = "home"
+     button "Mark as collected"
+     → as is, "Mark as collected": sim post /parcel/10/collected back=home
+
+$ sim post /parcel/10/collected back=home
+→ HTTP 303, the browser goes to /?collected=10
+
+PAGE /?collected=10  (HTTP 200)
+
+[Parcels → /] [In flight → /] [History → /history] [Attention → /attention] [Health → /health] [Settings → /settings] [Add parcel → /add]
+# In flight
+{form 1} [button: Refresh now]
+6 in flight, 2 ready for pickup and 1 out for delivery.
+Marked RB333333049CN as collected. It is in [History → /history] .
+{form 2} [button: Undo]
+## Temu
+Out for delivery
+• DPD · 01505333333324
+Kuriér doručuje · Fiktívna Bystrica
+Since Sat 7 Nov, 06:50
+## Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica
+Ready for pickup
+•
+### AliExpress (Cainiao)
+Packeta · Z3333333323
+Collect by Wed 11 Nov · 4 days left
+▸ Add to Calendar   (collapsed; a click on it shows:)
+    {form 3}
+    Day
+    [ ] Today, from 13:00
+    [ ] Tomorrow
+    [ ] Mon 9 Nov
+    [ ] Tue 10 Nov
+    [x] Wed 11 Nov — last day
+    Time
+    [x] 9:00
+    [ ] 13:00
+    [ ] 17:00
+    [ ] Other
+    [button: Add to Calendar]
+Open the box with 771530
+{form 4} [button: Mark as collected]
+•
+### SHEIN
+Packeta · Z3333333306
+Collect by Fri 13 Nov · 6 days left
+▸ Add to Calendar   (collapsed; a click on it shows:)
+    {form 5}
+    Day
+    [ ] Today, from 13:00
+    [ ] Tomorrow
+    [ ] Mon 9 Nov
+    [ ] Tue 10 Nov
+    [ ] Wed 11 Nov
+    [ ] Thu 12 Nov
+    [x] Fri 13 Nov — last day
+    Time
+    [x] 9:00
+    [ ] 13:00
+    [ ] 17:00
+    [ ] Other
+    [button: Add to Calendar]
+Open the box with 662018
+{form 6} [button: Mark as collected]
+[Open in Apple Maps → https://maps.apple.com/?q=N%C3%A1mestie%20SNP%201%2C%2099931%20Fikt%C3%ADvna%20Bystrica]
+## SHEIN
+Registered
+• DPD · 01505333333310
+Údaje o zásielke boli prijaté · Bratislava
+Since Sat 7 Nov, 08:00
+## Temu
+In transit
+• Packeta · Z3333333308
+Zásielka je na ceste.
+Since Fri 6 Nov, 08:00 · 1 day
+## Móda Fiktívna
+In transit
+• Packeta · Z3333333307
+Zásielka je na ceste.
+Since Fri 6 Nov, 04:00 · 1 day
+
+LINKS (open with: sim text <path>)
+  Parcels → /
+  In flight → /
+  History → /history
+  Attention → /attention
+  Health → /health
+  Settings → /settings
+  Add parcel → /add
+  Open in Apple Maps → https://maps.apple.com/?q=N%C3%A1mestie%20SNP%201%2C%2099931%20Fikt%C3%ADvna%20Bystrica
+
+FORMS (submit with: sim post <action> name=value ...)
+  [form 1] POST /refresh   (under "In flight")
+     button "Refresh now"
+     → as is, "Refresh now": sim post /refresh
+  [form 2] POST /parcel/10/uncollected   (under "In flight")
+     field back [hidden] = "home"
+     button "Undo"
+     → as is, "Undo": sim post /parcel/10/uncollected back=home
+  [form 3] POST /parcel/1/calendar#cal-1   (under "AliExpress (Cainiao)")
+     field back [hidden] = "home"
+     field day [radio] = "2026-11-07"  label "Today, from 13:00" (unchecked)
+     field day [radio] = "2026-11-08"  label "Tomorrow" (unchecked)
+     field day [radio] = "2026-11-09"  label "Mon 9 Nov" (unchecked)
+     field day [radio] = "2026-11-10"  label "Tue 10 Nov" (unchecked)
+     field day [radio] = "2026-11-11"  label "Wed 11 Nov — last day" (checked)
+     field time [radio] = "09:00"  label "9:00" (checked)
+     field time [radio] = "13:00"  label "13:00" (unchecked)
+     field time [radio] = "17:00"  label "17:00" (unchecked)
+     field time [radio] = "other"  label "Other" (unchecked)
+     button "Add to Calendar"
+     → as is, "Add to Calendar": sim post /parcel/1/calendar back=home day=2026-11-11 time=09:00
+  [form 4] POST /parcel/1/collected   (under "AliExpress (Cainiao)")
+     field back [hidden] = "home"
+     button "Mark as collected"
+     → as is, "Mark as collected": sim post /parcel/1/collected back=home
+  [form 5] POST /parcel/6/calendar#cal-6   (under "SHEIN")
+     field back [hidden] = "home"
+     field day [radio] = "2026-11-07"  label "Today, from 13:00" (unchecked)
+     field day [radio] = "2026-11-08"  label "Tomorrow" (unchecked)
+     field day [radio] = "2026-11-09"  label "Mon 9 Nov" (unchecked)
+     field day [radio] = "2026-11-10"  label "Tue 10 Nov" (unchecked)
+     field day [radio] = "2026-11-11"  label "Wed 11 Nov" (unchecked)
+     field day [radio] = "2026-11-12"  label "Thu 12 Nov" (unchecked)
+     field day [radio] = "2026-11-13"  label "Fri 13 Nov — last day" (checked)
+     field time [radio] = "09:00"  label "9:00" (checked)
+     field time [radio] = "13:00"  label "13:00" (unchecked)
+     field time [radio] = "17:00"  label "17:00" (unchecked)
+     field time [radio] = "other"  label "Other" (unchecked)
+     button "Add to Calendar"
+     → as is, "Add to Calendar": sim post /parcel/6/calendar back=home day=2026-11-13 time=09:00
+  [form 6] POST /parcel/6/collected   (under "SHEIN")
+     field back [hidden] = "home"
+     button "Mark as collected"
+     → as is, "Mark as collected": sim post /parcel/6/collected back=home
+
+Menu-bar icon: 3 → 2
+
+$ sim day --until 10:30
+══ Day 6 · Saturday 7 November 2026 · until 10:30 ══
+Menu-bar icon (parcels ready to collect): (no reading in this stretch) · now 10:30 → 3
+Notifications (1):
+  10:00  [Parcels] Ready for pickup — Móda Fiktívna
+         Trafika Pod Lipou – výdajné miesto, Lipová 12, Fiktívna Bystrica · collect by Sat 14 Nov
+         (clicking it opens /parcel/8)
+New mail in Gmail (1):
+  #39 10:04  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 307 Dobrý deň, vaša zásielka od odosielateľa Móda Fiktívna je pre vás pripravená na vyzdvihnutie na …
+
+
+$ sim collect Z 333 3333 307
+10:30  Trafika Pod Lipou – výdajné miesto: the staff hand it over - parcel collected. You pay 24,90 € (cash on delivery).
+
+$ sim day
+══ Day 6 · Saturday 7 November 2026 ══
+Menu-bar icon (parcels ready to collect): midday 13:00 → 2 · evening 21:00 → 2
+Notifications (5):
+  11:00  [Parcels] Delivered — Móda Fiktívna
+         Zásielka bola vyzdvihnutá.
+         (clicking it opens /parcel/8)
+  11:00  [Parcels] Delivered — Temu
+         Doručené
+         (clicking it opens /parcel/9)
+  15:30  [Parcels] Still waiting for you · day 4 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Wed 11 Nov
+         (clicking it opens /parcel/1)
+  15:30  [Parcels] Still waiting for you · day 2 — SHEIN
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/6)
+  18:00  [Parcels] In transit — SHEIN
+         Zásielka na ceste
+         (clicking it opens /parcel/11)
+New mail in Gmail (3):
+  #40 10:36  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola vyzdvihnutá
+      Zásielka Z 333 3333 307 Dobrý deň, vaša zásielka od odosielateľa Móda Fiktívna bola úspešne vyzdvihnutá. Ďakujeme, že st…
+  #41 10:52  DPD <no_reply@dpd.sk>   [label: parcels]
+      Vaša zásielka bola doručená
+      Vaša zásielka bola úspešne doručená. Ďakujeme, že ste využili služby DPD.͏‌ ͏‌ ͏‌ DPD [https://img.example.com/logo.png]…
+  #42 19:00  AliExpress <transaction@notice.aliexpress.example.com>
+      Order confirmed: 8193333300000012
+      Hi Zuzana, Thanks for your order 8193333300000012. We will let you know when it ships.
+
+
+$ sim day
+══ Day 7 · Sunday 8 November 2026 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 2 · midday 13:00 → 3 · evening 21:00 → 3
+Notifications (8):
+  08:00  [Parcels] Still waiting for you · day 5 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Wed 11 Nov
+         (clicking it opens /parcel/1)
+  08:00  [Parcels] Still waiting for you · day 3 — SHEIN
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/6)
+  11:00  [Parcels] Ready for pickup — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Sun 15 Nov
+         (clicking it opens /parcel/7)
+  14:00  [Parcels] Registered — AliExpress (Cainiao)
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/13)
+  15:30  [Parcels] Still waiting for you · day 5 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Wed 11 Nov
+         (clicking it opens /parcel/1)
+  15:30  [Parcels] Still waiting for you · day 3 — SHEIN
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/6)
+  15:30  [Parcels] Still waiting for you · day 1 — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Sun 15 Nov
+         (clicking it opens /parcel/7)
+  19:00  [Parcels] Registered — Temu
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/12)
+New mail in Gmail (4):
+  #43 08:09  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 308 Dobrý deň, vaša zásielka od odosielateľa TEMU je pre vás pripravená na vyzdvihnutie v Z-BOXe. Kó…
+  #44 10:00  Temu <orders@temu.example.com>   [label: parcels]
+      📦 Your Temu order has shipped
+      Hi Zuzana, Good news! Your order PO-211-33000011 has been shipped. Carrier: Packeta Tracking number: Z3333333311 Estimat…
+  #45 13:08  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 309 Dobrý deň, odosielateľ AliExpress (Cainiao) nám práve odovzdal vašu zásielku, ktorá vám bude dor…
+  #46 18:38  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 311 Dobrý deň, odosielateľ TEMU nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu.…
+
+
+$ sim day --until 12:30
+══ Day 8 · Monday 9 November 2026 · until 12:30 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 3 · now 12:30 → 3
+Notifications (5):
+  07:00  [Parcels] In transit — Temu
+         Zásielka je na ceste.
+         (clicking it opens /parcel/12)
+  07:00  [Parcels] In transit — AliExpress (Cainiao)
+         Zásielka je na ceste.
+         (clicking it opens /parcel/13)
+  08:00  [Parcels] Still waiting for you · day 6 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Wed 11 Nov
+         (clicking it opens /parcel/1)
+  08:00  [Parcels] Still waiting for you · day 4 — SHEIN
+         Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum), Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/6)
+  08:00  [Parcels] Still waiting for you · day 2 — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Sun 15 Nov
+         (clicking it opens /parcel/7)
+New mail in Gmail (4):
+  #47 23:50  AliExpress <transaction@notice.aliexpress.example.com>   [label: parcels]
+      Your order 8193333300000016 has been shipped
+      Hi Zuzana, Good news! Your order 8193333300000016 has been shipped. Carrier: Cainiao Super Economy Global Tracking numbe…
+  #48 03:00  AliExpress <transaction@notice.aliexpress.example.com>   [label: parcels]
+      Your order 8193333300000012 has been shipped
+      Hi Zuzana, Good news! Your order 8193333300000012 has been shipped. Carrier: Cainiao Super Economy Global Tracking numbe…
+  #49 07:30  Temu <orders@temu.example.com>
+      Your package has a surprise inside 👀
+      Open the app to reveal your surprise. Unsubscribe
+  #50 09:40  Temu <orders@temu.example.com>   [label: parcels]
+      📦 Your Temu order has shipped
+      Hi Zuzana, Good news! Your order PO-211-33000013 has been shipped. Carrier: Packeta Estimated delivery: 3-6 business day…
+
+
+$ sim collect 771530
+12:30  Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum): you enter 771530, a compartment opens - parcel collected.
+
+$ sim collect 662018
+12:30  Z-BOX Fiktívna Bystrica, Námestie SNP 1 (OC Centrum): you enter 662018, a compartment opens - parcel collected.
+
+$ sim day
+══ Day 8 · Monday 9 November 2026 ══
+Menu-bar icon (parcels ready to collect): midday 13:00 → 1 · evening 21:00 → 2
+Notifications (7):
+  13:00  [Parcels] Delivered — AliExpress (Cainiao)
+         Zásielka bola vyzdvihnutá.
+         (clicking it opens /parcel/1)
+  13:00  [Parcels] Delivered — SHEIN
+         Zásielka bola vyzdvihnutá.
+         (clicking it opens /parcel/6)
+  15:00  [Parcels] Ready for pickup — SHEIN
+         Pickup Station Fiktívna Bystrica (Kaufland), Okružná 2, Fiktívna Bystrica · collect by Sat 14 Nov
+         (clicking it opens /parcel/11)
+  15:30  [Parcels] Still waiting for you · day 2 — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Sun 15 Nov
+         (clicking it opens /parcel/7)
+  15:30  [Parcels] Still waiting for you · day 1 — SHEIN
+         Pickup Station Fiktívna Bystrica (Kaufland), Okružná 2, Fiktívna Bystrica · collect by Sat 14 Nov
+         (clicking it opens /parcel/11)
+  19:00  [Parcels] Registered — Temu
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/14)
+  20:00  [Parcels] Registered — Temu
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/15)
+New mail in Gmail (5):
+  #51 12:36  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola vyzdvihnutá
+      Zásielka Z 333 3333 323 Dobrý deň, vaša zásielka od odosielateľa AliExpress (Cainiao) bola úspešne vyzdvihnutá. Ďakujeme…
+  #52 12:36  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola vyzdvihnutá
+      Zásielka Z 333 3333 306 Dobrý deň, vaša zásielka od odosielateľa SHEIN bola úspešne vyzdvihnutá. Ďakujeme, že ste si vyb…
+  #53 14:16  DPD <no_reply@dpd.sk>   [label: parcels]
+      Informácia o uložení zásielky v samoobslužnom boxe Pickup Station
+      Vaša zásielka bola uložená v samoobslužnom boxe Pickup Station a je pripravená na vyzdvihnutie.͏‌ ͏‌ ͏‌ DPD [https://img…
+  #54 19:08  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 313 Dobrý deň, odosielateľ TEMU nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu.…
+  #55 19:13  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 314 Dobrý deň, odosielateľ TEMU nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu.…
+
+
+$ sim day --until 18:00
+══ Day 9 · Tuesday 10 November 2026 · until 18:00 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 2 · midday 13:00 → 4 · now 18:00 → 4
+Notifications (12):
+  07:00  [Parcels] In transit — Temu
+         Zásielka je na ceste.
+         (clicking it opens /parcel/14)
+  08:00  [Parcels] Still waiting for you · day 3 — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Sun 15 Nov
+         (clicking it opens /parcel/7)
+  08:00  [Parcels] Still waiting for you · day 2 — SHEIN
+         Pickup Station Fiktívna Bystrica (Kaufland), Okružná 2, Fiktívna Bystrica · collect by Sat 14 Nov
+         (clicking it opens /parcel/11)
+  08:00  [Parcels] In transit — Temu
+         Zásielka je na ceste.
+         (clicking it opens /parcel/15)
+  09:00  [Parcels] Ready for pickup — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Tue 17 Nov
+         (clicking it opens /parcel/12)
+  12:00  [Parcels] Ready for pickup — EB333333168SK
+         BalíkoBOX Fiktívna Bystrica – Lidl, Cesta k Lidlu 1, Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/18)
+  13:00  [Parcels] Registered — AliExpress (Cainiao)
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/19)
+  15:30  [Parcels] Still waiting for you · day 3 — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Sun 15 Nov
+         (clicking it opens /parcel/7)
+  15:30  [Parcels] Still waiting for you · day 2 — SHEIN
+         Pickup Station Fiktívna Bystrica (Kaufland), Okružná 2, Fiktívna Bystrica · collect by Sat 14 Nov
+         (clicking it opens /parcel/11)
+  15:30  [Parcels] Still waiting for you · day 1 — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Tue 17 Nov
+         (clicking it opens /parcel/12)
+  15:30  [Parcels] Still waiting for you · day 1 — EB333333168SK
+         BalíkoBOX Fiktívna Bystrica – Lidl, Cesta k Lidlu 1, Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/18)
+  18:00  [Parcels] Registered — Temu
+         Údaje o balíku boli zaregistrované
+         (clicking it opens /parcel/17)
+New mail in Gmail (5):
+  #56 05:10  AliExpress <transaction@notice.aliexpress.example.com>   [label: parcels]
+      Your order 8193333300000018 has been shipped
+      Hi Zuzana, Good news! Your order 8193333300000018 has been shipped. Carrier: Cainiao → SPS Slovak Parcel Service Trackin…
+  #57 08:24  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 311 Dobrý deň, vaša zásielka od odosielateľa TEMU je pre vás pripravená na vyzdvihnutie v Z-BOXe. Kó…
+  #58 10:00  Temu <orders@temu.example.com>   [label: parcels]
+      📦 Your Temu order has shipped
+      Hi Zuzana, Good news! Your order PO-211-33000017 has been shipped. Carrier: GLS Tracking number: 90333333317 Estimated d…
+  #59 11:55  Slovenská pošta <notifikacie@posta.sk>   [label: parcels]
+      Zásielka EB333333168SK je uložená v BalíkoBOXe
+      Slovenská pošta, a. s. Vážená pani / Vážený pán, Vaša zásielka bola uložená v BalíkoBOXe. Vyzdvihnite si ju do 3 dní. Po…
+  #60 12:08  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 312 Dobrý deň, odosielateľ AliExpress (Cainiao) nám práve odovzdal vašu zásielku, ktorá vám bude dor…
+
+
+$ sim collect 448203
+18:00  Pickup Station Fiktívna Bystrica (Kaufland): you enter 448203, a compartment opens - parcel collected.
+
+$ sim day
+══ Day 9 · Tuesday 10 November 2026 ══
+Menu-bar icon (parcels ready to collect): evening 21:00 → 3
+Notifications (1):
+  19:00  [Parcels] Delivered — SHEIN
+         Vyzdvihnuté v Pickup Station
+         (clicking it opens /parcel/11)
+New mail in Gmail (2):
+  #61 18:05  DPD <no_reply@dpd.sk>   [label: parcels]
+      Vaša zásielka bola doručená
+      Vaša zásielka bola úspešne doručená. Ďakujeme, že ste využili služby DPD.͏‌ ͏‌ ͏‌ DPD [https://img.example.com/logo.png]…
+  #62 18:20  GLS Slovakia <noreply@gls-slovakia.sk>   [label: parcels]
+      Balík 90333333317 sme prevzali od odosielateľa
+      Váš balík sme prevzali od odosielateľa a je na ceste k vám. Predpokladaný dátum doručenia vám oznámime v ďalšom e-maile.…
+
+
+$ sim day --until 07:40
+══ Day 10 · Wednesday 11 November 2026 · until 07:40 ══
+Menu-bar icon (parcels ready to collect): (no reading in this stretch) · now 07:40 → 3
+Notifications (2):
+  07:00  [Parcels] In transit — Temu
+         Balík je na ceste
+         (clicking it opens /parcel/17)
+  07:00  [Parcels] In transit — AliExpress (Cainiao)
+         Zásielka je na ceste.
+         (clicking it opens /parcel/19)
+New mail in Gmail (2):
+  #63 07:14  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 309 Dobrý deň, vaša zásielka od odosielateľa AliExpress (Cainiao) je pre vás pripravená na vyzdvihnu…
+  #64 07:19  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 313 Dobrý deň, vaša zásielka od odosielateľa TEMU je pre vás pripravená na vyzdvihnutie v Z-BOXe. Kó…
+
+
+$ sim collect 009115
+07:40  Z-BOX Fiktívna Bystrica, Lesná 4 (Billa): you enter 009115, a compartment opens - parcel collected.
+
+$ sim collect 227401
+07:40  Z-BOX Fiktívna Bystrica, Lesná 4 (Billa): you enter 227401, a compartment opens - parcel collected.
+
+$ sim collect 381640
+07:40  Z-BOX Fiktívna Bystrica, Lesná 4 (Billa): you enter 381640, a compartment opens - parcel collected.
+
+$ sim collect 650077
+07:40  Z-BOX Fiktívna Bystrica, Lesná 4 (Billa): you enter 650077, a compartment opens - parcel collected.
+
+$ sim day
+══ Day 10 · Wednesday 11 November 2026 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 1 · midday 13:00 → 1 · evening 21:00 → 1
+Notifications (8):
+  08:00  [Parcels] Delivered — Temu
+         Zásielka bola vyzdvihnutá.
+         (clicking it opens /parcel/7)
+  08:00  [Parcels] Delivered — Temu
+         Zásielka bola vyzdvihnutá.
+         (clicking it opens /parcel/12)
+  08:00  [Parcels] Delivered — Temu
+         Zásielka bola vyzdvihnutá.
+         (clicking it opens /parcel/14)
+  08:00  [Parcels] Still waiting for you · day 2 — EB333333168SK
+         BalíkoBOX Fiktívna Bystrica – Lidl, Cesta k Lidlu 1, Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/18)
+  10:00  [Parcels] Delivered — AliExpress (Cainiao)
+         Zásielka bola vyzdvihnutá.
+         (clicking it opens /parcel/13)
+  14:00  [Parcels] Registered — AliExpress
+         Zásielka prevzatá od odosielateľa
+         (clicking it opens /parcel/16)
+  15:30  [Parcels] Still waiting for you · day 2 — EB333333168SK
+         BalíkoBOX Fiktívna Bystrica – Lidl, Cesta k Lidlu 1, Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/18)
+  20:00  [Parcels] Registered — SHEIN
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/20)
+New mail in Gmail (7):
+  #65 07:46  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola vyzdvihnutá
+      Zásielka Z 333 3333 309 Dobrý deň, vaša zásielka od odosielateľa AliExpress (Cainiao) bola úspešne vyzdvihnutá. Ďakujeme…
+  #66 07:46  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola vyzdvihnutá
+      Zásielka Z 333 3333 313 Dobrý deň, vaša zásielka od odosielateľa TEMU bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybr…
+  #67 07:46  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola vyzdvihnutá
+      Zásielka Z 333 3333 308 Dobrý deň, vaša zásielka od odosielateľa TEMU bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybr…
+  #68 07:46  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola vyzdvihnutá
+      Zásielka Z 333 3333 311 Dobrý deň, vaša zásielka od odosielateľa TEMU bola úspešne vyzdvihnutá. Ďakujeme, že ste si vybr…
+  #69 11:20  SHEIN <noreply@shein.example.com>   [label: parcels]
+      Your SHEIN order GSH33000015 has been shipped!
+      Hi ZUZANA, Good news! Your order GSH33000015 has been shipped. Carrier: Packeta Tracking number: Z3333333315 Estimated d…
+  #70 13:00  AliExpress <transaction@notice.aliexpress.example.com>
+      11.11 is coming: coupons inside 🎉
+      Get ready for 11.11. Coupons up to 30 EUR.
+  #71 20:08  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 315 Dobrý deň, odosielateľ SHEIN nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu…
+
+
+$ sim day
+══ Day 11 · Thursday 12 November 2026 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 2 · midday 13:00 → 3 · evening 21:00 → 3
+Notifications (10):
+  07:00  [Parcels] In transit — AliExpress
+         Zásielka na triediacom centre
+         (clicking it opens /parcel/16)
+  07:00  [Parcels] Pickup deadline approaching — EB333333168SK
+         BalíkoBOX Fiktívna Bystrica – Lidl, Cesta k Lidlu 1, Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/18)
+  08:00  [Parcels] Still waiting for you · day 3 — EB333333168SK
+         BalíkoBOX Fiktívna Bystrica – Lidl, Cesta k Lidlu 1, Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/18)
+  08:00  [Parcels] Ready for pickup — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Thu 19 Nov
+         (clicking it opens /parcel/19)
+  08:00  [Parcels] In transit — SHEIN
+         Zásielka je na ceste.
+         (clicking it opens /parcel/20)
+  13:00  [Parcels] Ready for pickup — Temu
+         collect by Thu 19 Nov
+         (clicking it opens /parcel/17)
+  15:30  [Parcels] Still waiting for you · day 1 — Temu
+         collect by Thu 19 Nov
+         (clicking it opens /parcel/17)
+  15:30  [Parcels] Still waiting for you · day 3 — EB333333168SK
+         BalíkoBOX Fiktívna Bystrica – Lidl, Cesta k Lidlu 1, Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/18)
+  15:30  [Parcels] Still waiting for you · day 1 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Thu 19 Nov
+         (clicking it opens /parcel/19)
+  19:00  [Parcels] Registered — SHEIN
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/21)
+New mail in Gmail (6):
+  #72 02:00  AliExpress <transaction@notice.aliexpress.example.com>   [label: parcels]
+      Your order 8193333300000020 has been shipped
+      Hi Zuzana, Good news! Your order 8193333300000020 has been shipped. Carrier: Cainiao Super Economy Global Tracking numbe…
+  #73 07:34  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 312 Dobrý deň, vaša zásielka od odosielateľa AliExpress (Cainiao) je pre vás pripravená na vyzdvihnu…
+  #74 10:00  Slovenská pošta <notifikacie@posta.sk>   [label: parcels]
+      Pripomienka: zásielka EB333333168SK čaká na pošte
+      Slovenská pošta, a. s. Vážená pani / Vážený pán, pripomíname Vám, že zásielka adresovaná na Vaše meno je stále uložená. …
+  #75 10:30  SHEIN <noreply@shein.example.com>   [label: parcels]
+      Your SHEIN order GSH33000019 has been shipped!
+      Hi ZUZANA, Good news! Your order GSH33000019 has been shipped. Carrier: Packeta Tracking number: Z3333333319 Estimated d…
+  #76 13:07  GLS Slovakia <noreply@gls-slovakia.sk>   [label: parcels]
+      Balík 90333333317 je pripravený k vyzdvihnutiu
+      Váš balík sme práve doručili do odberného miesta. Balík si môžete vyzdvihnúť najneskôr dňa 19. 11. 2026. Pre vydanie bal…
+  #77 19:08  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 319 Dobrý deň, odosielateľ SHEIN nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu…
+
+
+$ sim day --until 17:00
+══ Day 12 · Friday 13 November 2026 · until 17:00 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 3 · midday 13:00 → 5 · now 17:00 → 5
+Notifications (8):
+  07:00  [Parcels] In transit — SHEIN
+         Zásielka je na ceste.
+         (clicking it opens /parcel/21)
+  08:00  [Parcels] Out for delivery — AliExpress
+         Zásielka na doručení
+         (clicking it opens /parcel/16)
+  08:00  [Parcels] Still waiting for you · day 2 — Temu
+         collect by Thu 19 Nov
+         (clicking it opens /parcel/17)
+  08:00  [Parcels] Still waiting for you · day 4 — EB333333168SK
+         BalíkoBOX Fiktívna Bystrica – Lidl, Cesta k Lidlu 1, Fiktívna Bystrica · collect by Fri 13 Nov
+         (clicking it opens /parcel/18)
+  08:00  [Parcels] Still waiting for you · day 2 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Thu 19 Nov
+         (clicking it opens /parcel/19)
+  09:00  [Parcels] Ready for pickup — SHEIN
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Fri 20 Nov
+         (clicking it opens /parcel/20)
+  10:00  [Parcels] Ready for pickup — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Fri 20 Nov
+         (clicking it opens /parcel/15)
+  15:30  [Parcels] 6 parcel updates
+         Still waiting for you · day 1 — Temu; Still waiting for you · day 2 — Temu; Still waiting for you · day 4 — EB333333168SK; Still waiting for you · day 2 — AliExpress (Cainiao); Still waiting for you · day 1 — SHEIN; Delivered — AliExpress
+         (clicking it opens /)
+New mail in Gmail (5):
+  #78 07:40  serv@sps-sro.sk   [label: parcels]
+      Doručenie zásielky SK0FAKE26ZUZA00018 dnes
+      body { font-family: Tahoma, Verdana, Arial, Helvetica, Chicago, Sans-serif; font-size: 12px; margin: 0px; padding: 4px; …
+  #79 08:49  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 315 Dobrý deň, vaša zásielka od odosielateľa SHEIN je pre vás pripravená na vyzdvihnutie v Z-BOXe. K…
+  #80 09:00  Temu <orders@temu.example.com>   [label: parcels]
+      📦 Your Temu order has shipped
+      Hi Zuzana, Good news! Your order PO-211-33000021 has been shipped. Carrier: Packeta Tracking number: Z3333333321 Estimat…
+  #81 09:04  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 314 Dobrý deň, vaša zásielka od odosielateľa TEMU je pre vás pripravená na vyzdvihnutie v Z-BOXe. Kó…
+  #82 12:00  SHEIN <noreply@shein.example.com>   [label: parcels]
+      Your SHEIN order GSH33000022 has been shipped!
+      Hi ZUZANA, Good news! Your order GSH33000022 has been shipped. Carrier: Packeta Tracking number: Z3333333322 Estimated d…
+
+
+$ sim collect 573019
+17:00  GLS ParcelShop Papiernictvo Ceruzka: the staff hand it over - parcel collected.
+
+$ sim day
+══ Day 12 · Friday 13 November 2026 ══
+Menu-bar icon (parcels ready to collect): evening 21:00 → 4
+Notifications (2):
+  18:00  [Parcels] Delivered — Temu
+         Balík bol vyzdvihnutý
+         (clicking it opens /parcel/17)
+  19:00  [Parcels] Registered — SHEIN
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/23)
+New mail in Gmail (3):
+  #83 17:08  GLS Slovakia <noreply@gls-slovakia.sk>   [label: parcels]
+      Balík 90333333317 bol doručený
+      Váš balík bol úspešne doručený. Ďakujeme, že ste využili služby GLS.͏‌ ͏‌ ͏‌ logo GLS [https://img.example.com/logo.png]…
+  #84 19:08  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 322 Dobrý deň, odosielateľ SHEIN nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu…
+  #85 20:00  Packeta Slovakia <info@packeta.sk>   [label: parcels]
+      Posielajte s Packetou výhodne – od 2,49 €
+      Posielajte s Packetou výhodne. Na štítku nájdete číslo zásielky v tvare Z 000 0000 000 – podľa neho ju sledujete. Cena o…
+
+
+$ sim day
+══ Day 13 · Saturday 14 November 2026 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 3 · midday 13:00 → 4 · evening 21:00 → 4
+Notifications (12):
+  07:00  [Parcels] Returning to sender — EB333333168SK
+         Vrátenie zásielky odosielateľovi
+         (clicking it opens /parcel/18)
+  07:00  [Parcels] In transit — SHEIN
+         Zásielka je na ceste.
+         (clicking it opens /parcel/23)
+  08:00  [Parcels] Still waiting for you · day 2 — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Fri 20 Nov
+         (clicking it opens /parcel/15)
+  08:00  [Parcels] Still waiting for you · day 3 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Thu 19 Nov
+         (clicking it opens /parcel/19)
+  08:00  [Parcels] Still waiting for you · day 2 — SHEIN
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Fri 20 Nov
+         (clicking it opens /parcel/20)
+  09:00  [Parcels] Ready for pickup — SHEIN
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Sat 21 Nov
+         (clicking it opens /parcel/21)
+  15:00  [Parcels] Registered — AliExpress (Cainiao)
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/24)
+  15:30  [Parcels] Still waiting for you · day 2 — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Fri 20 Nov
+         (clicking it opens /parcel/15)
+  15:30  [Parcels] Still waiting for you · day 3 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Thu 19 Nov
+         (clicking it opens /parcel/19)
+  15:30  [Parcels] Still waiting for you · day 2 — SHEIN
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Fri 20 Nov
+         (clicking it opens /parcel/20)
+  15:30  [Parcels] Still waiting for you · day 1 — SHEIN
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Sat 21 Nov
+         (clicking it opens /parcel/21)
+  18:00  [Parcels] Registered — Temu
+         Zásielka bola podaná odosielateľom.
+         (clicking it opens /parcel/22)
+New mail in Gmail (4):
+  #86 08:14  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 319 Dobrý deň, vaša zásielka od odosielateľa SHEIN je pre vás pripravená na vyzdvihnutie v Z-BOXe. K…
+  #87 09:00  Temu <orders@temu.example.com>
+      How was your order? Rate it and get 500 credits
+      Rate your recent order PO-211-33000003. Unsubscribe
+  #88 14:08  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 320 Dobrý deň, odosielateľ AliExpress (Cainiao) nám práve odovzdal vašu zásielku, ktorá vám bude dor…
+  #89 18:08  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka bola prijatá do prepravy
+      Zásielka Z 333 3333 321 Dobrý deň, odosielateľ TEMU nám práve odovzdal vašu zásielku, ktorá vám bude doručená do Z-BOXu.…
+
+
+$ sim day
+══ Day 14 · Sunday 15 November 2026 ══
+Menu-bar icon (parcels ready to collect): morning 08:00 → 4 · midday 13:00 → 5 · evening 21:00 → 5
+Notifications (8):
+  07:00  [Parcels] In transit — Temu
+         Zásielka je na ceste.
+         (clicking it opens /parcel/22)
+  07:00  [Parcels] In transit — AliExpress (Cainiao)
+         Zásielka je na ceste.
+         (clicking it opens /parcel/24)
+  08:00  [Parcels] Still waiting for you · day 3 — Temu
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Fri 20 Nov
+         (clicking it opens /parcel/15)
+  08:00  [Parcels] Still waiting for you · day 4 — AliExpress (Cainiao)
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Thu 19 Nov
+         (clicking it opens /parcel/19)
+  08:00  [Parcels] Still waiting for you · day 3 — SHEIN
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Fri 20 Nov
+         (clicking it opens /parcel/20)
+  08:00  [Parcels] Still waiting for you · day 2 — SHEIN
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Sat 21 Nov
+         (clicking it opens /parcel/21)
+  10:00  [Parcels] Ready for pickup — SHEIN
+         Z-BOX Fiktívna Bystrica, Lesná 4 (Billa), Fiktívna Bystrica · collect by Sun 22 Nov
+         (clicking it opens /parcel/23)
+  15:30  [Parcels] 5 parcel updates
+         Still waiting for you · day 3 — Temu; Still waiting for you · day 4 — AliExpress (Cainiao); Still waiting for you · day 3 — SHEIN; Still waiting for you · day 2 — SHEIN; Still waiting for you · day 1 — SHEIN
+         (clicking it opens /)
+New mail in Gmail (1):
+  #90 09:24  Packeta Slovakia <noreply@packeta.sk>   [label: parcels]
+      Zásielka je pripravená na vyzdvihnutie
+      Zásielka Z 333 3333 322 Dobrý deň, vaša zásielka od odosielateľa SHEIN je pre vás pripravená na vyzdvihnutie v Z-BOXe. K…
+
+
+$ sim day
+Day 14 is over: the 14 days are done. Use sim text / sim shot to look around, then sim stop.
+
+$ sim status
+Persona: zuzana (Zuzana Fiktívna, Fiktívna Bystrica)
+Simulated time: Day 14 of 14 · Sunday 15 November 2026, 22:00
+Setup: done
+Dashboard: http://127.0.0.1:50370/
+Menu-bar icon: 5
+Gmail: 90 mails so far (sim mail)
+Guards: network attempts blocked 0, processes blocked 0
+

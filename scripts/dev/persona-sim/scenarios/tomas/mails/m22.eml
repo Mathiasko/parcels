@@ -1,0 +1,14 @@
+Delivered-To: tomas.bezpecny@example.sk
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fakecm;
+        Fri, 13 Nov 2026 08:00:13 +0100
+Return-Path: <newsletter@secweekly.example.com>
+Date: Fri, 13 Nov 2026 08:00:13 +0100
+From: Security Weekly <newsletter@secweekly.example.com>
+To: =?utf-8?Q?Tom=C3=A1=C5=A1_Bezpe=C4=8Dn=C3=BD?= <tomas.bezpecny@example.sk>
+Subject: This week: supply-chain attacks on auto-updaters
+Message-ID: <tomas.m22.mail@secweekly.example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+This week: supply-chain attacks on auto-updaters.

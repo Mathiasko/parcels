@@ -1,0 +1,67 @@
+Delivered-To: lucia.vymyslena@example.cz
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake2i;
+        Tue, 3 Nov 2026 10:00:03 +0100
+Return-Path: <eshop@knihkupectvi.example.cz>
+Date: Tue, 3 Nov 2026 10:00:03 +0100
+From: =?utf-8?Q?Knihkupectv=C3=AD_P=C5=99=C3=AD?=
+ =?utf-8?Q?kladn=C3=A9?= <eshop@knihkupectvi.example.cz>
+To: =?utf-8?Q?Lucia_Vymyslen=C3=A1?= <lucia.vymyslena@example.cz>
+Subject: =?utf-8?Q?Va=C5=A1e_objedn=C3=A1vka_?=
+ =?utf-8?Q?=C4=8D._2026-4410_byla?=
+ =?utf-8?Q?_odesl=C3=A1na?=
+Message-ID: <lucia.m01.cz-2026-4410@knihkupectvi.example.cz>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_2hxxxx.fake"
+
+------=_Part_alt_2hxxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Dobr=C3=BD den,
+
+va=C5=A1e objedn=C3=A1vka =C4=8D. 2026-4410 byla pr=C3=A1v=C4=9B =
+odesl=C3=A1na.
+Doprava: Z=C3=A1silkovna =E2=80=93 v=C3=BDdejn=C3=AD m=C3=ADsto Trafika U =
+Fiktivn=C3=ADho parku
+=C4=8C=C3=ADslo z=C3=A1silky: Z 777 7777 701
+
+Obsah z=C3=A1silky:
+ - U=C4=8Debnice: =C3=9Avod do statistiky
+
+D=C4=9Bkujeme za n=C3=A1kup!
+T=C3=BDm Knihkupectv=C3=AD P=C5=99=C3=ADkladn=C3=A9
+
+------=_Part_alt_2hxxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>Va=C5=A1e objedn=C3=A1vka =C4=8D. 2026-4410 byla =
+odesl=C3=A1na</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#444;color:#f=
+ff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">&#847;&zwnj;&nbsp=
+;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#444;padding:16px;color:#fff;font-size:20px"><i=
+mg src=3D"https://img.example.com/logo.png" alt=3D"Knihkupectv=C3=AD =
+P=C5=99=C3=ADkladn=C3=A9" width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Dobr=C3=BD den,</p><p>va=C5=A1e =
+objedn=C3=A1vka =C4=8D. 2026-4410 byla pr=C3=A1v=C4=9B odesl=C3=A1na.=
+</p><p>Doprava: Z=C3=A1silkovna =E2=80=93 v=C3=BDdejn=C3=AD m=C3=ADsto =
+Trafika U Fiktivn=C3=ADho parku</p><p>=C4=8C=C3=ADslo z=C3=A1silky: Z 777 =
+7777 701</p><p>Obsah z=C3=A1silky:</p><p> - U=C4=8Debnice: =C3=9Avod do =
+statistiky</p><p>D=C4=9Bkujeme za n=C3=A1kup!</p><p>T=C3=BDm =
+Knihkupectv=C3=AD P=C5=99=C3=ADkladn=C3=A9</p></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">Tento e-mail bol =
+vygenerovan=C3=BD automaticky.</td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_2hxxxx.fake--

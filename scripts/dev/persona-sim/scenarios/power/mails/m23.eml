@@ -1,0 +1,58 @@
+Delivered-To: peter.mocny@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fakeb2;
+        Sat, 7 Nov 2026 07:40:07 +0100
+Return-Path: <serv@sps-sro.sk>
+Date: Sat, 7 Nov 2026 07:40:07 +0100
+From: serv@sps-sro.sk
+To: =?utf-8?Q?Peter_Mocn=C3=BD?= <peter.mocny@example.com>
+Subject: =?utf-8?Q?Doru=C4=8Denie_z=C3=A1siel?=
+ =?utf-8?Q?ky_703444444444440?=
+ =?utf-8?Q?6_dnes?=
+Message-ID: <power.m23.7034444444444406-today@sps-sro.sk>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_b1xxxx.fake"
+
+------=_Part_alt_b1xxxx.fake
+Content-Type: text/plain; charset=windows-1250
+Content-Transfer-Encoding: quoted-printable
+
+body { font-family: Tahoma, Verdana, Arial, Helvetica, Chicago, Sans-serif;=
+ font-size: 12px; margin: 0px; padding: 4px; }p { text-align: justify }tr, =
+td { font-size: 12px; }h1 {color: #ffffff; font-size: 14px; background: =
+#455560; padding: 4px 5px; border-left: 20px solid #f89829; }
+V=E1=9Een=FD z=E1kazn=EDk,
+va=9Aa z=E1sielka cislo 7034444444444406 od N=E1bytok Domov bude dnes =
+doru=E8en=E1 kuri=E9rom na adresu. Suma na =FAhradu (dobierka): 89,90 =80. =
+Kuri=E9r: 0900 000 404.
+
+Prev=E1dzkovate=BEom je spolo=E8nos=9D Slovak Parcel Service s.r.o., I=C8O:=
+ 31 329 217 (=EFalej len ako "Prev=E1dzkovate=BE"). Prev=E1dzkovate=BEa =
+m=F4=9Eete kontaktova=9D na adrese Seneck=E1 cesta 1, 900 28 Ivanka pri =
+Dunaji.
+
+S pozdravom,
+kuri=E9rska spolo=E8nos=9D
+Pros=EDm, neodpovedajte na doru=E8en=FA spr=E1vu e-mailom, pre kontakt =
+pou=9Eite inform=E1cie na webovej str=E1nke.
+
+------=_Part_alt_b1xxxx.fake
+Content-Type: text/html; charset=windows-1250
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><style>body { font-family: Tahoma, Verdana, Arial, Helvetica, =
+Chicago, Sans-serif; font-size: 12px; margin: 0px; padding: 4px; }p { =
+text-align: justify }tr, td { font-size: 12px; }h1 {color: #ffffff; =
+font-size: 14px; background: #455560; padding: 4px 5px; border-left: 20px =
+solid #f89829; }</style></head><body><div class=3D"obsah"><h1>Slovak Parcel=
+ Service</h1><p>V=E1=9Een=FD z=E1kazn=EDk,</p><p>va=9Aa z=E1sielka cislo =
+7034444444444406 od N=E1bytok Domov bude dnes doru=E8en=E1 kuri=E9rom na =
+adresu. Suma na =FAhradu (dobierka): 89,90 =80. Kuri=E9r: 0900 000 404.=
+</p><p>Prev=E1dzkovate=BEom je spolo=E8nos=9D Slovak Parcel Service s.r.o.,=
+ I=C8O: 31 329 217 (=EFalej len ako "Prev=E1dzkovate=BE"). =
+Prev=E1dzkovate=BEa m=F4=9Eete kontaktova=9D na adrese Seneck=E1 cesta 1, =
+900 28 Ivanka pri Dunaji.<br><br>S pozdravom,<br>kuri=E9rska =
+spolo=E8nos=9D<br>Pros=EDm, neodpovedajte na doru=E8en=FA spr=E1vu e-mailom=
+, pre kontakt pou=9Eite inform=E1cie na webovej str=E1nke.=
+</p></div></body></html>
+------=_Part_alt_b1xxxx.fake--
