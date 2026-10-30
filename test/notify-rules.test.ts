@@ -568,6 +568,32 @@ test('a pickup point seen while in transit does not speak for a quiet transition
   expect(build(on, [], NOW, PROGRESS)).toEqual([])
 })
 
+test('a pickup point that appears a poll after a quiet transition stays quiet too, and leaves no backlog', () => {
+  const db = memDb()
+  const id = parcelIn(db, 'pre_transit', {}, 'dpd', '01234567890123')
+  // Poll 1: in transit, no pickup point yet. Quiet, recorded.
+  updateParcelState(db, id, { status: 'in_transit' })
+  expect(build(db)).toEqual([])
+  // Poll 2: still in transit, and a scan now names the pickup point (DPD's pudoId). No transition this
+  // time, but the parcel is still in a quiet status: nothing pushed, the pickup point recorded as said.
+  updateParcelState(db, id, { status: 'in_transit', pickup: ZBOX })
+  expect(build(db, [], new Date(NOW.getTime() + HOUR))).toEqual([])
+  expect(getParcel(db, id)).toMatchObject({ lastAnnouncedStatus: 'in_transit', pickupAnnounced: true })
+  // Progress switched on in a later run: nothing owed.
+  expect(build(db, [], new Date(NOW.getTime() + 2 * HOUR), PROGRESS)).toEqual([])
+})
+
+test.each([
+  ['pre_transit', { progress: false }],
+  ['delivered', { delivered: false }],
+] as const)('a pickup point appearing while the parcel stays %s with its switch off does not speak', (status, off) => {
+  const db = memDb()
+  const id = parcelIn(db, status)
+  updateParcelState(db, id, { status, pickup: ZBOX })
+  expect(build(db, [], NOW, { ...DEFAULT_NOTIFICATIONS, ...off })).toEqual([])
+  expect(getParcel(db, id)!.pickupAnnounced).toBe(true)
+})
+
 test('a pickup point first seen on a delivered parcel the user marked does not leak a Delivered banner', () => {
   const db = memDb()
   const id = parcelIn(db, 'out_for_delivery')

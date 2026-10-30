@@ -64,16 +64,13 @@ function waitingDay(p: Parcel, now: Date): string {
  * - `newEvents` (this run's inserted events) is used only for a repeat failed attempt, where the
  *   status does not change but a new attempt happened.
  *
- * `prefs` (the config's `notifications` switches) can make a transition SILENT: one to `pre_transit` or
- * `in_transit` while `progress` is off, and one to `delivered` while `delivered` is off or once the
- * user has marked the parcel themselves (a `user_marks` row: they already said they have it). A silent
- * transition is still recorded with `markAnnounced`, so switching a switch on later releases no
- * backlog of stale banners. A pickup point first seen with a silenced status is recorded as said with
- * it and does not speak on its own, because DPD and Posta name the pickup point while the parcel is still
- * in transit (that would make every such parcel an "In transit" banner, or a "Delivered" one past a user
- * mark), and the ready-for-pickup banner carries it anyway. Every other status, and every other
- * reason (a failed attempt, a new pickup point of a status that speaks, the deadline, the reminder), is
- * announced exactly as before.
+ * `prefs` (the config's `notifications` switches) make some statuses QUIET: `pre_transit` and
+ * `in_transit` while `progress` is off, and `delivered` while `delivered` is off or once the user has
+ * marked the parcel themselves (a `user_marks` row: they already said they have it). A parcel in a quiet
+ * status speaks neither for its transition nor for a new pickup point (DPD and Posta name one while the
+ * parcel is still in transit; the ready-for-pickup banner carries it anyway), on that poll or a later
+ * one. Both are still recorded with `markAnnounced`, so switching a switch on later releases no backlog.
+ * Every other status is announced exactly as before.
  *
  * Parcel updates beyond four collapse into one summary. Carrier alarms are infrastructure failures,
  * not parcel updates: they are never folded into that summary, so they can never be truncated out of it.
@@ -107,18 +104,17 @@ export function buildNotifications(
       const mine = newEvents.filter(e => e.parcelId === id)
 
       const transitioned = p.status !== p.lastAnnouncedStatus && p.status !== 'unknown'
-      // A transition the switches keep quiet (see above): still recorded below, never a reason by itself.
-      const silenced = transitioned && (
-        (p.status === 'pre_transit' || p.status === 'in_transit') ? !prefs.progress
-          : p.status === 'delivered' ? !prefs.delivered || marked.get(id) !== undefined
-            : false)
-      const speaks = transitioned && !silenced
+      // A status the switches keep quiet (see above). The user_marks lookup only for a delivered parcel.
+      const quiet = (p.status === 'pre_transit' || p.status === 'in_transit') ? !prefs.progress
+        : p.status === 'delivered' ? !prefs.delivered || marked.get(id) !== undefined
+          : false
+      const speaks = transitioned && !quiet
+      const pickupPending = p.pickup !== undefined && !p.pickupAnnounced && p.status !== 'unknown'
       // Only while the parcel is *currently* failed, so a long-ago attempt in a freshly added parcel's
       // backfilled history is not mistaken for a live one.
       const failedAttempt = p.status === 'failed_attempt' && (transitioned || mine.some(e => e.status === 'failed_attempt'))
-      // Not for a silenced status: the pickup point is recorded as said with it (below), and the
-      // ready-for-pickup banner names it anyway.
-      const newPickup = p.pickup !== undefined && !p.pickupAnnounced && p.status !== 'unknown' && !silenced
+      // Not in a quiet status: the pickup point is recorded as said (below), and the ready banner names it.
+      const newPickup = pickupPending && !quiet
       const deadlineDue = p.status === 'ready_for_pickup' && p.retainedTill !== undefined
         && p.retainedTill > now && p.retainedTill.getTime() - now.getTime() <= DEADLINE_WINDOW_MS
         && reminded.get(id) === undefined
@@ -127,7 +123,8 @@ export function buildNotifications(
       const nudgeDue = p.status === 'ready_for_pickup' && dueSlot !== undefined
         && nudged.get(id, dueSlot) === undefined
       if (!speaks && !failedAttempt && !newPickup && !deadlineDue && !nudgeDue) {
-        if (silenced) markAnnounced(db, id, p.status, p.pickup !== undefined)
+        // What the quiet status kept back is recorded, so it is neither re-evaluated every run nor owed later.
+        if (quiet && (transitioned || pickupPending)) markAnnounced(db, id, p.status, p.pickup !== undefined)
         continue
       }
 
