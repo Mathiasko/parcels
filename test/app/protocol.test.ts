@@ -7,13 +7,13 @@ import { firstRunHandler, NOT_A_POSTCODE, PAGE_CSP, readPages, type FirstRunDeps
 
 const pages = readPages(join(import.meta.dirname, '../../app/pages'))
 
-function setup(firstRun: FirstRunDeps['firstRun'], result: MoveInResult = { ok: true }) {
+function setup(firstRun: FirstRunDeps['firstRun'], result: MoveInResult = { ok: true }, appearance?: FirstRunDeps['appearance']) {
   const configPath = join(mkdtempSync(join(tmpdir(), 'parcels-protocol-')), 'Parcels', 'config.json')
   const started: string[] = []
   let quits = 0
   let moves = 0
   const handle = firstRunHandler({
-    firstRun, configPath, pages,
+    firstRun, configPath, pages, ...(appearance && { appearance }),
     start: path => started.push(path),
     moveIn: async () => { moves++; return result },
     quit: () => { quits++ },
@@ -118,4 +118,27 @@ test('an unknown action is refused', async () => {
   const s = setup(MOVE_IN)
   expect((await s.post('move-in', 'action=delete')).status).toBe(400)
   expect(s.moves()).toBe(0)
+})
+
+const MOVE_FAILED: MoveInResult = { ok: false, step: 'copy', reason: 'no space', oldInstall: 'running' }
+
+test('every first-run page names its theme and mode on <html>: the defaults without an appearance', async () => {
+  const welcome = await (await setup({ kind: 'welcome' }).handle(new Request('parcels://welcome/'))).text()
+  expect(welcome).toContain('<html lang="en" data-theme="postal" data-mode="system">')
+  const move = setup(MOVE_IN, MOVE_FAILED)
+  expect(await (await move.handle(new Request('parcels://move-in/'))).text()).toContain('data-theme="postal" data-mode="system"')
+  const result = await (await move.post('move-in', 'action=move')).text()
+  expect(result).toContain('Nothing was moved')
+  expect(result).toContain('<html lang="en" data-theme="postal" data-mode="system">')
+})
+
+test('every first-run page carries the appearance it was given', async () => {
+  const appearance = { theme: 'classic', mode: 'light' } as const
+  const tag = '<html lang="en" data-theme="classic" data-mode="light">'
+  expect(await (await setup({ kind: 'welcome' }, undefined, appearance).handle(new Request('parcels://welcome/'))).text()).toContain(tag)
+  const move = setup(MOVE_IN, MOVE_FAILED, appearance)
+  expect(await (await move.handle(new Request('parcels://move-in/'))).text()).toContain(tag)
+  expect(await (await move.post('move-in', 'action=move')).text()).toContain(tag)
+  // A welcome page re-shown after a bad postcode keeps it too.
+  expect(await (await setup({ kind: 'welcome' }, undefined, appearance).post('welcome', 'postcode=abc')).text()).toContain(tag)
 })

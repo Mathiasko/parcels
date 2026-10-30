@@ -313,7 +313,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    */
   const ctx = (): PageCtx => {
     const at = now()
-    return { now: at, health: carrierHealth(db), poller: pollerStatus(db, at), attention: countUnparsedMessages(db) }
+    return { now: at, health: carrierHealth(db), poller: pollerStatus(db, at), attention: countUnparsedMessages(db), appearance: config.appearance }
   }
 
   // Without authentication, a page the user happens to visit must not be able to drive this server:
@@ -355,7 +355,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    * `ctx()` reads: then the page goes without the nav's health dot rather than not at all.
    */
   const errorCtx = (): PageCtx => {
-    try { return ctx() } catch { return { now: new Date(), health: [] } }
+    try { return ctx() } catch { return { now: new Date(), health: [], appearance: config.appearance } }
   }
 
   /** An error as a page of the app (see views/error.ts); plain text only if even that cannot render. */

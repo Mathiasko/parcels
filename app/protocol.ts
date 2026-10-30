@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Protocol } from 'electron'
+import { DEFAULT_APPEARANCE, type Appearance } from '../src/core/appearance.js'
 import { STYLE } from '../src/web/views/style.js'
 import { fillPage, normalisePostcode, writeWelcomeConfig, type FirstRun } from './first-run.js'
 import type { MoveInResult } from './move-in.js'
@@ -56,6 +57,8 @@ export interface FirstRunDeps {
   firstRun: Exclude<FirstRun, { kind: 'ready' }>
   configPath: string
   pages: Pages
+  /** The theme and mode the pages wear; absent is the defaults, since a first run has no config yet. */
+  appearance?: Appearance
   /** Starts the server, then shows `path` on the dashboard once it answers. Called once. */
   start: (path: string) => void
   /** The move itself, with launchctl and the folders already bound. */
@@ -81,7 +84,8 @@ const plain = (status: number, text: string) => new Response(text, {
 const noContent = () => new Response(null, { status: 204, headers: { 'content-security-policy': PAGE_CSP } })
 
 export function firstRunHandler(d: FirstRunDeps): (req: Request) => Promise<Response> {
-  const welcomePage = (error: string, postcode: string) => page(fillPage(d.pages.welcome, { error, postcode }, STYLE))
+  const { theme, mode } = d.appearance ?? DEFAULT_APPEARANCE
+  const welcomePage = (error: string, postcode: string) => page(fillPage(d.pages.welcome, { error, postcode, theme, mode }, STYLE))
   const clone = d.firstRun.kind === 'move-in' ? d.firstRun.clone : ''
 
   /** Set once the app is set up: from then on the buttons have nothing left to do. */
@@ -125,7 +129,7 @@ export function firstRunHandler(d: FirstRunDeps): (req: Request) => Promise<Resp
       return noContent()
     }
     d.log(`move in: failed at ${result.step}: ${result.reason}`)
-    return page(fillPage(d.pages.result, { clone, step: STEP_WORDS[result.step], reason: result.reason, ...OLD_INSTALL[result.oldInstall] }, STYLE))
+    return page(fillPage(d.pages.result, { clone, step: STEP_WORDS[result.step], reason: result.reason, theme, mode, ...OLD_INSTALL[result.oldInstall] }, STYLE))
   }
 
   return async (req: Request): Promise<Response> => {
@@ -136,7 +140,7 @@ export function firstRunHandler(d: FirstRunDeps): (req: Request) => Promise<Resp
           : undefined
       if (which === undefined || url.pathname !== '/') return plain(404, 'There is no such page.')
       if (req.method === 'GET') {
-        return which === 'welcome' ? welcomePage('', '') : page(fillPage(d.pages.moveIn, { clone }, STYLE))
+        return which === 'welcome' ? welcomePage('', '') : page(fillPage(d.pages.moveIn, { clone, theme, mode }, STYLE))
       }
       if (req.method !== 'POST') return plain(405, 'Not allowed.')
       // Only the first-run pages themselves may post here. Electron may leave the header out of a

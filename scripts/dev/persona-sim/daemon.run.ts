@@ -31,6 +31,7 @@ import { POLL_SLOTS } from '../../../src/core/schedule.js'
 import { appUpdateStatusPath, checkAppRelease, stagingDir, writeAppUpdateStatus, type AppUpdateStatus } from '../../../src/core/app-update.js'
 import { setMainChannel, type ToMain } from '../../../src/core/app-ipc.js'
 import { STYLE } from '../../../src/web/views/style.js'
+import { DEFAULT_APPEARANCE } from '../../../src/core/appearance.js'
 import { getUpdateCheck, recordUpdateInstalled } from '../../../src/db/update-state.js'
 import type { Carrier, CarrierAdapter, HttpClient } from '../../../src/core/types.js'
 import type { Notification } from '../../../src/notify/types.js'
@@ -296,7 +297,7 @@ test('persona simulator', async () => {
   async function appPage(name: string, method: 'GET' | 'POST' = 'GET', form?: URLSearchParams): Promise<{ status: number; body: string; note?: string }> {
     if (name === 'first-run') name = firstRunPath
     if (name === 'result') {
-      const body = fillPage(pages.result, { clone: S.meta.clone ?? '/Users/you/parcels', step: 'Copying your parcels and settings', reason: 'The disk is full: 0 bytes free on Macintosh HD.', ...OLD_INSTALL.running }, STYLE)
+      const body = fillPage(pages.result, { clone: S.meta.clone ?? '/Users/you/parcels', step: 'Copying your parcels and settings', reason: 'The disk is full: 0 bytes free on Macintosh HD.', ...DEFAULT_APPEARANCE, ...OLD_INSTALL.running }, STYLE)
       return { status: 200, body, note: 'This page appears only if moving in fails; it is shown here with sample text.' }
     }
     const res = await firstRun(new Request(`parcels://${name}/`, method === 'POST' ? { method, body: form, headers: { 'content-type': 'application/x-www-form-urlencoded' } } : {}))

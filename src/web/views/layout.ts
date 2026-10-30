@@ -2,6 +2,7 @@ import type { HealthRow } from '../../db/health.js'
 import type { PollerStatus } from '../../core/pollwatch.js'
 import { glyph } from './glyphs.js'
 import { SPRITE } from './glyphs.js'
+import { DEFAULT_APPEARANCE, type Appearance } from '../../core/appearance.js'
 import { html, raw, type Html } from './html.js'
 import { STYLE } from './style.js'
 
@@ -32,6 +33,8 @@ export interface PageCtx {
    * to the update section once the new app is likely to be answering. Only ever a path on this server.
    */
   reloadTo?: string
+  /** The configured theme and mode, named on `<html>`; absent is the defaults. */
+  appearance?: Appearance
 }
 
 /** A carrier that has failed its last run(s). The nav shows a dot for this and for nothing else (see design-language §5.1). */
@@ -56,8 +59,9 @@ function attentionLabel(label: string, waiting: number): Html {
 export function layout(title: string, current: string, body: Html, ctx: PageCtx): Html {
   const trouble = carrierTrouble(ctx.health)
   const waiting = ctx.attention ?? 0
+  const a = ctx.appearance ?? DEFAULT_APPEARANCE
   return html`<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="en" data-theme="${a.theme}" data-mode="${a.mode}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 ${ctx.reloadIn ? html`<meta http-equiv="refresh" content="${ctx.reloadTo ? `${ctx.reloadIn};url=${ctx.reloadTo}` : ctx.reloadIn}">` : ''}<title>${title} - Parcels</title>
 <style>${raw(STYLE)}</style></head>

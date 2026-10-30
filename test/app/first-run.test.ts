@@ -223,7 +223,7 @@ describe('the pages', () => {
   })
 
   test('welcome says what the spec says, and posts the postcode to parcels://welcome', () => {
-    const html = fillPage(page('welcome.html'), { error: '', postcode: '' }, STYLE)
+    const html = fillPage(page('welcome.html'), { error: '', postcode: '', theme: 'postal', mode: 'system' }, STYLE)
     expect(html).toContain('<h1>Welcome to Parcels</h1>')
     expect(html).toContain('Parcels tracks your parcels from your shipping emails. First, the postcode some carriers ask for.')
     expect(html).toMatch(/<form method="post" action="parcels:\/\/welcome\/">/)
@@ -232,7 +232,7 @@ describe('the pages', () => {
   })
 
   test('move in names the clone, offers Move in and Not now (quit), and posts to parcels://move-in', () => {
-    const html = fillPage(page('move-in.html'), { clone: '/Users/a/Desktop/parcels' }, STYLE)
+    const html = fillPage(page('move-in.html'), { clone: '/Users/a/Desktop/parcels', theme: 'postal', mode: 'system' }, STYLE)
     expect(html).toContain('<h1>Move your parcels into the app</h1>')
     expect(html.replace(/\s+/g, ' ')).toContain(
       'Parcels is already installed in <span class="mono">/Users/a/Desktop/parcels</span>. Move your parcels, settings and Gmail connection into the app? The folder is left as it is.')
@@ -243,9 +243,10 @@ describe('the pages', () => {
 
   test('the result page shows the step and the reason', () => {
     const html = fillPage(page('result.html'), {
-      step: 'Copying your parcels', reason: 'file is not a database', clone: '/c',
+      step: 'Copying your parcels', reason: 'file is not a database', clone: '/c', theme: 'classic', mode: 'dark',
       ledeStart: 'Nothing was moved, and ', ledeEnd: ' is as it was.', next: 'You can try again.',
     }, STYLE)
+    expect(html).toContain('<html lang="en" data-theme="classic" data-mode="dark">')
     expect(html).toContain('Copying your parcels')
     expect(html).toContain('file is not a database')
     expect(html).toMatch(/action="parcels:\/\/move-in\/"/)
