@@ -14,6 +14,7 @@ import { dismissMessage } from '../src/db/messages.js'
 import { listUnparsedMessages } from '../src/web/queries.js'
 import { healthPage } from '../src/web/views/health.js'
 import { getIngestStatus } from '../src/db/ingest-status.js'
+import { recordHealth } from '../src/db/health.js'
 import type { CarrierId } from '../src/core/types.js'
 import { fakeImap, type FakeMessage } from './imap-fake.js'
 import { NOW, bodyHttp, config, memDb, okResult, stubAdapter } from './poll-helpers.js'
@@ -726,6 +727,63 @@ describe('runPoll wiring', () => {
     expect(report.ingest?.error).toMatch(/ENOTFOUND/)
     expect(report.polled).toBe(1)
     expect(summarize(report)).toMatch(/mail ingest failed: .*ENOTFOUND/)
+  })
+
+  // Persona finding "3 hours behind Gmail": the carrier's mail said the parcel was ready, and the
+  // dashboard said so hours later, because a parcel idle for days sits in a slow backoff tier and
+  // `isDue` looked only at the clock. New mail about it is the carrier telling us to look now.
+  describe('new mail about a parcel already tracked makes it due in that run', () => {
+    const HOUR = 3_600_000
+    /** Z0000000001 (the number in packeta-accepted.eml), idle 4 days and polled 30 minutes ago: not due by time. */
+    function quietParcel(db: ReturnType<typeof memDb>): number {
+      const id = Number(db.prepare(`INSERT INTO parcels (carrier, tracking_number, status, first_seen_at, last_changed_at, last_polled_at, source)
+        VALUES ('packeta', 'Z0000000001', 'in_transit', ?, ?, ?, 'manual')`)
+        .run(new Date(NOW.getTime() - 5 * DAY).toISOString(), new Date(NOW.getTime() - 4 * DAY).toISOString(),
+          new Date(NOW.getTime() - HOUR / 2).toISOString()).lastInsertRowid)
+      return id
+    }
+    const run = (db: ReturnType<typeof memDb>, adapter: ReturnType<typeof stubAdapter>, client: ReturnType<typeof fakeImap>['client'], now = NOW) =>
+      runPoll({ db, http: bodyHttp(), adapters: [adapter], config, now, ingest: { imap, client, mailDir: mkdtempSync(join(tmpdir(), 'parcels-due-')) } })
+
+    test('polled in the same run that read the mail, and only once per mail', async () => {
+      const db = memDb()
+      quietParcel(db)
+      const adapter = stubAdapter('packeta', inputs => inputs.map(i => okResult(i.number, [])))
+      // Without mail the backoff holds, which is what the rest of this relies on.
+      expect((await run(db, adapter, fakeImap([]).client)).polled).toBe(0)
+
+      const mailbox = [mail(1, 'packeta-accepted', 0)]
+      const report = await run(db, adapter, fakeImap(mailbox).client)
+      expect(report.ingest).toMatchObject({ created: 0, linked: 1 })
+      expect(adapter.calls.flat().map(i => i.number)).toEqual(['Z0000000001'])
+      expect(report.polled).toBe(1)
+
+      // The same mail again (nothing new) is not a reason to ask again: the backoff is back in charge.
+      const again = await run(db, adapter, fakeImap(mailbox).client, new Date(NOW.getTime() + 10 * 60_000))
+      expect(again.polled).toBe(0)
+      expect(adapter.calls).toHaveLength(1)
+    })
+
+    test('a carrier inside its gated backoff window is still left alone', async () => {
+      const db = memDb()
+      quietParcel(db)
+      recordHealth(db, 'packeta', 'gated', 'HTTP 429', new Date(NOW.getTime() - 10 * 60_000))
+      const adapter = stubAdapter('packeta', inputs => inputs.map(i => okResult(i.number, [])))
+      const report = await run(db, adapter, fakeImap([mail(1, 'packeta-accepted', 0)]).client)
+      expect(report.ingest).toMatchObject({ linked: 1 })
+      expect(report.polled).toBe(0)
+      expect(adapter.calls).toHaveLength(0)
+    })
+
+    test('a delivered parcel is not polled again because a late mail mentions it', async () => {
+      const db = memDb()
+      const id = quietParcel(db)
+      db.prepare("UPDATE parcels SET status = 'delivered' WHERE id = ?").run(id)
+      const adapter = stubAdapter('packeta', inputs => inputs.map(i => okResult(i.number, [])))
+      const report = await run(db, adapter, fakeImap([mail(1, 'packeta-accepted', 0)]).client)
+      expect(report.ingest).toMatchObject({ linked: 1 })
+      expect(report.polled).toBe(0)
+    })
   })
 
   test('without ingest configured nothing changes', async () => {

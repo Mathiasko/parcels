@@ -49,6 +49,12 @@ export interface IngestReport {
   failed: number
   /** Set (with every count at zero) when the mailbox could not be read at all. */
   error?: string
+  /**
+   * Parcels that already existed and that a message read this run named, by id. The poll treats them
+   * as due in the same run (see `runPoll`): carrier mail about a parcel is the best sign there is that
+   * the carrier has news, and the backoff tier knows nothing about it. Absent when there were none.
+   */
+  mentioned?: number[]
 }
 
 const emptyReport = (): IngestReport => ({ read: 0, created: 0, linked: 0, archivedOld: 0, needsAttention: 0, ignored: 0, failed: 0 })
@@ -169,6 +175,7 @@ function place<T extends Item>(
     report.archivedOld += counts.archivedOld
     report.needsAttention += counts.needsAttention
     report.ignored += counts.ignored
+    if (counts.mentioned) report.mentioned = [...new Set([...(report.mentioned ?? []), ...counts.mentioned])]
   }
 }
 
@@ -280,6 +287,7 @@ function placeOne(db: Database, it: Item, deps: ReprocessDeps, report: IngestRep
       // This is how an email-only parcel moves: each later mail adds its own words. `appendEvents`
       // dedupes, so re-reading the same mail (a reprocess, a resent copy) adds nothing.
       if (event) appendEvents(db, existing.id, [event])
+      report.mentioned = [...(report.mentioned ?? []), existing.id]
       if (linked) {
         link(existing.id, null)
         report.linked++

@@ -138,15 +138,21 @@ export async function runPoll(deps: PollDeps): Promise<PollReport> {
   if (deps.ingest) report.ingest = await runIngest(db, deps, deps.ingest)
 
   const health = new Map(carrierHealth(db).map(h => [h.carrier, h]))
+  // Parcels this run's mail was about. New mail is news the backoff tier cannot know of (a parcel idle
+  // for days is asked about every 2.5 or 20 hours, and its "ready for pickup" arrives by mail first),
+  // so they are due now. Once per mail: the next run reads no new mail about them and the tiers resume.
+  // Only the time tiers are skipped: the throttle of a gated carrier and the postcode skip still hold.
+  const mailed = new Set(report.ingest?.mentioned ?? [])
   const byCarrier = new Map<CarrierId, Parcel[]>()
   for (const p of listActive(db)) {
     if (deps.parcelIds && !deps.parcelIds.includes(p.id)) continue
     if (deps.select && !deps.select(p)) continue
     // `forceAll` skips `isDue` entirely, and dormancy lives inside `isDue`. Without this, every long
     // sleep gap (every morning) would re-poll every dormant parcel. A parcel named in `parcelIds` is
-    // the user's explicit "refresh this one" and is polled even when dormant.
-    if (deps.parcelIds === undefined && isDormant(p, now)) continue
-    if (!deps.forceAll && !isDue(p, now)) continue
+    // the user's explicit "refresh this one" and is polled even when dormant, and so is one that new
+    // mail was just about: that mail is the sign of life dormancy was waiting for.
+    if (deps.parcelIds === undefined && !mailed.has(p.id) && isDormant(p, now)) continue
+    if (!deps.forceAll && !mailed.has(p.id) && !isDue(p, now)) continue
     // Deterministic: the carrier rejected this exact postcode and would reject it identically for
     // ever, so do not ask. The flag is NOT cleared here: clearing at selection would unflag a
     // parcel whose carrier has no adapter or is throttled, i.e. one that never gets polled at all.
