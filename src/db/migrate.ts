@@ -157,6 +157,29 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 5,
+    name: 'pickup codes: read waiting parcels again with the new PIN patterns',
+    /**
+     * `extractPickupCode` used to know only Packeta's Z-BOX phrase; it now also reads the PINs that
+     * GLS, DPD, the post, SPS and PPL print. But the pickup-code pass is gated by a watermark:
+     * `pickup_codes.checked_messages` is how many messages it had looked at when it last gave up, and
+     * `needsPickupCodeCheck` reads a parcel again only when it now has MORE mail than that. A parcel
+     * already waiting at a GLS BOX has been looked at, found "no code" under the old reader, and has
+     * no new mail coming - so without this it would never be opened with the new patterns, and the
+     * user would see no PIN on exactly the parcels that are waiting right now.
+     *
+     * Setting the watermark to -1 (below any message count, including zero) makes the next pass read
+     * each of those parcels once more, after which it records the real count and the usual rule
+     * applies again. Only rows WITHOUT a code are touched: a code that was found is final (the
+     * locker code does not change, and `needsPickupCodeCheck` already never re-reads it), so it is
+     * left exactly as it is. Data only - the shape is unchanged, so `schema.sql` needs no edit, and a
+     * fresh database (which has no such rows) is simply stamped at this version.
+     */
+    up: db => {
+      db.exec('UPDATE pickup_codes SET checked_messages = -1 WHERE code IS NULL')
+    },
+  },
 ]
 
 /** Tables with no uniqueness on `parcel_id`: every row moves, and none may be dropped. */

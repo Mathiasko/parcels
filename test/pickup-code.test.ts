@@ -8,6 +8,7 @@ import { getPickupCode, needsPickupCodeCheck, recordPickupCode, pickupCodesFor }
 import { extractPickupCode, mailText } from '../src/ingest/extract.js'
 import { runPickupCodes } from '../src/core/pickup-code.js'
 import { runPoll } from '../src/core/poll.js'
+import { MIGRATIONS } from '../src/db/migrate.js'
 import type { Notification } from '../src/notify/types.js'
 import { bodyHttp, config, okResult, stubAdapter } from './poll-helpers.js'
 import type { CarrierId, PickupPoint } from '../src/core/types.js'
@@ -231,6 +232,30 @@ test('a second poll does not re-read mail it has already scanned', async () => {
   await runPickupCodes({ db, now: NOW, readMail: read })
   expect(reads).toBe(1)   // nothing new arrived, so nothing was opened again
   expect(getPickupCode(db, id)).toBe('987654')
+})
+
+test('a waiting parcel whose mail was read before the PIN patterns existed is read again after the migration', async () => {
+  const id = insertParcel(db, { carrier: 'gls', trackingNumber: '12345678901', source: 'manual' })
+  updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'locker', name: 'GLS BOX', street: 'Hlavna 6', city: 'Bratislava', postalCode: '821 01' } })
+  mail(id, '/mail/gls.eml')
+  // What the previous version left behind: it looked at the one message, found no Z-BOX code, and
+  // wrote that down. The watermark now says there is nothing new to read.
+  recordPickupCode(db, id, undefined, 1, new Date('2026-10-01T10:00:00Z'))
+  const body = readFileSync(new URL('./fixtures/fake-mail/20-gls-ready-glsbox-pin.eml', import.meta.url))
+
+  const before = await runPickupCodes({ db, now: NOW, readMail: () => body })
+  expect(before.scanned).toBe(0)
+  expect(getPickupCode(db, id)).toBeUndefined()
+
+  // The migration's own statement, run as it runs on an upgrading database.
+  const latest = MIGRATIONS.at(-1)!
+  latest.up(db)
+  const after = await runPickupCodes({ db, now: NOW, readMail: () => body })
+  expect(after.found).toBe(1)
+  expect(getPickupCode(db, id)).toBe('402211')
+
+  // And only once: the pass records the real count, so the next poll does not open the mail again.
+  expect(needsPickupCodeCheck(db, id, 1)).toBe(false)
 })
 
 // --- what the reader sees -----------------------------------------------------------------------

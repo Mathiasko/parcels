@@ -14,7 +14,7 @@ export interface PickupCodeDeps {
 
 export interface PickupCodeReport {
   scanned: number
-  /** Z-BOX opening codes found. */
+  /** Pickup codes (a Z-BOX opening code, a GLS BOX or DPD PIN, ...) found. */
   found: number
   /** Parcels that gained a pickup point, or the detail of one, from their own mail. */
   points: number
@@ -24,7 +24,7 @@ export interface PickupCodeReport {
 type PickupGap = 'none' | 'missing' | 'thin' | 'postcode'
 
 /**
- * What the parcel's own stored mail can still tell us: the Z-BOX opening code, and - for the parcels
+ * What the parcel's own stored mail can still tell us: the pickup code or PIN, and - for the parcels
  * the carrier never located - where the parcel actually is.
  *
  * This runs during a poll and touches no network: both facts are already on disk, in mail ingested

@@ -483,3 +483,37 @@ test('an index left on an older predicate is rebuilt on the next open, so the co
     again.close()
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
+
+// --- migration 5: waiting parcels are read once more for a PIN -------------------------------------
+
+test('migration 5 makes every code-less pickup_codes row due for one more read, and leaves a found code alone', () => {
+  const dir = tmp()
+  try {
+    const path = join(dir, 'parcels.db')
+    const db = openDb(path, [])
+    const a = insertParcel(db, { carrier: 'gls', trackingNumber: '12345678901', source: 'manual' })
+    const b = insertParcel(db, { carrier: 'packeta', trackingNumber: 'Z1234567890', source: 'manual' })
+    const put = db.prepare('INSERT INTO pickup_codes (parcel_id, code, checked_messages, checked_at) VALUES (?, ?, 3, ?)')
+    put.run(a, null, '2026-10-01T10:00:00Z')
+    put.run(b, '118822', '2026-10-01T10:00:00Z')
+    // Stamp it one version below the migration under test, so that migration - and only it - runs.
+    db.pragma(`user_version = ${latestVersion(MIGRATIONS) - 1}`)
+    db.close()
+
+    const after = openDb(path, MIGRATIONS)
+    const row = (id: number) => after.prepare('SELECT code, checked_messages, checked_at FROM pickup_codes WHERE parcel_id = ?').get(id)
+    // -1 is below any message count, so the watermark no longer hides the parcel from the next pass.
+    expect(row(a)).toEqual({ code: null, checked_messages: -1, checked_at: '2026-10-01T10:00:00Z' })
+    // A code that was found is final; the row is exactly as it was.
+    expect(row(b)).toEqual({ code: '118822', checked_messages: 3, checked_at: '2026-10-01T10:00:00Z' })
+    expect(userVersion(after)).toBe(latestVersion(MIGRATIONS))
+    after.close()
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('migration 5 is the pickup-code rescan, and a fresh database does not run it', () => {
+  expect(MIGRATIONS.at(-1)?.name).toBe('pickup codes: read waiting parcels again with the new PIN patterns')
+  const fresh = openDb(':memory:')
+  expect(userVersion(fresh)).toBe(latestVersion(MIGRATIONS))
+  fresh.close()
+})
