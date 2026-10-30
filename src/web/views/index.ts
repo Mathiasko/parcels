@@ -128,27 +128,35 @@ export interface Entry {
 }
 
 /**
- * The code or PIN the carrier's mail gave, worded for the kind of place it is used at.
+ * The words in front of a pickup code, by the kind of place it is used at. The ONE place this mapping
+ * lives: the card (`pickupCodeLine`) and the Add to Calendar description (`pickupEventContent`) both
+ * read it, so a counter PIN is never "open the box" on one surface and "show the PIN" on the other.
+ *
+ * The same six digits are used two different ways: a Z-BOX or a locker is OPENED with them, while a
+ * ParcelShop or a post office counter wants the PIN SHOWN to the person serving. Telling someone to
+ * open a box at a counter is a small lie that costs a confused minute in a queue. When the carrier
+ * named no place (or one we could not classify) the label claims nothing about how it is used and just
+ * says "PIN": no invented place, the same rule the rest of the card follows.
+ */
+export function pickupCodeLabel(kind: PickupPoint['kind'] | undefined): string {
+  return kind === 'zbox' || kind === 'locker' ? 'Open the box with'
+    : kind === 'parcelshop' || kind === 'post_office' ? 'Show this PIN at the counter:'
+    : 'PIN'
+}
+
+/**
+ * The code or PIN the carrier's mail gave, worded for the kind of place it is used at
+ * (`pickupCodeLabel`).
  *
  * There is deliberately no empty state: a staffed pickup point with nothing to type never has a code,
  * because a person hands the parcel over, so "no code" is the normal and permanent answer for those
  * and saying so would invent a problem. Rendered big, monospaced and selectable - it is read off the
- * screen while standing at the box, or copied, and a mis-read digit is a wasted trip.
- *
- * The wording follows the pickup `kind`, because the same six digits are used two different ways:
- * a Z-BOX or a locker is OPENED with them ("Open the box with"), while a ParcelShop or a post office
- * counter wants the PIN SHOWN to the person serving ("Show this PIN at the counter:"). Telling someone
- * to open a box at a counter is a small lie that costs a confused minute in a queue. When the carrier
- * named no place (or one we could not classify) the line claims nothing about how it is used and just
- * labels it "PIN": no invented place, the same rule the rest of the card follows. The markup is the
- * same for all three, so the stylesheet and the big monospaced digits do not care.
+ * screen while standing at the box, or copied, and a mis-read digit is a wasted trip. The markup is
+ * the same for every kind, so the stylesheet and the big monospaced digits do not care.
  */
 export function pickupCodeLine(code: string | undefined, kind: PickupPoint['kind'] | undefined): Html {
   if (!code) return html``
-  const label = kind === 'zbox' || kind === 'locker' ? 'Open the box with'
-    : kind === 'parcelshop' || kind === 'post_office' ? 'Show this PIN at the counter:'
-    : 'PIN'
-  return html`<p class="code"><span class="code-l">${label}</span> <b class="mono sel">${code}</b></p>`
+  return html`<p class="code"><span class="code-l">${pickupCodeLabel(kind)}</span> <b class="mono sel">${code}</b></p>`
 }
 
 /**

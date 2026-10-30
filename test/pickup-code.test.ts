@@ -315,14 +315,21 @@ describe('the card words the code by the kind of pickup point', async () => {
       .toBe('<p class="code"><span class="code-l">Open the box with</span> <b class="mono sel">631285</b></p>')
   })
 
-  test('a GLS BOX parcel and a counter parcel read differently on the page', async () => {
+  test('a locker parcel and a counter parcel read differently on the page', async () => {
     const { buildServer } = await import('../src/web/server.js')
-    const id = insertParcel(db, { carrier: 'posta', trackingNumber: 'RR123456789SK', source: 'manual' })
-    updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'post_office', name: 'Pošta Bratislava 1', street: 'Nám. SNP 35', city: 'Bratislava', postalCode: '810 00' } })
-    recordPickupCode(db, id, '402211', 1, NOW)
-    const body = (await buildServer({ db, config }).inject({ method: 'GET', url: `/parcel/${id}` })).body
-    expect(body).toContain(COUNTER)
-    expect(body).not.toContain(BOX)
+    let n = 0
+    const page = async (pickup: PickupPoint): Promise<string> => {
+      const id = insertParcel(db, { carrier: 'gls', trackingNumber: `00000000000${++n}`, source: 'manual' })
+      updateParcelState(db, id, { status: 'ready_for_pickup', pickup })
+      recordPickupCode(db, id, '402211', 1, NOW)
+      return (await buildServer({ db, config }).inject({ method: 'GET', url: `/parcel/${id}` })).body
+    }
+    const counter = await page({ kind: 'post_office', name: 'Pošta Bratislava 1', street: 'Nám. SNP 35', city: 'Bratislava', postalCode: '810 00' })
+    expect(counter).toContain(COUNTER)
+    expect(counter).not.toContain(BOX)
+    const locker = await page({ kind: 'locker', name: 'GLS BOX Example', street: 'Príkladová 6', city: 'Testville', postalCode: '00001' })
+    expect(locker).toContain(BOX)
+    expect(locker).not.toContain(COUNTER)
   })
 })
 
