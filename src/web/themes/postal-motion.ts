@@ -15,6 +15,15 @@ import { AIRMAIL_REPEAT } from './postal-ornaments.js'
 const R = ':root[data-theme="postal"]'
 const STAMPED = '.orn-postmark.just-collected'
 
+/** What each motion animates, after the scope. */
+const CARD = '.card'
+const AIRMAIL = '.card[data-status=out_for_delivery]::before'
+const INKED = '.card.just-arrived .code-plate b'
+const LANDED_ON = [`.notice:has(>div>${STAMPED})`, `.status:has(>${STAMPED})`]
+const ANIMATED = [CARD, AIRMAIL, INKED, STAMPED, ...LANDED_ON]
+/** `animation:none` on every animated element, each selector prefixed by `scope`. */
+const still = (scope: string): string => `${ANIMATED.map(sel => `${scope} ${sel}`).join(',')}{animation:none}`
+
 /** Deal-in: each card 60ms after the one before, up to the sixth; the rest come with the sixth. */
 const DEAL_STEP_MS = 60
 const DEAL_STAGGERED = 6
@@ -36,22 +45,20 @@ const MOTION = [
   // position:relative), not a transform: a transform, filter or opacity would make the status line a
   // stacking context and lift the parcel page's postmark (z-index -1) over the words.
   `@keyframes thud{0%,50%{top:0}58%{top:3px}74%{top:-1px}100%{top:0}}`,
-  `${R} .notice:has(>div>${STAMPED}),${R} .status:has(>${STAMPED}){animation:thud .55s ease-out}`,
+  `${LANDED_ON.map(sel => `${R} ${sel}`).join(',')}{animation:thud .55s ease-out}`,
 
   // The deal (board `deal`): once per load, the cards slide in one after another. The hover lift below uses
   // `translate` and `rotate`, so it adds to the deal's `transform` rather than fighting it.
   `@keyframes deal{0%{opacity:0;transform:translate(-40px,-6px) rotate(-6deg)}}`,
-  `${R} .card{animation:deal .5s cubic-bezier(.2,.8,.2,1) ${DEAL_STAGGERED * DEAL_STEP_MS}ms both;transition:translate .2s ease-out,rotate .2s ease-out}`,
+  `${R} ${CARD}{animation:deal .5s cubic-bezier(.2,.8,.2,1) ${DEAL_STAGGERED * DEAL_STEP_MS}ms both;transition:translate .2s ease-out,rotate .2s ease-out}`,
   ...Array.from({ length: DEAL_STAGGERED }, (_, i) => `${R} .card:nth-child(${i + 1} of .card){animation-delay:${(i + 1) * DEAL_STEP_MS}ms}`),
-  // A page that reloads itself while a refresh runs (every few seconds) would deal its cards every time.
-  `${R}:has(meta[http-equiv=refresh]) .card{animation:none}`,
   `@media(hover:hover){${R} .card:hover{translate:0 -3px;rotate:-.8deg}}`,
 
   // The ink settle (board `inkin`): a code that has just arrived inks in, a moment after its card. A PIN's
   // <b> is the stamp itself and rests with a drop shadow, which the blur is laid over rather than replacing.
   `@keyframes inkin{0%{opacity:0;filter:var(--orn-ink-filter,) blur(3px);scale:1.12}60%{opacity:1;filter:var(--orn-ink-filter,) blur(0);scale:.98}}`,
   `${R} .code-plate[data-kind=counter] b,${R} .code-plate[data-kind=plain] b{--orn-ink-filter:var(--orn-stamp-shadow)}`,
-  `${R} .card.just-arrived .code-plate b{animation:inkin .5s .25s cubic-bezier(.3,0,.3,1) both}`,
+  `${R} ${INKED}{animation:inkin .5s .25s cubic-bezier(.3,0,.3,1) both}`,
 
   // The march (board `march`): the airmail chevrons run along the top edge three times, then stop. A -45deg
   // gradient's stripes hang from the image's bottom-right corner, so the stripe image starts one repeat
@@ -59,10 +66,18 @@ const MOTION = [
   // covers the bar (no seam, unlike shifting background-position, as the bar is no whole number of
   // repeats), and each loop ends on the static bar itself, so it stops exactly where reduced motion rests.
   `@keyframes march{from{background-size:calc(100% + ${AIRMAIL_ACROSS}) 100%}to{background-size:100% 100%}}`,
-  `${R} .card[data-status=out_for_delivery]::before{animation:march 1.6s linear 3}`,
+  `${R} ${AIRMAIL}{animation:march 1.6s linear 3}`,
 
   // The press (board .btn:active): a button goes down 1px while it is held.
   `${R} button:active{translate:0 1px}`,
+
+  // Nothing replays on a page that reloads itself while a refresh runs (every 3 seconds): the march would
+  // restart on every load and never stop, the cards would be dealt again and again. (The just-* markers
+  // are never on such a page; guarded anyway.)
+  still(`${R}:has(meta[http-equiv=refresh])`),
+  // A print shows the page at rest, never a card or a code caught at the start of its fade-in. Last, so it
+  // overrides the rules above at the same specificity.
+  `@media print{${still(R)}}`,
 ]
 
 export const POSTAL_MOTION = `@media(prefers-reduced-motion:no-preference){${MOTION.join('\n')}}`

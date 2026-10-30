@@ -184,7 +184,7 @@ describe('Postal', () => {
     }
     expect(own).toMatch(/font-weight:400/)
     // every selector (text before a "{") starts with the scope; a @keyframes block holds no selectors
-    const media = withoutBlocks(own, /@keyframes\s+[\w-]+\s*\{/g).replace(/@media\([^)]*\)\{/g, '')
+    const media = withoutBlocks(own, /@keyframes\s+[\w-]+\s*\{/g).replace(/@media[^{]*\{/g, '')
     for (const m of media.matchAll(/(?:^|\})([^{}]+)\{/g)) {
       for (const sel of m[1].split(',')) expect(sel.trim().startsWith(':root[data-theme="postal"]'), sel).toBe(true)
     }
@@ -351,7 +351,7 @@ describe('Postal motion', () => {
   })
 
   test('scopes every selector to data-theme="postal"', () => {
-    const inner = withoutBlocks(own, /@keyframes\s+[\w-]+\s*\{/g).replace(/@media\([^)]*\)\{/g, '')
+    const inner = withoutBlocks(own, /@keyframes\s+[\w-]+\s*\{/g).replace(/@media[^{]*\{/g, '')
     const sels = [...inner.matchAll(/(?:^|\})([^{}]+)\{/g)].flatMap(m => m[1]!.split(','))
     expect(sels.length).toBeGreaterThan(8)
     for (const sel of sels) expect(sel.trim().startsWith(R), sel).toBe(true)
@@ -383,8 +383,30 @@ describe('Postal motion', () => {
     expect(rule(`${R} .card`)).toMatch(/(^|;)animation:deal \.5s cubic-bezier\(\.2,\.8,\.2,1\) 360ms both(;|$)/)
     for (let n = 1; n <= 6; n++) expect(rule(`${R} .card:nth-child(${n} of .card)`), `card ${n}`).toBe(`animation-delay:${n * 60}ms`)
     expect(own).not.toContain('nth-child(7')
-    // not on a page that reloads itself every few seconds while a refresh runs
-    expect(rule(`${R}:has(meta[http-equiv=refresh]) .card`)).toBe('animation:none')
+  })
+
+  /** Every element a Postal motion animates, as its selector after the scope. */
+  const ANIMATED = ['.card', '.card[data-status=out_for_delivery]::before', '.card.just-arrived .code-plate b', '.orn-postmark.just-collected',
+    '.notice:has(>div>.orn-postmark.just-collected)', '.status:has(>.orn-postmark.just-collected)']
+
+  test('animates exactly these elements', () => {
+    const animated = [...own.matchAll(/(?<=^|[{}])([^{}]+)\{animation:(?!none)[^}]*\}/g)].flatMap(m => m[1]!.split(/,(?![^(]*\))/))
+      .map(s => s.trim().replace(`${R} `, ''))
+    expect(animated.sort()).toEqual([...ANIMATED].sort())
+  })
+
+  test('replays nothing on a page that reloads itself every few seconds while a refresh runs', () => {
+    // the march would restart on every reload and never stop; the deal would re-deal; a one-shot would repeat
+    const reloading = `${R}:has(meta[http-equiv=refresh])`
+    expect(rule(ANIMATED.map(s => `${reloading} ${s}`).join(','))).toBe('animation:none')
+  })
+
+  test('prints everything at rest, never a card or code caught at opacity 0', () => {
+    const [print] = blocks(own, /@media print\{/g)
+    expect(print).toBeDefined()
+    expect(own.slice(print![0], print![1])).toBe(`@media print{${ANIMATED.map(s => `${R} ${s}`).join(',')}{animation:none}}`)
+    // it comes after the rules it overrides, at the same specificity
+    expect(print![0]).toBeGreaterThan(own.lastIndexOf('{animation:inkin'))
   })
 
   test('inks in the code of a card that just arrived, keeping a PIN stamp\'s shadow', () => {
