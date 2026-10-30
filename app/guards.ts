@@ -60,17 +60,15 @@ export function notificationPath(url: string | undefined): string {
 }
 
 /**
- * True when `path` is one of `roots` or inside one. Used before `shell.openPath`, which would launch
- * an app or a script as readily as it opens a folder: the server may only ask to show its own folders.
- * The path is normalised first, so `..` cannot climb out.
+ * True when `path` is one of `roots` itself. Used before `shell.openPath`, which would launch an app
+ * or a script as readily as it opens a folder: the server may only ask to show the app's own folders,
+ * never something inside them. The path is normalised first, so `..` cannot climb out.
  */
-export function isInside(path: string, roots: readonly string[]): boolean {
+export function isOneOf(path: string, roots: readonly string[]): boolean {
   if (!isAbsolute(path)) return false
-  const p = normalize(path)
-  return roots.some(root => {
-    const r = normalize(root)
-    return p === r || p.startsWith(r.endsWith(sep) ? r : r + sep)
-  })
+  const trim = (p: string) => { const n = normalize(p); return n.length > 1 && n.endsWith(sep) ? n.slice(0, -1) : n }
+  const p = trim(path)
+  return roots.some(root => trim(root) === p)
 }
 
 /**

@@ -6,7 +6,7 @@ import { findParcel, insertParcel, reviveArchived, setArchived } from '../db/par
 import { appendEvents } from '../db/events.js'
 import { linkMessage, storeMessage } from '../db/messages.js'
 import { accountKey, getImapState, saveImapState, type ImapState } from '../db/imap-state.js'
-import { extract, type Extraction, type ParcelEvidence } from './extract.js'
+import { carrierForAddress, extract, type Extraction, type ParcelEvidence } from './extract.js'
 import { fetchMessages, type FetchDeps, type ImapConfig, type RawMessage } from './imap.js'
 import { CARRIER_NAME } from '../notify/rules.js'
 
@@ -272,8 +272,11 @@ function placeOne(db: Database, it: Item, deps: ReprocessDeps, report: IngestRep
       if (existing.archivedAt && deps.now.getTime() - it.receivedAt.getTime() <= ARCHIVE_AFTER_DAYS * DAY) {
         reviveArchived(db, existing.id, deps.now)
       }
-      // A later mail may name the sender when the first one did not.
-      if (merchant && !existing.merchant) db.prepare('UPDATE parcels SET merchant = ? WHERE id = ?').run(merchant, existing.id)
+      // A later mail may name the sender when the first one did not. A merchant that is a carrier's
+      // own domain counts as none: before fake-mail F2 a GLS parcel was named "gls-slovakia.sk", and
+      // this lets the next GLS mail put the shop's name there instead.
+      const unnamed = !existing.merchant || carrierForAddress(`x@${existing.merchant}`) !== undefined
+      if (merchant && unnamed) db.prepare('UPDATE parcels SET merchant = ? WHERE id = ?').run(merchant, existing.id)
       // This is how an email-only parcel moves: each later mail adds its own words. `appendEvents`
       // dedupes, so re-reading the same mail (a reprocess, a resent copy) adds nothing.
       if (event) appendEvents(db, existing.id, [event])

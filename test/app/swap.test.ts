@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import {
-  failedSwapToReveal, readSwapFailedMarker, shQuote, sweepOldCopies, swapScript, SWAP_WAIT_SECONDS, verifyStaged,
+  failedSwapToReveal, readSwapFailedMarker, removeRefusedStaging, shQuote, sweepOldCopies, swapScript, SWAP_WAIT_SECONDS, verifyStaged,
   type VerifyStagedDeps,
 } from '../../app/swap.js'
 import { APP_BUNDLE_ID, CODESIGN, PLUTIL, stagingDir } from '../../src/core/app-update.js'
@@ -260,6 +260,29 @@ describe('swapScript, run for real by /bin/sh on temporary folders', () => {
   })
 })
 
+
+describe('removeRefusedStaging', () => {
+  test('removes the staging folder Parcels makes for that version beside the app, and nothing else', () => {
+    const appBundle = join(root, 'Applications', 'Parcels.app')
+    mkdirSync(appBundle, { recursive: true })
+    const staging = stagingDir(appBundle, VERSION)
+    mkdirSync(join(staging, 'Parcels.app', 'Contents'), { recursive: true })
+    const other = stagingDir(appBundle, '0.1.9')
+    mkdirSync(other, { recursive: true })
+    removeRefusedStaging(appBundle, VERSION)
+    expect(existsSync(staging)).toBe(false)
+    expect(existsSync(other)).toBe(true)
+    expect(existsSync(appBundle)).toBe(true)
+  })
+
+  test('a version that is not one, or a bundle path that is not absolute, removes nothing', () => {
+    const apps = join(root, 'Applications')
+    mkdirSync(join(apps, '.Parcels-update-x'), { recursive: true })
+    removeRefusedStaging(join(apps, 'Parcels.app'), '../../x')
+    removeRefusedStaging('Parcels.app', VERSION)
+    expect(readdirSync(apps)).toEqual(['.Parcels-update-x'])
+  })
+})
 
 describe('verifyStaged', () => {
   const CERT = 'the leaf certificate, in DER'

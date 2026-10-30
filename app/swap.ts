@@ -185,6 +185,17 @@ function notNewerRefusal(version: string, running: string): BundleRefusal | unde
 }
 
 /**
+ * Removes the staging folder of a refused install: the one Parcels makes for `version` beside
+ * `appBundle`, by its own name, whatever path the refused message named. Left there, a refused (and
+ * possibly tampered) copy would sit beside the app until the next staging. Nothing is removed for a
+ * version that is not one or a bundle path that is not absolute. Never throws.
+ */
+export function removeRefusedStaging(appBundle: string, version: string): void {
+  if (!isVersion(version) || !isAbsolute(appBundle)) return
+  try { rmSync(stagingDir(appBundle, version), { recursive: true, force: true }) } catch { /* left for the next staging */ }
+}
+
+/**
  * The cheap half of `verifyStaged`, shared with the reveal after a failed swap: `staged` must be
  * exactly the folder Parcels stages `version` in beside `appBundle`, and still a real folder there,
  * not a link. Both callers act on a path that came from somewhere the user, or anything running as

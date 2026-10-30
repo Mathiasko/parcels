@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import {
-  dashboardOrigin, downloadName, isDashboardUrl, isFirstRunUrl, isInside, isWebUrl, notificationPath,
+  dashboardOrigin, downloadName, isDashboardUrl, isFirstRunUrl, isOneOf, isWebUrl, notificationPath,
 } from '../../app/guards.js'
 
 test('dashboardOrigin is the loopback origin on the port', () => {
@@ -46,12 +46,16 @@ test('notificationPath turns anything else into /, never an outside address', ()
   expect(notificationPath('')).toBe('/')
 })
 
-test('isInside accepts a root and what is below it, nothing beside or above it', () => {
-  expect(isInside('/h/Support/Parcels', ['/h/Support/Parcels'])).toBe(true)
-  expect(isInside('/h/Support/Parcels/data', ['/x', '/h/Support/Parcels'])).toBe(true)
-  expect(isInside('/h/Support/Parcels-evil', ['/h/Support/Parcels'])).toBe(false)
-  expect(isInside('/h/Support/Parcels/../../bin', ['/h/Support/Parcels'])).toBe(false)
-  expect(isInside('relative/path', ['/h'])).toBe(false)
+test('isOneOf accepts only the folders themselves, nothing inside, beside or above them', () => {
+  expect(isOneOf('/h/Support/Parcels', ['/h/Support/Parcels'])).toBe(true)
+  expect(isOneOf('/h/Support/Parcels/', ['/x', '/h/Support/Parcels'])).toBe(true)
+  expect(isOneOf('/h/Support/Parcels/./data/..', ['/h/Support/Parcels'])).toBe(true)
+  // Inside: a script the server could name there would be run by openPath.
+  expect(isOneOf('/h/Support/Parcels/updates/x.command', ['/h/Support/Parcels'])).toBe(false)
+  expect(isOneOf('/h/Support/Parcels/data', ['/h/Support/Parcels'])).toBe(false)
+  expect(isOneOf('/h/Support/Parcels-evil', ['/h/Support/Parcels'])).toBe(false)
+  expect(isOneOf('/h/Support/Parcels/../../bin', ['/h/Support/Parcels'])).toBe(false)
+  expect(isOneOf('relative/path', ['/h'])).toBe(false)
 })
 
 test('downloadName keeps the base name and picks a free one when the file exists', () => {

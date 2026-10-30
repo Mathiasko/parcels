@@ -98,6 +98,27 @@ describe('F2: a GLS parcel is named after the shop GLS prints, never after GLS\'
   })
 })
 
+describe('a parcel already named after GLS\'s domain takes the shop\'s name from the next GLS mail', () => {
+  test('"gls-slovakia.sk" in a live database is replaced; a merchant someone chose is kept', async () => {
+    const db = memDb()
+    insertParcel(db, { carrier: 'gls', trackingNumber: '90444444401', merchant: 'gls-slovakia.sk', source: 'email' })
+    insertParcel(db, { carrier: 'gls', trackingNumber: '90444444402', merchant: 'Moja objednávka', source: 'manual' })
+    const mails = [corpus('20-gls-ready-glsbox-pin'), Buffer.from(corpus('20-gls-ready-glsbox-pin').toString('latin1').replaceAll('90444444401', '90444444402'), 'latin1')]
+    const fake = fakeImap(mails.map((source, i) => ({
+      uid: i + 1, source, messageId: `<m8-${i}@fake-mail>`, subject: 'x', from: 'x@example.com', date: new Date(NOW.getTime() - 86_400_000),
+    })))
+    await ingestMessages(db, {
+      imap: { host: 'imap.example.com', port: 993, user: 'u@example.com', pass: 'pw', mailbox: 'parcels' },
+      client: fake.client, mailDir: mkdtempSync(join(tmpdir(), 'parcels-fake-mail-')),
+      now: NOW, adapters: allAdapters(), defaultPostalCode: '81101',
+    })
+    expect(db.prepare('SELECT tracking_number AS n, merchant FROM parcels ORDER BY id').all()).toEqual([
+      { n: '90444444401', merchant: 'Hračkáreň Kocúrik' },
+      { n: '90444444402', merchant: 'Moja objednávka' },
+    ])
+  })
+})
+
 describe('F6: a carrier\'s sample number ("Z 000 0000 000") is not a parcel', () => {
   test('Packeta\'s promo mail explaining the number format: no parcel, a question for /attention', async () => {
     expect(await extract(corpus('08-packeta-promo-sample-number'))).toEqual({

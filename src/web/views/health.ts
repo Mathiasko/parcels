@@ -237,7 +237,9 @@ function appUpdateResult(app: AppHealth, ctx: PageCtx): Html {
     return notice('neutral', html`<p><strong>Parcels ${s.version} is ready.</strong> Press Restart to update: Parcels closes and opens again on the new version, which takes a few seconds.</p>`, true)
   }
   if (s.state === 'failed') {
-    return notice('warn', html`<p><strong>Parcels ${s.version} was not installed.</strong> ${s.reason}</p>`, true)
+    // The reason already says what happened to the update (it is shared with the log and the main
+    // process's dialog), so the lede only says that it stopped.
+    return notice('warn', html`<p><strong>The update to Parcels ${s.version} stopped.</strong> ${s.reason}</p>`, true)
   }
   if (s.version !== app.version) return html``
   return notice('neutral', html`<p><strong>Updated to ${s.version}.</strong></p>`, true)

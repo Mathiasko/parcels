@@ -7,14 +7,14 @@ import type { ToMain } from '../src/core/app-ipc.js'
 import { appUpdateStatusPath, readAppUpdateStatus, RELEASES_URL_ENV, runCommand, writeAppUpdateStatus } from '../src/core/app-update.js'
 import { devReleasesUrl, hasDevReleasesFlag } from './dev-releases.js'
 import { decideFirstRun, type FirstRun } from './first-run.js'
-import { dashboardOrigin, isInside, notificationPath } from './guards.js'
+import { dashboardOrigin, isOneOf, notificationPath } from './guards.js'
 import { offerMoveToApplications, MOVE_DETAIL, MOVE_QUESTION } from './location.js'
 import { appendRotating } from './logs.js'
 import { finishInterruptedMoveIn, launchctlFailureLine, moveIn, type MoveInDeps, type MoveInResult } from './move-in.js'
 import { appPaths, bundlePath } from './paths.js'
 import { readPages, registerFirstRun, SCHEME } from './protocol.js'
 import { Supervisor, type Child } from './supervise.js'
-import { failedSwapToReveal, swapScript, sweepOldCopies, verifyStaged } from './swap.js'
+import { failedSwapToReveal, removeRefusedStaging, swapScript, sweepOldCopies, verifyStaged } from './swap.js'
 import { createTray, type ParcelsTray } from './tray.js'
 import { allowFirstRunPages, currentWindow, openWindow } from './window.js'
 
@@ -350,8 +350,8 @@ async function run(): Promise<void> {
           break
         case 'reveal':
           // openPath launches apps and scripts as readily as it opens folders, so only the app's own
-          // folders may be shown this way.
-          if (isInside(m.path, [paths.support, paths.logs])) void shell.openPath(m.path)
+          // folders themselves may be shown this way, nothing inside them.
+          if (isOneOf(m.path, [paths.support, paths.logs])) void shell.openPath(m.path)
           else log(`refused to reveal ${m.path}: not a Parcels folder`)
           break
         case 'install':
@@ -523,6 +523,8 @@ async function installAndRelaunch(staged: string, version: string): Promise<void
     installing = false
     log(`install of ${version} refused: ${reason}${detail ? ` (${detail})` : ''}`)
     markInstallRefused(version, reason)
+    // The refused copy goes now, not at the next staging; only Parcels's own folder for that version.
+    removeRefusedStaging(bundlePath(process.execPath), version)
     void dialog.showMessageBox({
       type: 'warning',
       message: 'Parcels could not install the update.',

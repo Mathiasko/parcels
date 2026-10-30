@@ -208,7 +208,9 @@ describe('Health in app mode', () => {
       reason: 'The new version is not signed by the same certificate as this one, so it was not installed.',
     })
     const body = (await s.get('/health')).body
-    expect(body).toContain('The new version is not signed by the same certificate as this one, so it was not installed.')
+    expect(body).toContain('<strong>The update to Parcels 0.4.0 stopped.</strong> The new version is not signed by the same certificate as this one, so it was not installed.')
+    // Said once: the lede no longer says "was not installed" before a reason that says it too.
+    expect(body.match(/not installed/g)).toHaveLength(1)
   })
 
   test('an installed update of the running version says so', async () => {
