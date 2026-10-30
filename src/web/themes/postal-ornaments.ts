@@ -14,8 +14,11 @@ const R = ':root[data-theme="postal"]'
 /** The airmail stripes' repeat along their -45deg line, in px: the march (postal-motion.ts) moves them by exactly one. */
 export const AIRMAIL_REPEAT = 32
 
-/** The rubber stamp's opacity. Exported so the contrast test measures the ink as it is actually seen. */
-export const RUBBER_OPACITY = 0.85
+/**
+ * The rubber stamp's opacity. Exported so the contrast test measures the ink as it is actually seen. 0.95 keeps
+ * warn over surface at 5.6:1 in light (0.85 was 4.74:1, too close to 4.5 once the grain mask thins the strokes).
+ */
+export const RUBBER_OPACITY = 0.95
 
 /**
  * A perforated edge (board `.perf`), for an element whose background is the stamp: a padding band of half a

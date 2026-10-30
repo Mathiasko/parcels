@@ -213,6 +213,28 @@ describe('Postal', () => {
     expect(STYLE).not.toContain('</')
   })
 
+  test('lets a button grow instead of clipping a wrapped label, keeping each one-line height as its minimum', () => {
+    const own = postal.css ?? ''
+    const R = ':root[data-theme="postal"]'
+    // [selector, the base CSS's fixed height, which becomes the minimum]
+    const heights: Array<[string, string]> = [
+      ['button:not(.link)', '2rem'], ['button.pri:not(.link)', '2.25rem'], ['.toolbar button:not(.link)', '2.25rem'],
+      ['.calf button:not(.link)', '1.75rem'], ['.got button:not(.link)', '1.75rem'],
+    ]
+    // every rule is `sel1,sel2{decls}`; find the one whose selector list holds `sel`
+    const rules = [...own.matchAll(/(?:^|\n)([^{}\n@][^{}\n]*)\{([^}]*)\}/g)].map(m => ({ sels: m[1]!.split(','), decls: m[2]! }))
+    const declsFor = (sel: string): string[] => rules.filter(r => r.sels.includes(`${R} ${sel}`)).map(r => r.decls)
+    expect(declsFor('button:not(.link)').join(';')).toContain('height:auto')
+    expect(declsFor('button:not(.link)').join(';')).toContain('padding-block:')
+    for (const [sel, min] of heights) expect(declsFor(sel).join(';'), sel).toContain(`min-height:${min}`)
+    // a one-line label is ~19px tall: .25rem of padding on a 1.75rem button would push it past its minimum
+    for (const sel of ['.calf button:not(.link)', '.got button:not(.link)']) expect(declsFor(sel).join(';'), sel).toContain('padding-block:.125rem')
+    // the base CSS's fixed heights are what Postal overrides; they are not touched
+    expect(STYLE).toContain('button{font-size:.8125rem;font-weight:600;height:2rem;')
+    // a link-style button stays as the base made it
+    expect(own).not.toMatch(/button\.link[^{]*\{[^}]*height/)
+  })
+
   test('swaps in the dark grain and shadow for dark, and for system under prefers-color-scheme', () => {
     const own = postal.css ?? ''
     expect(own).toContain(':root[data-theme="postal"][data-mode="dark"]{--texture:url("data:image/svg+xml;utf8,%3Csvg ')
@@ -294,14 +316,14 @@ describe('Postal ornaments', () => {
     expect(own).toMatch(/\.code-plate\[data-kind=box\]\{[^}]*color:var\(--on-signal\)/)
   })
 
-  test('the rubber stamp\'s warn ink, at its opacity over the card, keeps 4.5:1 in both modes', () => {
+  test('the rubber stamp\'s warn ink, at its opacity over the card, keeps 5.5:1 headroom in both modes (the grain mask thins the strokes)', () => {
     expect(RUBBER_OPACITY).toBeGreaterThan(0)
     expect(RUBBER_OPACITY).toBeLessThanOrEqual(1)
     expect(own).toContain(`opacity:${RUBBER_OPACITY}`)
     for (const mode of MODES) {
       const surface = postal.colors.surface[mode]
       const ratio = contrast(over(postal.colors.warn[mode], surface, RUBBER_OPACITY), surface)
-      expect(ratio >= 4.5, `${mode}: rubber on surface is ${ratio.toFixed(2)}:1`).toBe(true)
+      expect(ratio >= 5.5, `${mode}: rubber on surface is ${ratio.toFixed(2)}:1`).toBe(true)
     }
   })
 

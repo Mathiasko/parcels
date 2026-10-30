@@ -92,6 +92,14 @@ export const postal: Theme = {
     `${ROOT} .day>span,${ROOT} .er .gl:not(.dotg){background-image:var(--texture);background-attachment:fixed}`,
     // Courier Prime has a smaller x-height than the system mono, so it reads small at the base .8125rem.
     `${ROOT} .mono{font-size:.875rem}`,
+    // Base buttons have a fixed height, so a label that wraps (at 390px "Refresh this parcel" next to a two-line
+    // title) has its second line cut by the border. Here a button grows instead: the base height becomes the
+    // minimum, so every one-line button renders exactly as before (a one-line label is about 19px tall here, so
+    // the padding-block, .25rem and for the 1.75rem buttons .125rem, stays inside the minimum; the label stays
+    // centred). Specificity is higher than the base rules, so each class restates its own minimum. .link buttons already say height:auto and are left out.
+    `${ROOT} button:not(.link){height:auto;min-height:2rem;padding-block:.25rem}`,
+    `${ROOT} button.pri:not(.link),${ROOT} .toolbar button:not(.link){min-height:2.25rem}`,
+    `${ROOT} .calf button:not(.link),${ROOT} .got button:not(.link){min-height:1.75rem;padding-block:.125rem}`,
     `${ROOT}[data-mode="dark"]{${DARK}}`,
     `@media(prefers-color-scheme:dark){${ROOT}[data-mode="system"]{${DARK}}}`,
     POSTAL_ORNAMENTS,
