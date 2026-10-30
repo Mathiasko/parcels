@@ -468,9 +468,11 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    * What a finished run brought in, for `just-arrived` on its `?run=N` page: the parcels that run moved
    * to ready for pickup (its own `status` rows in the activity log), that are still waiting and now have
    * a code. One-shot like the collected notice: a run that finished more than `COLLECTED_NOTICE_MS` ago
-   * marks nothing, so a bookmarked `?run=N` does not replay it.
+   * marks nothing, so a bookmarked `?run=N` does not replay it. A run that ended in error, or was reaped as
+   * stale (both set `error`), marks nothing either: an errored run has not brought anything in.
    */
   const arrivedIn = (run: PollRun, entries: Array<{ parcel: Parcel; code?: string }>, at: Date): Set<number> | undefined => {
+    if (run.error) return undefined
     const age = at.getTime() - (run.finishedAt ?? run.startedAt).getTime()
     if (age < 0 || age > COLLECTED_NOTICE_MS) return undefined
     const readied = readiedInRun(db, run.id)

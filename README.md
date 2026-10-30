@@ -390,7 +390,7 @@ Where the fonts came from, and their licences, are in
 [`assets/fonts/README.md`](assets/fonts/README.md).
 
 **The browser you open it in.** The colours use the CSS function `light-dark()`, which needs Chromium
-123 or later (Chrome, Edge and the like), Safari 17.5 or later, or Firefox 120 or later. The Mac app's
+123 or later (Chrome, Edge and the like), Safari 17.5 or later, or Firefox 121 or later. The Mac app's
 window is fine. If you open the dashboard from a Terminal install in an older browser, the page shows
 without its colours: update the browser.
 

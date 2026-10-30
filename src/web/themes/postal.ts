@@ -96,7 +96,7 @@ export const postal: Theme = {
     // title) has its second line cut by the border. Here a button grows instead: the base height becomes the
     // minimum, so every one-line button renders exactly as before (a one-line label is about 19px tall here, so
     // the padding-block, .25rem and for the 1.75rem buttons .125rem, stays inside the minimum; the label stays
-    // centred). Specificity is higher than the base rules, so each class restates its own minimum. .link buttons already say height:auto and are left out.
+    // centred). Specificity is higher than the base rules, so each class restates its own minimum. Link buttons (button.link) are left out: they are text links that never wrap into a box.
     `${ROOT} button:not(.link){height:auto;min-height:2rem;padding-block:.25rem}`,
     `${ROOT} button.pri:not(.link),${ROOT} .toolbar button:not(.link){min-height:2.25rem}`,
     `${ROOT} .calf button:not(.link),${ROOT} .got button:not(.link){min-height:1.75rem;padding-block:.125rem}`,

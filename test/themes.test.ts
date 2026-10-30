@@ -231,8 +231,9 @@ describe('Postal', () => {
     for (const sel of ['.calf button:not(.link)', '.got button:not(.link)']) expect(declsFor(sel).join(';'), sel).toContain('padding-block:.125rem')
     // the base CSS's fixed heights are what Postal overrides; they are not touched
     expect(STYLE).toContain('button{font-size:.8125rem;font-weight:600;height:2rem;')
-    // a link-style button stays as the base made it
-    expect(own).not.toMatch(/button\.link[^{]*\{[^}]*height/)
+    // a link-style button stays as the base made it: no rule that names button.link sets a height
+    const linkRules = rules.filter(r => r.sels.some(s => s.includes('button.link')))
+    for (const r of linkRules) expect(r.decls, r.sels.join(',')).not.toMatch(/(?:^|;)\s*(?:min-)?height\s*:/)
   })
 
   test('swaps in the dark grain and shadow for dark, and for system under prefers-color-scheme', () => {

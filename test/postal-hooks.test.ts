@@ -10,7 +10,7 @@ import { appendEvents } from '../src/db/events.js'
 import { recordPickupCode } from '../src/db/pickup-codes.js'
 import { codeKind, placeName, postmark, postmarkDate, rubberText } from '../src/web/views/ornaments.js'
 import { markCollected } from '../src/core/collected.js'
-import { finishRun, startRun } from '../src/db/poll-runs.js'
+import { failRun, finishRun, startRun } from '../src/db/poll-runs.js'
 import { pickupCodeLine } from '../src/web/views/index.js'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -353,6 +353,15 @@ describe('the postmark and the one-shot markers', () => {
     readied(db, 'Z1', 'Z-BOX New', run)
     expect(await get(db, `/?run=${run}`)).not.toContain('just-arrived')
     expect(await get(db, `/?run=${run}`, new Date(NOW.getTime() - 2 * MIN))).toContain('class="card just-arrived"')
+  })
+  test('a run that ended with an error marks nothing, even with a parcel it readied', async () => {
+    const db = memDb()
+    const run = startRun(db, 'web', new Date(NOW.getTime() - 2 * MIN))
+    failRun(db, run, 'the carrier said no', new Date(NOW.getTime() - MIN))
+    readied(db, 'Z1', 'Z-BOX New', run)
+    const body = await get(db, `/?run=${run}`)
+    expect(cardOf(body, 'Z-BOX New')).toMatch(/^<article class="card" data-status="ready_for_pickup">/)
+    expect(body).not.toContain('just-arrived')
   })
   test('a running run, or an unknown one, marks nothing', async () => {
     const db = memDb()
