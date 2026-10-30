@@ -129,6 +129,37 @@ describe('the settings page speaks to the person setting up Gmail', () => {
     expect(done).toContain('<details class="guide"><summary>')
   })
 
+  test('the guide is three plain groups, with the jargon explained where it is first used', async () => {
+    const fresh = (await harness({ imap: undefined }).get('/settings')).body
+    const guide = /<details class="guide"[\s\S]*?<\/details>/.exec(fresh)![0]
+    expect(guide).toContain('about ten minutes, on three Google pages')
+    const top = [...guide.matchAll(/<li><strong>([^<]+)<\/strong>/g)].map(m => m[1])
+    expect(top.slice(0, 3)).toEqual(['Label your parcel mail in Gmail', 'Make an App Password', 'Paste it here'])
+    expect(guide).toContain('a Gmail rule that files mail under a label')
+    expect(guide).toContain('the way apps like this one read mail')
+    // The step that catches everyone is bold in the guide and said again where the label is typed.
+    expect(guide).toContain('<strong>Show in IMAP</strong>')
+    const hint = /<label class="wide">Gmail label[\s\S]*?<\/label>/.exec(fresh)![0]
+    expect(hint).toContain('<strong>Show in IMAP</strong>')
+    // The App Password sentence says what it can do, and that it can be taken back.
+    expect(guide).toContain('An App Password can read and send mail as your whole account. Parcels only reads the <span class="mono">parcels</span> label and never sends mail. You can revoke it any time at <a href="https://myaccount.google.com/apppasswords">myaccount.google.com/apppasswords</a>')
+    const pass = /<label class="wide">App Password[\s\S]*?<\/label>/.exec(fresh)![0]
+    expect(pass).toContain('16-character')
+    expect(pass).toContain('Spaces are fine')
+    // Other setups.
+    expect(guide).toContain('Company (Google Workspace) accounts work too; your admin may have to allow App Passwords.')
+    expect(guide).toContain('Sell online? Add <span class="mono">-from:yourshop.sk</span> to the filter so your customers’ dispatch copies are not tracked as your parcels.')
+  })
+
+  test('a way out of the guide shows only while Gmail is not connected', async () => {
+    const skip = '<a href="/add">Skip for now — add a parcel by hand</a>'
+    const fresh = (await harness({ imap: undefined }).get('/settings')).body
+    expect(fresh).toContain(skip)
+    expect(fresh.indexOf(skip)).toBeGreaterThan(fresh.indexOf('</details>'))
+    expect(fresh.indexOf(skip)).toBeLessThan(fresh.indexOf('name="imapUser"'))
+    expect((await harness().get('/settings')).body).not.toContain(skip)
+  })
+
   test('the filter it tells you to import is a download from this server, the very file in the checkout', async () => {
     const res = await harness().get('/gmail-filter.xml')
     expect(res.statusCode).toBe(200)

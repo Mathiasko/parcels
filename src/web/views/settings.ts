@@ -63,29 +63,42 @@ const GMAIL_LABELS = 'https://mail.google.com/mail/u/0/#settings/labels'
  * Filters tab, and "Settings, Filters and Blocked Addresses" is three clicks they would have to find.
  * The filter itself is a download from this server, so "Choose File" finds it in Downloads.
  *
+ * Written for someone who has never heard "IMAP" or "filter": each is explained once, where it first
+ * appears, and the timing is the honest one (ten minutes, three Google pages) rather than the hopeful
+ * one. The App Password sentence says what the password can really do, because Google's own page
+ * only says "app", and what Parcels does with it. The skip link is outside the fold on purpose: a
+ * person who is stuck should see the way out without reading the guide, and it goes away once mail
+ * is connected.
+ *
  * The order matters: the label must exist and be visible to IMAP before the first test, or that test
  * says the mailbox is not there.
  */
 function gmailGuide(v: SettingsValues): Html {
-  return html`<details class="guide"${v.imapConfigured ? '' : raw(' open')}><summary>How to connect Gmail — three steps, about five minutes</summary>
+  return html`<details class="guide"${v.imapConfigured ? '' : raw(' open')}><summary>How to connect Gmail — about ten minutes, on three Google pages</summary>
 <ol class="steps">
-<li><strong>Label your shipping emails.</strong>
+<li><strong>Label your parcel mail in Gmail</strong>
+<p class="meta">A filter is a Gmail rule that files mail under a label. This one files your shipping emails under a label called <span class="mono">parcels</span>, and Parcels reads only that label.</p>
 <ol>
 <li>Download the filter: <a href="/gmail-filter.xml" download>gmail-filter.xml</a>. It goes to your Downloads folder.</li>
 <li>Open <a href="${GMAIL_FILTERS}">Gmail’s filter settings</a> (in Gmail: the gear icon → <strong>See all settings</strong> → <strong>Filters and Blocked Addresses</strong>). Signed in to more than one Google account? Check the address at the top right is the one you will enter below.</li>
 <li>At the bottom of the page, click <strong>Import filters</strong>.</li>
 <li>Click <strong>Choose File</strong>, pick <strong>gmail-filter.xml</strong> in Downloads, then click <strong>Open file</strong>.</li>
 <li>Gmail shows the filter it found. Tick <strong>Apply new filters to existing email</strong> — without it only mail that arrives from now on is labelled — then click <strong>Create filters</strong>.</li>
-<li>Open <a href="${GMAIL_LABELS}">Gmail’s label settings</a>, find <strong>parcels</strong> under Labels, and make sure <strong>Show in IMAP</strong> is ticked.</li>
+<li>Open <a href="${GMAIL_LABELS}">Gmail’s label settings</a>, find <strong>parcels</strong> under Labels, and make sure <strong>Show in IMAP</strong> is ticked. IMAP is the way apps like this one read mail, and Gmail hides a label from it until you say otherwise.</li>
 </ol></li>
-<li><strong>Make an App Password</strong>, which lets this app read that label without your Google password.
+<li><strong>Make an App Password</strong>
+<p class="meta">An App Password can read and send mail as your whole account. Parcels only reads the <span class="mono">parcels</span> label and never sends mail. You can revoke it any time at <a href="${APP_PASSWORDS}">myaccount.google.com/apppasswords</a>.</p>
 <ol>
 <li><a href="${TWO_STEP}">2-Step Verification</a> has to be on. If it is off, turn it on first.</li>
 <li>Open <a href="${APP_PASSWORDS}">App passwords</a>, type a name such as <strong>Parcels</strong>, and click <strong>Create</strong>.</li>
-<li>Google shows a 16-letter password once. Copy it.</li>
+<li>Google shows a 16-character password once. Copy it; spaces are fine.</li>
 </ol></li>
-<li><strong>Paste it here.</strong> Enter your Gmail address and the App Password below and click <strong>Save settings</strong>. Saving tests the connection, and the answer appears at the top of this page.</li>
-</ol></details>`
+<li><strong>Paste it here</strong>
+<p>Enter your Gmail address and the App Password below and click <strong>Save settings</strong>. Saving tests the connection, and the answer appears at the top of this page.</p></li>
+</ol>
+<p class="meta">Company (Google Workspace) accounts work too; your admin may have to allow App Passwords.</p>
+<p class="meta">Sell online? Add <span class="mono">-from:yourshop.sk</span> to the filter so your customers’ dispatch copies are not tracked as your parcels.</p></details>${
+    v.imapConfigured ? '' : html`<p class="meta"><a href="/add">Skip for now — add a parcel by hand</a></p>`}`
 }
 
 /** The notifier choices, said as what they do. Only under Advanced; "Automatic" is right for everyone. */
@@ -243,9 +256,9 @@ ${gmailGuide(v)}
 <label class="wide">App Password <span class="meta">${v.passSet ? '(set)' : '(not set)'}</span><input type="password" name="imapPass" autocomplete="new-password" spellcheck="false">${
     v.passSet
       ? html`<span class="meta hint">Saved, and never shown again. Leave this blank to keep it; type a new one to replace it.</span>`
-      : html`<span class="meta hint">A 16-character App Password from <a href="${APP_PASSWORDS}">myaccount.google.com/apppasswords</a>, not your Google password. Spaces are ignored.</span>`
+      : html`<span class="meta hint">A 16-character App Password from <a href="${APP_PASSWORDS}">myaccount.google.com/apppasswords</a>, not your Google password. Spaces are fine.</span>`
   }</label>
-<label class="wide">Gmail label<input name="imapMailbox" value="${v.imapMailbox}" autocapitalize="off" spellcheck="false"><span class="meta hint">The label your parcel emails are filed under. In Gmail's label settings it must have "Show in IMAP" ticked. A label inside another is written <span class="mono">parent/child</span>.</span></label>
+<label class="wide">Gmail label<input name="imapMailbox" value="${v.imapMailbox}" autocapitalize="off" spellcheck="false"><span class="meta hint">The label your parcel emails are filed under. In Gmail’s label settings it must have <strong>Show in IMAP</strong> ticked. A label inside another is written <span class="mono">parent/child</span>.</span></label>
 </div>
 
 <h2>Parcels</h2>
