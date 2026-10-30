@@ -1,0 +1,24 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake2x;
+        Wed, 28 Oct 2026 15:00:28 +0100
+Return-Path: <noreply@packeta.com>
+Date: Wed, 28 Oct 2026 15:00:28 +0100
+From: Packeta <noreply@packeta.com>
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: Your parcel is on its way
+Message-ID: <202610281500.Z2222222213@packeta.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Parcel Z 222 2222 213
+
+Hello,
+the sender LedLight Store has just handed over your parcel, which will be =
+delivered to the Z-BOX.
+
+Place where your parcel will be stored
+Z-BOX Testovo, Nov=C3=A1 8 (Lidl)
+Nov=C3=A1 8 999 01 Testovo
+
+Packeta

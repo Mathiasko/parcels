@@ -1,0 +1,19 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake3b;
+        Fri, 30 Oct 2026 15:00:30 +0100
+Return-Path: <noreply@packeta-sk.example.com>
+Date: Fri, 30 Oct 2026 15:00:30 +0100
+From: Packeta <noreply@packeta-sk.example.com>
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: =?utf-8?Q?Va=C5=A1a_z=C3=A1sielka_=C4=8D?=
+ =?utf-8?Q?ak=C3=A1_=E2=80=93_uhra=C4=8Fte_?=
+ =?utf-8?Q?poplatok_1,99_=E2=82=AC?=
+Message-ID: <202610301500.phish@packeta-sk.example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Dobr=C3=BD de=C5=88,
+va=C5=A1a z=C3=A1sielka Z 222 2222 299 =C4=8Dak=C3=A1 v depe. Pre =
+doru=C4=8Denie uhra=C4=8Fte poplatok 1,99 =E2=82=AC na https://packeta-sk.=
+example.com/pay

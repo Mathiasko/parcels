@@ -1,0 +1,51 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake1a;
+        Wed, 21 Oct 2026 08:30:21 +0200
+Return-Path: <peter.testovy@example.com>
+Date: Wed, 21 Oct 2026 08:30:21 +0200
+From: =?utf-8?Q?Peter_Testov=C3=BD?= <peter.testovy@example.com>
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: =?utf-8?Q?Fwd:_Va=C5=A1a_z=C3=A1siel?=
+ =?utf-8?Q?ka_bude_doru=C4=8Den=C3=A1?=
+ =?utf-8?Q?_dnes?=
+Message-ID: <CAFakeFwd0001+peter@mail.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_19xxxx.fake"
+
+------=_Part_alt_19xxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Prevezme=C5=A1 to pros=C3=ADm? Ja som v pr=C3=A1ci.
+
+=2D--------- Forwarded message ---------
+From: *DPD* <no_reply@dpd.sk>
+Date: Wed, Oct 21, 2026 at 7:58 AM
+Subject: Va=C5=A1a z=C3=A1sielka bude doru=C4=8Den=C3=A1 dnes
+To: <peter.testovy@example.com>
+
+
+Dobr=C3=BD de=C5=88 Peter Testov=C3=BD,
+Va=C5=A1a z=C3=A1sielka bude doru=C4=8Den=C3=A1 dnes v =C4=8Dase 09:45 =
+=E2=80=93 10:45.
+Odosielate=C4=BE: Fotoshop Testovo # F-3321   =C4=8C=C3=ADslo bal=C3=ADka: =
+01505333333304
+Kontakt na kuri=C3=A9ra: +421 911 777 888
+
+------=_Part_alt_19xxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"ltr">Prevezme=C5=A1 to pros=C3=ADm? Ja som v pr=C3=A1ci.=
+<br><br><div class=3D"gmail_quote"><div dir=3D"ltr" =
+class=3D"gmail_attr">---------- Forwarded message ---------<br>From: =
+<strong class=3D"gmail_sendername" dir=3D"auto">DPD</strong> <span =
+dir=3D"auto">&lt;no_reply@dpd.sk&gt;</span><br>Date: Wed, Oct 21, 2026 at =
+7:58 AM<br>Subject: Va=C5=A1a z=C3=A1sielka bude doru=C4=8Den=C3=A1 =
+dnes<br>To: &lt;peter.testovy@example.com&gt;<br></div><br><br>Dobr=C3=BD =
+de=C5=88 Peter Testov=C3=BD,<br>Va=C5=A1a z=C3=A1sielka bude =
+doru=C4=8Den=C3=A1 dnes v =C4=8Dase 09:45 =E2=80=93 10:45.=
+<br>Odosielate=C4=BE: Fotoshop Testovo # F-3321 &nbsp; =C4=8C=C3=ADslo =
+bal=C3=ADka: 01505333333304</div></div>
+------=_Part_alt_19xxxx.fake--

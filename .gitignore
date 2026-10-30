@@ -8,3 +8,8 @@ config.json
 dist-app/
 release/
 spike/
+
+# fake-mail harness output (scripts/dev/fake-mail/harness.run.ts)
+test/fixtures/fake-mail/shots/
+test/fixtures/fake-mail/html/
+test/fixtures/fake-mail/out/

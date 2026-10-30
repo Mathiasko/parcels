@@ -1,0 +1,20 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake2h;
+        Mon, 26 Oct 2026 12:00:26 +0100
+Return-Path: <orders@temu.example.com>
+Date: Mon, 26 Oct 2026 12:00:26 +0100
+From: Temu <orders@temu.example.com>
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: Your package has been dispatched
+Message-ID: <202610261200.po-dhl@temu.example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Hi Jana,
+
+your package is on its way with DHL eCommerce.
+Tracking number: 00077777777777777701
+Order PO-211-99999999990000
+
+Temu

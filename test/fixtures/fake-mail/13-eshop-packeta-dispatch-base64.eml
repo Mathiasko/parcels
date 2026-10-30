@@ -1,0 +1,56 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fakem;
+        Fri, 16 Oct 2026 09:40:16 +0200
+Return-Path: <info@knihomol.example.sk>
+Date: Fri, 16 Oct 2026 09:40:16 +0200
+From: =?utf-8?Q?Knihomo=C4=BE?= <info@knihomol.example.sk>
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: =?utf-8?Q?Va=C5=A1a_objedn=C3=A1vka_?=
+ =?utf-8?Q?=C4=8D._2026100188_bol?=
+ =?utf-8?Q?a_odoslan=C3=A1?=
+Message-ID: <202610160940.ship-2026100188@knihomol.example.sk>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_lxxxx.fake"
+
+------=_Part_alt_lxxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: base64
+
+RG9icsO9IGRlxYgsDQoNCnZhxaFhIG9iamVkbsOhdmthIMSNLiAyMDI2MTAwMTg4IGJvbGEgcHLD
+oXZlIG9kb3NsYW7DoS4NClNww7Rzb2IgZG9ydcSNZW5pYTogUGFja2V0YSDigJMgWi1CT1ggVGVz
+dG92bywgSGxhdm7DoSA1DQpTbGVkb3ZhbmllIHrDoXNpZWxreTogWiAyMjIgMjIyMiAyMDENCg0K
+T2JzYWggesOhc2llbGt5Og0KIC0gS25paGE6IERlamlueSBGaWt0w612bmVobyBtZXN0YQ0KIC0g
+WsOhbG/FvmthIGRvIGtuaWh5DQoNCg0KxI5ha3VqZW1lIHphIG7DoWt1cCENClTDrW0gS25paG9t
+b8S+DQoNCg==
+------=_Part_alt_lxxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: base64
+
+PCFET0NUWVBFIGh0bWw+PGh0bWwgbGFuZz0ic2siPjxoZWFkPjxtZXRhIGNoYXJzZXQ9InV0Zi04
+Ij48bWV0YSBuYW1lPSJ2aWV3cG9ydCIgY29udGVudD0id2lkdGg9ZGV2aWNlLXdpZHRoIj4NCjx0
+aXRsZT5Lbmlob21vxL48L3RpdGxlPg0KPHN0eWxlPmJvZHl7bWFyZ2luOjA7cGFkZGluZzowO2Zv
+bnQtZmFtaWx5OkFyaWFsLEhlbHZldGljYSxzYW5zLXNlcmlmfXRke2ZvbnQtc2l6ZToxNHB4O2xp
+bmUtaGVpZ2h0OjIwcHh9LmJ0bntiYWNrZ3JvdW5kOiMyYjdhM2Q7Y29sb3I6I2ZmZjtwYWRkaW5n
+OjEwcHggMThweDtib3JkZXItcmFkaXVzOjRweDt0ZXh0LWRlY29yYXRpb246bm9uZX1AbWVkaWEg
+b25seSBzY3JlZW4gYW5kIChtYXgtd2lkdGg6NjAwcHgpey53e3dpZHRoOjEwMCUhaW1wb3J0YW50
+fX08L3N0eWxlPg0KPC9oZWFkPjxib2R5Pg0KPHNwYW4gc3R5bGU9ImRpc3BsYXk6bm9uZTttYXgt
+aGVpZ2h0OjA7b3ZlcmZsb3c6aGlkZGVuIj5PYmplZG7DoXZrYSAyMDI2MTAwMTg4IGplIG5hIGNl
+c3RlJiM4NDc7Jnp3bmo7Jm5ic3A7JiM4NDc7Jnp3bmo7Jm5ic3A7JiM4NDc7Jnp3bmo7Jm5ic3A7
+PC9zcGFuPg0KPHRhYmxlIHdpZHRoPSIxMDAlIiBjZWxscGFkZGluZz0iMCIgY2VsbHNwYWNpbmc9
+IjAiIGJvcmRlcj0iMCIgYmdjb2xvcj0iI2YyZjJmMiI+PHRyPjx0ZCBhbGlnbj0iY2VudGVyIj4N
+Cjx0YWJsZSBjbGFzcz0idyIgd2lkdGg9IjYwMCIgY2VsbHBhZGRpbmc9IjAiIGNlbGxzcGFjaW5n
+PSIwIiBib3JkZXI9IjAiIGJnY29sb3I9IiNmZmZmZmYiPg0KPHRyPjx0ZCBzdHlsZT0iYmFja2dy
+b3VuZDojMmI3YTNkO3BhZGRpbmc6MTZweDtjb2xvcjojZmZmO2ZvbnQtc2l6ZToyMHB4Ij48aW1n
+IHNyYz0iaHR0cHM6Ly9pbWcuZXhhbXBsZS5jb20vbG9nby5wbmciIGFsdD0iS25paG9tb8S+IiB3
+aWR0aD0iMTIwIj48L3RkPjwvdHI+DQo8dHI+PHRkIHN0eWxlPSJwYWRkaW5nOjI0cHgiPjxwPkRv
+YnLDvSBkZcWILDwvcD48cD52YcWhYSBvYmplZG7DoXZrYSDEjS4gPHN0cm9uZz4yMDI2MTAwMTg4
+PC9zdHJvbmc+IGJvbGEgcHLDoXZlIG9kb3NsYW7DoS48L3A+PHA+U3DDtHNvYiBkb3J1xI1lbmlh
+OiBQYWNrZXRhIOKAkyBaLUJPWCBUZXN0b3ZvLCBIbGF2bsOhIDU8L3A+PHA+U2xlZG92YW5pZSB6
+w6FzaWVsa3k6IFogMjIyIDIyMjIgMjAxPC9wPjx0YWJsZT48dHI+PHRkPktuaWhhOiBEZWppbnkg
+RmlrdMOtdm5laG8gbWVzdGE8L3RkPjwvdHI+PHRyPjx0ZD5aw6Fsb8W+a2EgZG8ga25paHk8L3Rk
+PjwvdHI+PC90YWJsZT48L3RkPjwvdHI+DQo8dHI+PHRkIHN0eWxlPSJwYWRkaW5nOjE2cHg7Y29s
+b3I6Izg4ODtmb250LXNpemU6MTFweCI+xI5ha3VqZW1lIHphIG7DoWt1cCEgVMOtbSBLbmlob21v
+xL4uIDwvdGQ+PC90cj4NCjwvdGFibGU+PC90ZD48L3RyPjwvdGFibGU+PC9ib2R5PjwvaHRtbD4=
+
+------=_Part_alt_lxxxx.fake--

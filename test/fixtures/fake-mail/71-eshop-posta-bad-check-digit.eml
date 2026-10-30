@@ -1,0 +1,66 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake34;
+        Thu, 29 Oct 2026 12:00:29 +0100
+Return-Path: <info@knihomol.example.sk>
+Date: Thu, 29 Oct 2026 12:00:29 +0100
+From: =?utf-8?Q?Knihomo=C4=BE?= <info@knihomol.example.sk>
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: =?utf-8?Q?Va=C5=A1a_objedn=C3=A1vka_?=
+ =?utf-8?Q?=C4=8D._2026100201_bol?=
+ =?utf-8?Q?a_odoslan=C3=A1?=
+Message-ID: <202610291200.ship-2026100201@knihomol.example.sk>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_33xxxx.fake"
+
+------=_Part_alt_33xxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Dobr=C3=BD de=C5=88,
+
+va=C5=A1a objedn=C3=A1vka =C4=8D. 2026100201 bola pr=C3=A1ve odoslan=C3=A1.
+Sp=C3=B4sob doru=C4=8Denia: Slovensk=C3=A1 po=C5=A1ta =E2=80=93 bal=C3=ADk =
+na adresu
+Podacie =C4=8D=C3=ADslo: EB666666030SK
+
+Obsah z=C3=A1sielky:
+ - Kalend=C3=A1r 2027
+
+
+=C4=8Eakujeme za n=C3=A1kup!
+T=C3=ADm Knihomo=C4=BE
+
+
+------=_Part_alt_33xxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>Knihomo=C4=BE</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color=
+:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">Objedn=C3=A1vka =
+2026100201 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp=
+;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#2b7a3d;padding:16px;color:#fff;font-size:20px"=
+><img src=3D"https://img.example.com/logo.png" alt=3D"Knihomo=C4=BE" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Dobr=C3=BD de=C5=88,</p><p>va=C5=A1a =
+objedn=C3=A1vka =C4=8D. <strong>2026100201</strong> bola pr=C3=A1ve =
+odoslan=C3=A1.</p><p>Sp=C3=B4sob doru=C4=8Denia: Slovensk=C3=A1 po=C5=A1ta =
+=E2=80=93 bal=C3=ADk na adresu</p><p>Podacie =C4=8D=C3=ADslo: =
+EB666666030SK</p><table><tr><td>Kalend=C3=A1r 2027</td></tr></table></td></=
+tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">=C4=8Eakujeme za =
+n=C3=A1kup! T=C3=ADm Knihomo=C4=BE. </td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_33xxxx.fake--

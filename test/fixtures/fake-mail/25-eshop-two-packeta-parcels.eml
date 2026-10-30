@@ -1,0 +1,71 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake13;
+        Tue, 20 Oct 2026 07:00:20 +0200
+Return-Path: <objednavky@mobilonline.example.sk>
+Date: Tue, 20 Oct 2026 07:00:20 +0200
+From: Mobilonline <objednavky@mobilonline.example.sk>
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: =?utf-8?Q?Objedn=C3=A1vka_88124_?=
+ =?utf-8?Q?bola_rozdelen=C3=A1_do?=
+ =?utf-8?Q?_2_z=C3=A1sielok?=
+Message-ID: <202610200700.split-88124@mobilonline.example.sk>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_12xxxx.fake"
+
+------=_Part_alt_12xxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Dobr=C3=BD de=C5=88,
+
+va=C5=A1a objedn=C3=A1vka =C4=8D. 88124 bola pr=C3=A1ve odoslan=C3=A1.
+Prepravca: Packeta. Z d=C3=B4vodu skladovej dostupnosti sme objedn=C3=A1vku=
+ rozdelili.
+Z=C3=A1sielka 1/2: Z 222 2222 205 (puzdro, nab=C3=ADja=C4=8Dka)
+Z=C3=A1sielka 2/2: Z 222 2222 206 (mobiln=C3=BD telef=C3=B3n)
+
+Obsah z=C3=A1sielky:
+ - Mobiln=C3=BD telef=C3=B3n
+ - Puzdro
+ - Nab=C3=ADja=C4=8Dka 65 W
+
+
+=C4=8Eakujeme za n=C3=A1kup!
+T=C3=ADm Mobilonline
+
+
+------=_Part_alt_12xxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>Mobilonline</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color=
+:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">Objedn=C3=A1vka =
+88124 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</sp=
+an>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#2b7a3d;padding:16px;color:#fff;font-size:20px"=
+><img src=3D"https://img.example.com/logo.png" alt=3D"Mobilonline" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Dobr=C3=BD de=C5=88,</p><p>va=C5=A1a =
+objedn=C3=A1vka =C4=8D. <strong>88124</strong> bola pr=C3=A1ve =
+odoslan=C3=A1.</p><p>Prepravca: Packeta. Z d=C3=B4vodu skladovej =
+dostupnosti sme objedn=C3=A1vku rozdelili.</p><p>Z=C3=A1sielka 1/2: Z 222 =
+2222 205 (puzdro, nab=C3=ADja=C4=8Dka)
+Z=C3=A1sielka 2/2: Z 222 2222 206 (mobiln=C3=BD telef=C3=B3n)</p><table><tr=
+><td>Mobiln=C3=BD telef=C3=B3n</td></tr><tr><td>Puzdro</td></tr><tr><td>Nab=
+=C3=ADja=C4=8Dka 65 W</td></tr></table></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">=C4=8Eakujeme za =
+n=C3=A1kup! T=C3=ADm Mobilonline. </td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_12xxxx.fake--

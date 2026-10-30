@@ -1,0 +1,21 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake2m;
+        Mon, 26 Oct 2026 15:00:26 +0100
+Return-Path: <jana.testova@example.com>
+Date: Mon, 26 Oct 2026 15:00:26 +0100
+From: =?utf-8?Q?Jana_Testov=C3=A1?= <jana.testova@example.com>
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: 
+Message-ID: <scan-20261026150000@phone.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed;
+ boundary="----=_Part_mix_2lxxxx.fake"
+
+------=_Part_mix_2lxxxx.fake
+Content-Type: application/pdf; name="stitok_Z2222222212.pdf"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="stitok_Z2222222212.pdf"
+
+JVBERi0xLjQKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZz4+ZW5kb2JqCiUgZmFrZSBsYWJlbCBaMjIy
+MjIyMjIxMgp0cmFpbGVyPDwvUm9vdCAxIDAgUj4+CiUlRU9GCg==
+------=_Part_mix_2lxxxx.fake--

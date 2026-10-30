@@ -1,0 +1,20 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake2g;
+        Mon, 26 Oct 2026 11:00:26 +0100
+Return-Path: <transaction@notice.aliexpress.example.com>
+Date: Mon, 26 Oct 2026 11:00:26 +0100
+From: AliExpress <transaction@notice.aliexpress.example.com>
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: Your order 8190000011112222 has been shipped
+Message-ID: <202610261100.ae-shipped@notice.aliexpress.example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Hi Jana,
+
+Your order 8190000011112222 has been shipped by Cainiao.
+Tracking number: LP00777777777701
+Estimated delivery: Nov 8 - Nov 15
+
+AliExpress

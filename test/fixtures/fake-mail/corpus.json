@@ -1,0 +1,796 @@
+[
+  {
+    "file": "01-posta-old-stored-at-office.eml",
+    "date": "2026-08-28 10:05",
+    "arrival": "2026-08-28 10:05",
+    "exercises": "Slovenská pošta, 48 days old at setup",
+    "expect": {
+      "parcel": "posta:EB666666008SK",
+      "archived": true
+    },
+    "bytes": 3717
+  },
+  {
+    "file": "02-packeta-old-ready.eml",
+    "date": "2026-09-01 14:22",
+    "arrival": "2026-09-01 14:22",
+    "exercises": "Packeta ready, 44 days old at setup (archive on arrival); old Z-BOX code",
+    "expect": {
+      "parcel": "packeta:Z2222222209",
+      "archived": true
+    },
+    "bytes": 4900
+  },
+  {
+    "file": "03-packeta-old-pickedup.eml",
+    "date": "2026-09-02 09:10",
+    "arrival": "2026-09-02 09:10",
+    "exercises": "second old mail for the same archived parcel",
+    "expect": {
+      "parcel": "packeta:Z2222222209",
+      "archived": true
+    },
+    "bytes": 3425
+  },
+  {
+    "file": "04-eshop-sps-old-dispatch.eml",
+    "date": "2026-09-10 16:40",
+    "arrival": "2026-09-10 16:40",
+    "exercises": "e-shop dispatch naming SPS, 35 days old at setup -> archived on arrival (setup run says 3 archived); revived by mail 63, so NOT archived at the end",
+    "expect": {
+      "parcel": "sps:SK0FAKE26TEST00002",
+      "archived": false
+    },
+    "bytes": 2799
+  },
+  {
+    "file": "05-gls-delivered-25-days-old.eml",
+    "date": "2026-09-25 13:31",
+    "arrival": "2026-09-25 13:31",
+    "exercises": "GLS from gls-group.eu (listed domain), 20 days old at setup: NOT archived, polled -> delivered",
+    "expect": {
+      "parcel": "gls:90444444404"
+    },
+    "bytes": 2860
+  },
+  {
+    "file": "06-eshop-order-confirmation-names-packeta.eml",
+    "date": "2026-10-01 20:14",
+    "arrival": "2026-10-01 20:14",
+    "exercises": "order confirmation: names Packeta, no number yet",
+    "expect": {
+      "attention": true,
+      "note": "carrier-named; design says a dismiss click"
+    },
+    "bytes": 883
+  },
+  {
+    "file": "07-newsletter-number-like.eml",
+    "date": "2026-10-05 07:00",
+    "arrival": "2026-10-05 07:00",
+    "exercises": "newsletter full of 8-14 digit strings, phones, EAN, IBAN; emoji subject",
+    "expect": {
+      "ignored": true
+    },
+    "bytes": 2956
+  },
+  {
+    "file": "08-packeta-promo-sample-number.eml",
+    "date": "2026-10-08 10:00",
+    "arrival": "2026-10-08 10:00",
+    "exercises": "carrier promo whose explainer prints a SAMPLE Z-number",
+    "expect": {
+      "attention": true,
+      "note": "carrier sent it; should NOT create parcel Z0000000000"
+    },
+    "bytes": 2720
+  },
+  {
+    "file": "09-dpd-promo-newsletter.eml",
+    "date": "2026-10-12 09:30",
+    "arrival": "2026-10-12 09:30",
+    "exercises": "carrier newsletter, no parcel (the template still prints \"Odosielateľ:\" and \"Číslo balíka:\" labels with nothing)",
+    "expect": {
+      "attention": true,
+      "note": "carrier sent it"
+    },
+    "bytes": 2638
+  },
+  {
+    "file": "10-eshop-gls-dispatch-zero-padded.eml",
+    "date": "2026-10-15 10:12",
+    "arrival": "2026-10-15 10:12",
+    "exercises": "e-shop dispatch naming GLS with a 12-digit zero-padded number (GLS itself prints 11)",
+    "expect": {
+      "parcel": "gls:90444444402"
+    },
+    "bytes": 2970
+  },
+  {
+    "file": "11-eshop-sps-dispatch-cp1250-qp.eml",
+    "date": "2026-10-15 14:30",
+    "arrival": "2026-10-15 14:30",
+    "exercises": "windows-1250 quoted-printable body and subject; SPS number by shape",
+    "expect": {
+      "parcel": "sps:SK0FAKE26TEST00001"
+    },
+    "bytes": 2853
+  },
+  {
+    "file": "12-gls-transit-courier-phone-first.eml",
+    "date": "2026-10-16 08:05",
+    "arrival": "2026-10-16 08:05",
+    "exercises": "GLS from gls-slovakia.sk (the real sender domain, not in SENDER_DOMAINS); courier phone printed before the number",
+    "expect": {
+      "parcel": "gls:90444444402"
+    },
+    "bytes": 3009
+  },
+  {
+    "file": "13-eshop-packeta-dispatch-base64.eml",
+    "date": "2026-10-16 09:40",
+    "arrival": "2026-10-16 09:40",
+    "exercises": "P1 lifecycle 1/6: e-shop dispatch (base64 utf-8), Packeta number by shape",
+    "expect": {
+      "parcel": "packeta:Z2222222201"
+    },
+    "bytes": 3217
+  },
+  {
+    "file": "14-eshop-dpd-dispatch.eml",
+    "date": "2026-10-16 12:00",
+    "arrival": "2026-10-16 12:00",
+    "exercises": "P4 1/3: e-shop dispatch naming DPD + labelled 14 digits",
+    "expect": {
+      "parcel": "dpd:01505333333301"
+    },
+    "bytes": 2774
+  },
+  {
+    "file": "15-packeta-accepted.eml",
+    "date": "2026-10-16 18:20",
+    "arrival": "2026-10-16 18:20",
+    "exercises": "P1 2/6: Packeta accepted, FUTURE-tense box block",
+    "expect": {
+      "parcel": "packeta:Z2222222201"
+    },
+    "bytes": 4230
+  },
+  {
+    "file": "16-dpd-predict-window.eml",
+    "date": "2026-10-17 07:30",
+    "arrival": "2026-10-17 07:30",
+    "exercises": "P4 2/3: DPD Predict, html only base64; courier phone and window",
+    "expect": {
+      "parcel": "dpd:01505333333301"
+    },
+    "bytes": 3427
+  },
+  {
+    "file": "17-dpd-delivered.eml",
+    "date": "2026-10-17 12:10",
+    "arrival": "2026-10-17 12:10",
+    "exercises": "P4 3/3: DPD delivered",
+    "expect": {
+      "parcel": "dpd:01505333333301"
+    },
+    "bytes": 3122
+  },
+  {
+    "file": "18-gls-accepted.eml",
+    "date": "2026-10-17 15:00",
+    "arrival": "2026-10-17 15:00",
+    "exercises": "P7 1/4: GLS accepted",
+    "expect": {
+      "parcel": "gls:90444444401"
+    },
+    "bytes": 3013
+  },
+  {
+    "file": "19-dpd-on-the-way-to-station-long-sender.eml",
+    "date": "2026-10-18 09:00",
+    "arrival": "2026-10-18 09:00",
+    "exercises": "P5 1/4: DPD, sender name ~110 chars (merchant truncation, card layout)",
+    "expect": {
+      "parcel": "dpd:01505333333302"
+    },
+    "bytes": 3373
+  },
+  {
+    "file": "20-gls-ready-glsbox-pin.eml",
+    "date": "2026-10-18 11:00",
+    "arrival": "2026-10-18 11:00",
+    "exercises": "P7 2/4: GLS BOX ready, PIN, \"Odberné miesto:\" block (carrier answer has no pickup -> mail fills it)",
+    "expect": {
+      "parcel": "gls:90444444401"
+    },
+    "bytes": 3419
+  },
+  {
+    "file": "21-packeta-accepted-cod-pickup-point.eml",
+    "date": "2026-10-18 13:00",
+    "arrival": "2026-10-18 13:00",
+    "exercises": "P2 1/5: Packeta to a výdajné miesto (not Z-BOX), cash on delivery 34,90 €",
+    "expect": {
+      "parcel": "packeta:Z2222222202"
+    },
+    "bytes": 4328
+  },
+  {
+    "file": "22-packeta-ready-pickup-point-cod.eml",
+    "date": "2026-10-19 10:00",
+    "arrival": "2026-10-19 10:00",
+    "exercises": "P2 2/5: ready at výdajné miesto, COD, no locker code",
+    "expect": {
+      "parcel": "packeta:Z2222222202"
+    },
+    "bytes": 4407
+  },
+  {
+    "file": "23-dpd-predict-p6.eml",
+    "date": "2026-10-19 07:00",
+    "arrival": "2026-10-19 07:00",
+    "exercises": "P6 1/3: DPD Predict",
+    "expect": {
+      "parcel": "dpd:01505333333303"
+    },
+    "bytes": 3406
+  },
+  {
+    "file": "24-dpd-failed-attempt.eml",
+    "date": "2026-10-19 18:00",
+    "arrival": "2026-10-19 18:00",
+    "exercises": "P6 2/3: failed delivery attempt",
+    "expect": {
+      "parcel": "dpd:01505333333303"
+    },
+    "bytes": 3509
+  },
+  {
+    "file": "25-eshop-two-packeta-parcels.eml",
+    "date": "2026-10-20 07:00",
+    "arrival": "2026-10-20 07:00",
+    "exercises": "one mail, TWO parcels",
+    "expect": {
+      "parcels": [
+        "packeta:Z2222222205",
+        "packeta:Z2222222206"
+      ]
+    },
+    "bytes": 3064
+  },
+  {
+    "file": "26-packeta-ready-zbox-code-leading-zero.eml",
+    "date": "2026-10-20 09:00",
+    "arrival": "2026-10-20 09:00",
+    "exercises": "P1 3/6: Z-BOX ready, opening code with a leading zero (040712)",
+    "expect": {
+      "parcel": "packeta:Z2222222201",
+      "code": "040712"
+    },
+    "bytes": 5042
+  },
+  {
+    "file": "27-dpd-delivered-p6.eml",
+    "date": "2026-10-20 12:00",
+    "arrival": "2026-10-20 12:00",
+    "exercises": "P6 3/3: delivered on second attempt",
+    "expect": {
+      "parcel": "dpd:01505333333303"
+    },
+    "bytes": 3115
+  },
+  {
+    "file": "28-sps-balikovo-cp1250-base64.eml",
+    "date": "2026-10-20 15:00",
+    "arrival": "2026-10-20 15:00",
+    "exercises": "SPS ready at balíkovo, windows-1250 base64, verification code 551902",
+    "expect": {
+      "parcel": "sps:SK0FAKE26TEST00001"
+    },
+    "bytes": 3412
+  },
+  {
+    "file": "29-gmail-forwarded-dpd.eml",
+    "date": "2026-10-21 08:30",
+    "arrival": "2026-10-21 08:30",
+    "exercises": "Gmail-forwarded DPD Predict (bold *DPD* sender) from a family member",
+    "expect": {
+      "parcel": "dpd:01505333333304"
+    },
+    "bytes": 2144
+  },
+  {
+    "file": "30-packeta-accepted-p3.eml",
+    "date": "2026-10-21 10:00",
+    "arrival": "2026-10-21 10:00",
+    "exercises": "P3 1/4: accepted, destined for Z-BOX A",
+    "expect": {
+      "parcel": "packeta:Z2222222203"
+    },
+    "bytes": 4108
+  },
+  {
+    "file": "31-zasilkovna-cz-ready-iso8859-2.eml",
+    "date": "2026-10-21 11:00",
+    "arrival": "2026-10-21 11:00",
+    "exercises": "Czech Zásilkovna, ISO-8859-2 QP text only; Czech code phrase; Czech pickup block (Místo...)",
+    "expect": {
+      "parcel": "packeta:Z2222222204",
+      "code": "918273"
+    },
+    "bytes": 1094
+  },
+  {
+    "file": "32-packeta-reminder.eml",
+    "date": "2026-10-21 16:00",
+    "arrival": "2026-10-21 16:00",
+    "exercises": "P1 4/6: reminder repeating the block and the code",
+    "expect": {
+      "parcel": "packeta:Z2222222201"
+    },
+    "bytes": 5258
+  },
+  {
+    "file": "33-packeta-zbox-full-redirected.eml",
+    "date": "2026-10-22 09:00",
+    "arrival": "2026-10-22 09:00",
+    "exercises": "P3 2/4: pickup point CHANGE (box full)",
+    "expect": {
+      "parcel": "packeta:Z2222222203"
+    },
+    "bytes": 4035
+  },
+  {
+    "file": "34-packeta-ready-new-box.eml",
+    "date": "2026-10-22 10:00",
+    "arrival": "2026-10-22 10:00",
+    "exercises": "P3 3/4: ready in the NEW box; pickup must be box B, not A",
+    "expect": {
+      "parcel": "packeta:Z2222222203",
+      "code": "331908"
+    },
+    "bytes": 4887
+  },
+  {
+    "file": "35-dhl-express-dispatch.eml",
+    "date": "2026-10-22 12:00",
+    "arrival": "2026-10-22 12:00",
+    "exercises": "DHL Express (email-only carrier) 1/3, English",
+    "expect": {
+      "parcel": "dhl:JJD000777777777701"
+    },
+    "bytes": 3105
+  },
+  {
+    "file": "36-packeta-pickedup.eml",
+    "date": "2026-10-22 14:00",
+    "arrival": "2026-10-22 14:00",
+    "exercises": "P1 5/6: collected",
+    "expect": {
+      "parcel": "packeta:Z2222222201"
+    },
+    "bytes": 3432
+  },
+  {
+    "file": "37-posta-stored-at-office-cod.eml",
+    "date": "2026-10-22 17:00",
+    "arrival": "2026-10-22 17:00",
+    "exercises": "Slovenská pošta: stored at a post office, COD 12,50 €",
+    "expect": {
+      "parcel": "posta:EB666666011SK"
+    },
+    "bytes": 3844
+  },
+  {
+    "file": "38-dhl-customs-duties.eml",
+    "date": "2026-10-23 08:00",
+    "arrival": "2026-10-23 08:00",
+    "exercises": "DHL 2/3: customs amount, Slovak subject without the number",
+    "expect": {
+      "parcel": "dhl:JJD000777777777701"
+    },
+    "bytes": 3422
+  },
+  {
+    "file": "39-packeta-last-day-reminder.eml",
+    "date": "2026-10-23 09:30",
+    "arrival": "2026-10-23 09:30",
+    "exercises": "P2 3/5: last-day reminder",
+    "expect": {
+      "parcel": "packeta:Z2222222202"
+    },
+    "bytes": 4613
+  },
+  {
+    "file": "40-eshop-emoji-subject-packeta.eml",
+    "date": "2026-10-23 11:00",
+    "arrival": "2026-10-23 11:00",
+    "exercises": "emoji subject and emoji sender name (merchant), Packeta number without spaces",
+    "expect": {
+      "parcel": "packeta:Z2222222207"
+    },
+    "bytes": 2794
+  },
+  {
+    "file": "41-eshop-number-only-in-html.eml",
+    "date": "2026-10-23 13:00",
+    "arrival": "2026-10-23 13:00",
+    "exercises": "number ONLY in the HTML part; the text part is a \"view in browser\" stub",
+    "expect": {
+      "parcel": "packeta:Z2222222211"
+    },
+    "bytes": 2273
+  },
+  {
+    "file": "42-eshop-number-only-in-subject.eml",
+    "date": "2026-10-23 15:00",
+    "arrival": "2026-10-23 15:00",
+    "exercises": "very short mail; number ONLY in the subject",
+    "expect": {
+      "parcel": "packeta:Z2222222208"
+    },
+    "bytes": 608
+  },
+  {
+    "file": "43-dpd-pickup-station-ready-pin.eml",
+    "date": "2026-10-24 09:00",
+    "arrival": "2026-10-24 09:00",
+    "exercises": "P5 2/4: DPD Pickup Station ready, PIN 120477, address block",
+    "expect": {
+      "parcel": "dpd:01505333333302"
+    },
+    "bytes": 4221
+  },
+  {
+    "file": "44-posta-balikobox-pin.eml",
+    "date": "2026-10-24 10:00",
+    "arrival": "2026-10-24 10:00",
+    "exercises": "Slovenská pošta BalíkoBOX with PIN; deadline that will PASS before the end of the run",
+    "expect": {
+      "parcel": "posta:EB666666025SK"
+    },
+    "bytes": 3868
+  },
+  {
+    "file": "45-dpd-two-parcels-one-mail.eml",
+    "date": "2026-10-24 12:00",
+    "arrival": "2026-10-24 12:00",
+    "exercises": "carrier mail listing TWO parcel numbers",
+    "expect": {
+      "parcels": [
+        "dpd:01505333333305",
+        "dpd:01505333333306"
+      ]
+    },
+    "bytes": 3145
+  },
+  {
+    "file": "46-sps-courier-cod-phone.eml",
+    "date": "2026-10-24 08:00",
+    "arrival": "2026-10-24 08:00",
+    "exercises": "SPS 703… form in the subject, COD 59,90 €, courier phone",
+    "expect": {
+      "parcel": "sps:7035555555555501"
+    },
+    "bytes": 2784
+  },
+  {
+    "file": "47-eshop-gls-phone-lookalikes.eml",
+    "date": "2026-10-24 16:00",
+    "arrival": "2026-10-24 16:00",
+    "exercises": "GLS number after several 10-12 digit phone/order/invoice lookalikes",
+    "expect": {
+      "parcel": "gls:90444444403"
+    },
+    "bytes": 962
+  },
+  {
+    "file": "48-sps-delivered.eml",
+    "date": "2026-10-25 09:00",
+    "arrival": "2026-10-25 09:00",
+    "exercises": "SPS collected (DST changeover day)",
+    "expect": {
+      "parcel": "sps:SK0FAKE26TEST00001"
+    },
+    "bytes": 2603
+  },
+  {
+    "file": "49-packeta-returning-to-sender.eml",
+    "date": "2026-10-25 10:00",
+    "arrival": "2026-10-25 10:00",
+    "exercises": "P2 4/5: not picked up -> returned to sender",
+    "expect": {
+      "parcel": "packeta:Z2222222202"
+    },
+    "bytes": 3602
+  },
+  {
+    "file": "50-dpd-station-reminder-resent.eml",
+    "date": "2026-10-25 11:00",
+    "arrival": "2026-10-25 11:00",
+    "exercises": "P5 3/4: same subject re-sent with a new Message-ID (reminder)",
+    "expect": {
+      "parcel": "dpd:01505333333302"
+    },
+    "bytes": 4280
+  },
+  {
+    "file": "51-dhl-express-delivered.eml",
+    "date": "2026-10-26 14:20",
+    "arrival": "2026-10-26 14:20",
+    "exercises": "DHL 3/3: delivered (email-only: status stays unknown by design)",
+    "expect": {
+      "parcel": "dhl:JJD000777777777701"
+    },
+    "bytes": 2709
+  },
+  {
+    "file": "52-dhl-express-bare-10-digit-waybill.eml",
+    "date": "2026-10-26 09:00",
+    "arrival": "2026-10-26 09:00",
+    "exercises": "DHL Express with the common bare 10-digit waybill",
+    "expect": {
+      "parcel": "dhl:7777777701",
+      "note": "design §6.6 excludes bare 10 digits; sender is DHL though"
+    },
+    "bytes": 2907
+  },
+  {
+    "file": "53-dhl-parcel-jvgl.eml",
+    "date": "2026-10-26 10:00",
+    "arrival": "2026-10-26 10:00",
+    "exercises": "DHL Parcel Europe JVGL… form",
+    "expect": {
+      "parcel": "dhl:JVGL07777777777701"
+    },
+    "bytes": 798
+  },
+  {
+    "file": "54-aliexpress-cainiao-shipped.eml",
+    "date": "2026-10-26 11:00",
+    "arrival": "2026-10-26 11:00",
+    "exercises": "AliExpress / Cainiao LP… number (no supported carrier yet)",
+    "expect": {
+      "attention": true
+    },
+    "bytes": 745
+  },
+  {
+    "file": "55-temu-dhl-ecommerce-000.eml",
+    "date": "2026-10-26 12:00",
+    "arrival": "2026-10-26 12:00",
+    "exercises": "DHL eCommerce 000… form from an e-shop (needs the DHL name + label)",
+    "expect": {
+      "parcel": "dhl:00077777777777777701"
+    },
+    "bytes": 655
+  },
+  {
+    "file": "56-unknown-carrier-express-one.eml",
+    "date": "2026-10-26 13:00",
+    "arrival": "2026-10-26 13:00",
+    "exercises": "unsupported carrier (Express One) whose number is GLS-shaped and which names DHL",
+    "expect": {
+      "attention": true
+    },
+    "bytes": 833
+  },
+  {
+    "file": "57-posta-customs-foreign-s10.eml",
+    "date": "2026-10-26 14:00",
+    "arrival": "2026-10-26 14:00",
+    "exercises": "Slovenská pošta, inbound international S10 number ending CN (not SK); customs amount",
+    "expect": {
+      "parcel": "posta:RB666666042CN",
+      "note": "posta regex only accepts …SK"
+    },
+    "bytes": 3656
+  },
+  {
+    "file": "58-attachment-only-scan.eml",
+    "date": "2026-10-26 15:00",
+    "arrival": "2026-10-26 15:00",
+    "exercises": "attachment-only mail, empty subject, number only in the PDF file name",
+    "expect": {
+      "attention": true
+    },
+    "bytes": 862
+  },
+  {
+    "file": "59-eshop-very-long-mail.eml",
+    "date": "2026-10-27 09:00",
+    "arrival": "2026-10-27 09:00",
+    "exercises": "very long mail (~470 KB text) with the number at the very end",
+    "expect": {
+      "parcel": "packeta:Z2222222210"
+    },
+    "bytes": 760649
+  },
+  {
+    "file": "60-dpd-pickup-station-collected.eml",
+    "date": "2026-10-27 10:00",
+    "arrival": "2026-10-27 10:00",
+    "exercises": "P5 4/4: collected from the station",
+    "expect": {
+      "parcel": "dpd:01505333333302"
+    },
+    "bytes": 3257
+  },
+  {
+    "file": "61-outlook-forwarded-gls-reminder.eml",
+    "date": "2026-10-27 11:00",
+    "arrival": "2026-10-27 11:00",
+    "exercises": "Outlook-style forward (underscore rule, no \"Forwarded message\" line); merchant should not become the forwarder",
+    "expect": {
+      "parcel": "gls:90444444401"
+    },
+    "bytes": 1064
+  },
+  {
+    "file": "62-gmail-cz-forwarded-zasilkovna-pickedup.eml",
+    "date": "2026-10-27 12:00",
+    "arrival": "2026-10-27 12:00",
+    "exercises": "Czech Gmail forward (\"Přeposlaná zpráva\", \"Od:\")",
+    "expect": {
+      "parcel": "packeta:Z2222222204"
+    },
+    "bytes": 967
+  },
+  {
+    "file": "63-sps-old-parcel-returning-revive.eml",
+    "date": "2026-10-28 09:00",
+    "arrival": "2026-10-28 09:00",
+    "exercises": "fresh mail for the ARCHIVED-on-arrival SPS parcel (mail 04): must revive it",
+    "expect": {
+      "parcel": "sps:SK0FAKE26TEST00002",
+      "archived": false
+    },
+    "bytes": 2622
+  },
+  {
+    "file": "64-posta-reminder.eml",
+    "date": "2026-10-28 10:00",
+    "arrival": "2026-10-28 10:00",
+    "exercises": "posta reminder",
+    "expect": {
+      "parcel": "posta:EB666666011SK"
+    },
+    "bytes": 3906
+  },
+  {
+    "file": "65-alza-alzabox-no-carrier.eml",
+    "date": "2026-10-28 11:00",
+    "arrival": "2026-10-28 11:00",
+    "exercises": "Alza own delivery to AlzaBox: no carrier, no tracking number, pickup code",
+    "expect": {
+      "attention": true
+    },
+    "bytes": 818
+  },
+  {
+    "file": "66-gls-delivered-p8.eml",
+    "date": "2026-10-28 13:00",
+    "arrival": "2026-10-28 13:00",
+    "exercises": "GLS delivered for the zero-padded parcel (mail 10/12) -> one parcel",
+    "expect": {
+      "parcel": "gls:90444444402"
+    },
+    "bytes": 2856
+  },
+  {
+    "file": "67-packeta-com-english.eml",
+    "date": "2026-10-28 15:00",
+    "arrival": "2026-10-28 15:00",
+    "exercises": "Packeta in English (packeta.com); English merchant phrase",
+    "expect": {
+      "parcel": "packeta:Z2222222213"
+    },
+    "bytes": 758
+  },
+  {
+    "file": "68-posta-delivered.eml",
+    "date": "2026-10-29 09:00",
+    "arrival": "2026-10-29 09:00",
+    "exercises": "posta delivered",
+    "expect": {
+      "parcel": "posta:EB666666011SK"
+    },
+    "bytes": 3269
+  },
+  {
+    "file": "69-gls-last-chance-reminder.eml",
+    "date": "2026-10-29 10:00",
+    "arrival": "2026-10-29 10:00",
+    "exercises": "P7 4/4: GLS reminder, still waiting at the end",
+    "expect": {
+      "parcel": "gls:90444444401"
+    },
+    "bytes": 3385
+  },
+  {
+    "file": "70-packeta-pickedup-p3.eml",
+    "date": "2026-10-29 11:00",
+    "arrival": "2026-10-29 11:00",
+    "exercises": "P3 4/4: collected",
+    "expect": {
+      "parcel": "packeta:Z2222222203"
+    },
+    "bytes": 3440
+  },
+  {
+    "file": "71-eshop-posta-bad-check-digit.eml",
+    "date": "2026-10-29 12:00",
+    "arrival": "2026-10-29 12:00",
+    "exercises": "Slovenská pošta number with a WRONG S10 check digit (typo by the shop)",
+    "expect": {
+      "parcel": "posta:EB666666030SK",
+      "note": "manual /add would refuse it"
+    },
+    "bytes": 2784
+  },
+  {
+    "file": "72-packeta-very-short.eml",
+    "date": "2026-10-29 14:00",
+    "arrival": "2026-10-29 14:00",
+    "exercises": "very short mail: subject and body are just the number",
+    "expect": {
+      "parcel": "packeta:Z2222222214"
+    },
+    "bytes": 516
+  },
+  {
+    "file": "73-sps-delivered-misdeclared-charset.eml",
+    "date": "2026-10-30 10:00",
+    "arrival": "2026-10-30 10:00",
+    "exercises": "body bytes windows-1250 but declared iso-8859-1 (mojibake source)",
+    "expect": {
+      "parcel": "sps:7035555555555501"
+    },
+    "bytes": 710
+  },
+  {
+    "file": "74-packeta-ready-shared-zbox-a.eml",
+    "date": "2026-10-30 12:00",
+    "arrival": "2026-10-30 12:00",
+    "exercises": "two parcels ready in the SAME Z-BOX (with 75): one shared card, two codes",
+    "expect": {
+      "parcel": "packeta:Z2222222207",
+      "code": "552019"
+    },
+    "bytes": 4847
+  },
+  {
+    "file": "75-packeta-ready-shared-zbox-b.eml",
+    "date": "2026-10-30 13:00",
+    "arrival": "2026-10-30 13:00",
+    "exercises": "second parcel in the same Z-BOX; code with two leading zeros",
+    "expect": {
+      "parcel": "packeta:Z2222222213",
+      "code": "009431"
+    },
+    "bytes": 4867
+  },
+  {
+    "file": "76-phishing-lookalike-packeta.eml",
+    "date": "2026-10-30 15:00",
+    "arrival": "2026-10-30 15:00",
+    "exercises": "phishing lookalike domain with a Z-number",
+    "expect": {
+      "attention": true,
+      "note": "creating a parcel from a phishing mail is questionable"
+    },
+    "bytes": 821
+  },
+  {
+    "file": "77-gls-ready-duplicate-same-message-id.eml",
+    "date": "2026-10-18 11:00",
+    "arrival": "2026-10-25 11:05",
+    "exercises": "exact duplicate of mail 20 (same Message-ID) arriving later at a new UID",
+    "expect": {
+      "parcel": "gls:90444444401",
+      "duplicateOf": "20"
+    },
+    "bytes": 3419
+  }
+]

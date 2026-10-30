@@ -1,0 +1,66 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fakec;
+        Mon, 5 Oct 2026 07:00:05 +0200
+Return-Path: <newsletter@dobreceny.example.sk>
+Date: Mon, 5 Oct 2026 07:00:05 +0200
+From: =?utf-8?Q?Dobr=C3=A9_Ceny?= <newsletter@dobreceny.example.sk>
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: =?utf-8?Q?Jesenn=C3=BD_v=C3=BDpredaj?=
+ =?utf-8?Q?_-40_%_len_do_nede?=
+ =?utf-8?Q?le_=F0=9F=8D=82?=
+Message-ID: <202610050700.nl-41@dobreceny.example.sk>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_bxxxx.fake"
+
+------=_Part_alt_bxxxx.fake
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Jesenn=C3=BD v=C3=BDpredaj!
+
+Z=C4=BEavov=C3=BD k=C3=B3d: JESEN2026 plat=C3=AD pre objedn=C3=A1vky nad 30=
+ =E2=82=AC.
+Z=C3=A1kazn=C3=ADcka linka: 0905 123 456 (Po=E2=80=93Pi 8:00=E2=80=9316:00)=
+, +421 2 1234 5678
+I=C4=8CO: 87654321, DI=C4=8C: 2023456789, IBAN: SK31 1200 0000 1987 4263 =
+7541
+Katal=C3=B3gov=C3=A9 =C4=8D=C3=ADslo produktu 123456789012, EAN =
+8588001234567
+Objedn=C3=A1vka =C4=8D. 1052281846 z minul=C3=A9ho t=C3=BD=C5=BEd=C5=88a? =
+Hodno=C5=A5te ju!
+
+Odhl=C3=A1senie z odberu: https://dobreceny.example.sk/unsub?=
+u=3D00001111222233334444
+
+------=_Part_alt_bxxxx.fake
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>V=C3=BDpredaj</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#333;color:#f=
+ff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">&#847;&zwnj;&nbsp=
+;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#333;padding:16px;color:#fff;font-size:20px"><i=
+mg src=3D"https://img.example.com/logo.png" alt=3D"Logo" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><h1>Jesenn=C3=BD v=C3=BDpredaj -40 =
+%</h1><p>Z=C4=BEavov=C3=BD k=C3=B3d: <b>JESEN2026</b></p><p>Z=C3=A1kazn=
+=C3=ADcka linka: 0905 123 456, +421 2 1234 5678</p><p>Katal=C3=B3gov=C3=A9 =
+=C4=8D=C3=ADslo 123456789012, EAN 8588001234567</p><p><a =
+href=3D"https://dobreceny.example.sk/p/12345678901234">Pozrie=C5=A5</a></p>=
+</td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">I=C4=8CO: 87654321=
+ =C2=B7 Odhl=C3=A1senie z odberu</td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_bxxxx.fake--

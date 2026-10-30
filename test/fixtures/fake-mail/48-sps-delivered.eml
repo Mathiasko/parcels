@@ -1,0 +1,54 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fake27;
+        Sun, 25 Oct 2026 09:00:25 +0100
+Return-Path: <serv@sps-sro.sk>
+Date: Sun, 25 Oct 2026 09:00:25 +0100
+From: serv@sps-sro.sk
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: Zasielka SK0FAKE26TEST00001 bola dorucena
+Message-ID: <202610250900.SK0FAKE26TEST00001-del@sps-sro.sk>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_26xxxx.fake"
+
+------=_Part_alt_26xxxx.fake
+Content-Type: text/plain; charset=windows-1250
+Content-Transfer-Encoding: quoted-printable
+
+body { font-family: Tahoma, Verdana, Arial, Helvetica, Chicago, Sans-serif;=
+ font-size: 12px; margin: 0px; padding: 4px; }p { text-align: justify }tr, =
+td { font-size: 12px; }h1 {color: #ffffff; font-size: 14px; background: =
+#455560; padding: 4px 5px; border-left: 20px solid #f89829; }
+V=E1=9Een=FD z=E1kazn=EDk,
+va=9Aa z=E1sielka cislo SK0FAKE26TEST00001 bola vyzdvihnut=E1 v odbernom =
+mieste bal=EDkovo. =CFakujeme.
+
+Prev=E1dzkovate=BEom je spolo=E8nos=9D Slovak Parcel Service s.r.o., I=C8O:=
+ 31 329 217 (=EFalej len ako "Prev=E1dzkovate=BE"). Prev=E1dzkovate=BEa =
+m=F4=9Eete kontaktova=9D na adrese Seneck=E1 cesta 1, 900 28 Ivanka pri =
+Dunaji.
+
+S pozdravom,
+kuri=E9rska spolo=E8nos=9D
+Pros=EDm, neodpovedajte na doru=E8en=FA spr=E1vu e-mailom, pre kontakt =
+pou=9Eite inform=E1cie na webovej str=E1nke.
+
+------=_Part_alt_26xxxx.fake
+Content-Type: text/html; charset=windows-1250
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><style>body { font-family: Tahoma, Verdana, Arial, Helvetica, =
+Chicago, Sans-serif; font-size: 12px; margin: 0px; padding: 4px; }p { =
+text-align: justify }tr, td { font-size: 12px; }h1 {color: #ffffff; =
+font-size: 14px; background: #455560; padding: 4px 5px; border-left: 20px =
+solid #f89829; }</style></head><body><div class=3D"obsah"><h1>Slovak Parcel=
+ Service</h1><p>V=E1=9Een=FD z=E1kazn=EDk,</p><p>va=9Aa z=E1sielka cislo =
+SK0FAKE26TEST00001 bola vyzdvihnut=E1 v odbernom mieste bal=EDkovo. =
+=CFakujeme.</p><p>Prev=E1dzkovate=BEom je spolo=E8nos=9D Slovak Parcel =
+Service s.r.o., I=C8O: 31 329 217 (=EFalej len ako "Prev=E1dzkovate=BE"). =
+Prev=E1dzkovate=BEa m=F4=9Eete kontaktova=9D na adrese Seneck=E1 cesta 1, =
+900 28 Ivanka pri Dunaji.<br><br>S pozdravom,<br>kuri=E9rska =
+spolo=E8nos=9D<br>Pros=EDm, neodpovedajte na doru=E8en=FA spr=E1vu e-mailom=
+, pre kontakt pou=9Eite inform=E1cie na webovej str=E1nke.=
+</p></div></body></html>
+------=_Part_alt_26xxxx.fake--

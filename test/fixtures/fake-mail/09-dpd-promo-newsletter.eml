@@ -1,0 +1,53 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fakef;
+        Mon, 12 Oct 2026 09:30:12 +0200
+Return-Path: <novinky@dpd.sk>
+Date: Mon, 12 Oct 2026 09:30:12 +0200
+From: DPD Slovensko <novinky@dpd.sk>
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: =?utf-8?Q?DPD_Pickup:_vyzdvi?=
+ =?utf-8?Q?hnite_si_bal=C3=ADk_ke?=
+ =?utf-8?Q?dyko=C4=BEvek?=
+Message-ID: <202610120930.nl-pickup@dpd.sk>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>DPD</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#dc0032;color=
+:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">&#847;&zwnj;&nbsp=
+;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#dc0032;padding:16px;color:#fff;font-size:20px"=
+><img src=3D"https://img.example.com/logo.png" alt=3D"DPD" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><table width=3D"100%"><tr><td>Dobr=C3=BD =
+de=C5=88 Jana Testov=C3=A1, <img src=3D"https://lib4u.dpd.=
+sk/images/NP/spacer.gif" width=3D"1" height=3D"8"> </td></tr>
+<tr><td><img src=3D"https://lib4u.dpd.sk/images/NP/spacer.gif" width=3D"1" =
+height=3D"8"></td></tr>
+<tr><td><table><tr><td>Odosielate=C4=BE: </td><td>&nbsp;&nbsp;</td><td>=
+=C4=8C=C3=ADslo bal=C3=ADka: </td></tr></table></td></tr>
+
+
+
+<tr><td><h2>Viac ako 1 500 Pickup bodov po celom Slovensku</h2><p>Stiahnite=
+ si aplik=C3=A1ciu myDPD a majte preh=C4=BEad o v=C5=A1etk=C3=BDch =
+z=C3=A1sielkach.</p></td></tr>
+<tr><td>D=C3=B4le=C5=BEit=C3=A1 inform=C3=A1cia k doru=C4=8Deniu: Va=C5=A1u=
+ z=C3=A1sielku m=C3=B4=C5=BEe namiesto v=C3=A1s prevzia=C5=A5 aj osoba, =
+ktorej poskytnete PIN k=C3=B3d.</td></tr></table></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">DPD SK s.r.o., =
+Testovsk=C3=A1 7, 999 04 Testovo. Infolinka: 02/00 00 00 00. Sledujte =
+n=C3=A1s na soci=C3=A1lnych sie=C5=A5ach. Stiahnite si aplik=C3=A1ciu myDPD=
+.</td></tr>
+</table></td></tr></table></body></html>

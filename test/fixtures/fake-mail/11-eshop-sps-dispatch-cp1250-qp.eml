@@ -1,0 +1,67 @@
+Delivered-To: jana.testova@example.com
+Received: by 2002:a05:fake:0:0:0:0 with SMTP id fakej;
+        Thu, 15 Oct 2026 14:30:15 +0200
+Return-Path: <objednavky@elektrosvet.example.sk>
+Date: Thu, 15 Oct 2026 14:30:15 +0200
+From: Elektro Svet <objednavky@elektrosvet.example.sk>
+To: Jana =?utf-8?Q?Testov=C3=A1?= <jana.testova@example.com>
+Subject: =?windows-1250?Q?Objedn=E1vka_=E8._2026?=
+ =?windows-1250?Q?104455_bola_odosla?=
+ =?windows-1250?Q?n=E1?=
+Message-ID: <202610151430.order-2026104455@elektrosvet.example.sk>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="----=_Part_alt_ixxxx.fake"
+
+------=_Part_alt_ixxxx.fake
+Content-Type: text/plain; charset=windows-1250
+Content-Transfer-Encoding: quoted-printable
+
+Dobr=FD de=F2,
+
+va=9Aa objedn=E1vka =E8. 2026104455 bola pr=E1ve odoslan=E1.
+Prepravca: SPS =96 Slovak Parcel Service, doru=E8enie do odbern=E9ho miesta=
+ bal=EDkovo
+=C8=EDslo z=E1sielky: SK0FAKE26TEST00001
+
+Obsah z=E1sielky:
+ - =8Eehli=E8ka s parou =96 =E8ierna
+ - =BCadov=E1 =E8ajov=E1 kanvica
+
+
+=CFakujeme za n=E1kup!
+T=EDm Elektro Svet
+
+
+------=_Part_alt_ixxxx.fake
+Content-Type: text/html; charset=windows-1250
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"sk"><head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width">
+<title>Elektro Svet</title>
+<style>body{margin:0;padding:0;font-family:Arial,Helvetica,=
+sans-serif}td{font-size:14px;line-height:20px}.btn{background:#2b7a3d;color=
+:#fff;padding:10px 18px;border-radius:4px;text-decoration:none}@media only =
+screen and (max-width:600px){.w{width:100%!important}}</style>
+</head><body>
+<span style=3D"display:none;max-height:0;overflow:hidden">Objedn=E1vka =
+2026104455 je na ceste&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp=
+;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" =
+bgcolor=3D"#f2f2f2"><tr><td align=3D"center">
+<table class=3D"w" width=3D"600" cellpadding=3D"0" cellspacing=3D"0" =
+border=3D"0" bgcolor=3D"#ffffff">
+<tr><td style=3D"background:#2b7a3d;padding:16px;color:#fff;font-size:20px"=
+><img src=3D"https://img.example.com/logo.png" alt=3D"Elektro Svet" =
+width=3D"120"></td></tr>
+<tr><td style=3D"padding:24px"><p>Dobr=FD de=F2,</p><p>va=9Aa objedn=E1vka =
+=E8. <strong>2026104455</strong> bola pr=E1ve odoslan=E1.</p><p>Prepravca: =
+SPS =96 Slovak Parcel Service, doru=E8enie do odbern=E9ho miesta =
+bal=EDkovo</p><p>=C8=EDslo z=E1sielky: SK0FAKE26TEST00001</p><table><tr><td=
+>=8Eehli=E8ka s parou =96 =E8ierna</td></tr><tr><td>=BCadov=E1 =E8ajov=E1 =
+kanvica</td></tr></table></td></tr>
+<tr><td style=3D"padding:16px;color:#888;font-size:11px">=CFakujeme za =
+n=E1kup! T=EDm Elektro Svet. </td></tr>
+</table></td></tr></table></body></html>
+------=_Part_alt_ixxxx.fake--
