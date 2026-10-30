@@ -533,7 +533,7 @@ async function installAndRelaunch(staged: string, version: string): Promise<void
   try {
     const appBundle = bundlePath(process.execPath)
     const refused = await verifyStaged({
-      appBundle, staged, version, expectedCertSha: shippedCertSha(), run: runCommand, workDir: updatesDir,
+      appBundle, staged, version, running: app.getVersion(), expectedCertSha: shippedCertSha(), run: runCommand, workDir: updatesDir,
     })
     if (refused) { refuse(refused.reason, refused.detail); return }
     const script = swapScript({ pid: process.pid, app: appBundle, staged, version, marker: swapFailedPath })

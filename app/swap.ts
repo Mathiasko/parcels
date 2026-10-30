@@ -1,6 +1,6 @@
 import { lstatSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join } from 'node:path'
-import { checkAppBundle, isVersion, stagingDir, type BundleRefusal, type RunResult } from '../src/core/app-update.js'
+import { checkAppBundle, compareVersions, isVersion, stagingDir, type BundleRefusal, type RunResult } from '../src/core/app-update.js'
 
 /**
  * Putting a staged update in place of the running app (spec §5.2, §10.3).
@@ -151,6 +151,8 @@ export interface VerifyStagedDeps {
   /** The path the server process asked to install. */
   staged: string
   version: string
+  /** The version of the app that is running, which the staged one must be newer than. */
+  running: string
   /** The bundled `signing-cert.sha256`. */
   expectedCertSha: string
   /** Runs a program without a shell (`runCommand`); tests pass a fake. */
@@ -166,12 +168,20 @@ export interface VerifyStagedDeps {
  * The server checked it when it staged it, but it has since sat in a folder the user (and anything
  * running as the user) can write to, and the path arrives in a message from another process. So:
  * the path must be exactly the staging folder Parcels makes beside this bundle for this version; it
- * must still be a real folder, not a link; and it must pass the same signature, certificate and
+ * must still be a real folder, not a link; it must be a later version than the one running, so no
+ * stale staging can turn into a downgrade; and it must pass the same signature, certificate and
  * identity checks as at staging (`checkAppBundle`).
  */
 export async function verifyStaged(d: VerifyStagedDeps): Promise<BundleRefusal | undefined> {
   return stagedPathRefusal(d.appBundle, d.version, d.staged)
+    ?? notNewerRefusal(d.version, d.running)
     ?? checkAppBundle(d.staged, d.version, d.expectedCertSha, d.run, d.workDir)
+}
+
+/** A refusal unless `version` (already known to be a version) is later than `running`. */
+function notNewerRefusal(version: string, running: string): BundleRefusal | undefined {
+  if (isVersion(running) && compareVersions(version, running) > 0) return undefined
+  return { reason: 'The update is not newer than the Parcels that is running, so it was not installed.', detail: `${version}, running ${running}` }
 }
 
 /**

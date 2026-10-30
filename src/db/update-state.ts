@@ -98,6 +98,11 @@ export function dueForUpdateCheck(
   return now.getTime() - last.checkedAt.getTime() >= intervalMs
 }
 
+/** Forgets the stored check, so the next poll makes one (`dueForUpdateCheck` is true with no row). */
+export function forgetUpdateCheck(db: Database): void {
+  db.prepare('DELETE FROM update_check WHERE id = 1').run()
+}
+
 /** Remembers that this upstream commit has been announced, so the banner fires once per version. */
 export function markUpdateNotified(db: Database, sha: string): void {
   db.prepare('UPDATE update_check SET notified_sha = ? WHERE id = 1').run(sha)

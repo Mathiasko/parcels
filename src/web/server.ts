@@ -57,8 +57,8 @@ import {
 } from '../core/update.js'
 import { getUpdateCheck, recordUpdateCheck } from '../db/update-state.js'
 import {
-  appUpdateDownloading, appUpdateStatusPath, checkAppRelease, downloadBaseBeside, githubFetchJson, readAppUpdateStatus,
-  RELEASES_URL, stagingDir, type AppUpdateStatus, type StageDeps,
+  appUpdateDownloading, appUpdateStatusPath, checkAppRelease, compareVersions, downloadBaseBeside, githubFetchJson, isVersion,
+  readAppUpdateStatus, RELEASES_URL, stagingDir, type AppUpdateStatus, type StageDeps,
 } from '../core/app-update.js'
 import { postToMain } from '../core/app-ipc.js'
 import { nextSlot } from '../core/schedule.js'
@@ -269,6 +269,13 @@ const CALENDAR_OUTCOMES_KEPT = 20
  * each; far fewer than `ACTIVITY_LOG_KEPT`, because a page is not an archive.
  */
 const ACTIVITY_SHOWN = 40
+
+/**
+ * True when `candidate` is a version later than `running`. False when either is not a version: an
+ * update that cannot be shown to be newer is not installed.
+ */
+const newerThanRunning = (candidate: string, running: string): boolean =>
+  isVersion(candidate) && isVersion(running) && compareVersions(candidate, running) > 0
 
 /**
  * The background refresh each server has in flight, if any. `POST /refresh` returns before its run is
@@ -1182,10 +1189,16 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    * in flight, which is the authoritative answer while it lives; the status file covers a press that
    * arrives from a page after a restart, and stops counting once it is stale, so a download that died
    * with its process cannot hide the button for ever. A second staging would delete the first's folder
-   * under it (`stageUpdate` clears leftovers before it starts).
+   * under it (`stageUpdate` clears leftovers before it starts). And the check's version must be newer
+   * than this app: a "behind" stored by an older copy, before a newer one was installed by hand, would
+   * otherwise stage, and then install, a downgrade.
    */
   const stageAppUpdate = (reply: FastifyReply, a: AppWebDeps, check: UpdateCheck) => {
     if (staging || appUpdateDownloading(appStatus(), now())) return reply.redirect('/health#update', 303)
+    if (check.version !== undefined && !newerThanRunning(check.version, a.version)) {
+      return sendError(reply, 409, () => errorPage('Nothing to install', html`Parcels ${check.version} is not newer than the Parcels that is running, so there is nothing to install. Open <a href="/health">Health</a> and press Check for updates.`, errorCtx()),
+        'the version the check found is not newer than the one running')
+    }
     if (!a.stage || !check.version || a.appBundle === '') {
       return sendError(reply, 409, () => errorPage('Cannot update from here', 'This copy of Parcels does not know where it is installed, so it cannot update itself. Download the new version from GitHub and drag it into Applications.', errorCtx()),
         'this copy of Parcels cannot update itself')
@@ -1209,7 +1222,8 @@ export function buildServer(deps: WebDeps): FastifyInstance {
      * Restart to update. The swap itself is the main process's (spec §5.2): this only checks that what
      * the status file names is the staged app this process made, and asks for it. The path is compared
      * with the one `stagingDir` gives for this bundle and that version, so a hand-edited status file
-     * cannot point the swap at any other folder on the disk; and it must still be there.
+     * cannot point the swap at any other folder on the disk; and it must still be there, and be newer
+     * than the app that is running (the main process checks that once more).
      */
     app.post('/update/restart', async (_req, reply) => {
       const s = appStatus()
@@ -1217,6 +1231,10 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       if (s?.state !== 'staged' || appDeps.appBundle === '' || s.staged !== expected || !existsSync(s.staged)) {
         return sendError(reply, 409, () => errorPage('Nothing to restart into', html`No new version is ready to install. Open <a href="/health#update">Health</a> and press Check for updates.`, errorCtx()),
           'no new version is ready to install')
+      }
+      if (!newerThanRunning(s.version, appDeps.version)) {
+        return sendError(reply, 409, () => errorPage('Nothing to restart into', html`Parcels ${s.version} is not newer than the Parcels that is running, so it was not installed. Open <a href="/health#update">Health</a> and press Check for updates.`, errorCtx()),
+          'the staged version is not newer than the one running')
       }
       if (!postToMain({ type: 'install', staged: s.staged, version: s.version })) {
         return sendError(reply, 503, () => errorPage('Could not restart', 'Parcels could not be asked to restart. Quit Parcels from its menu-bar icon and open it again; the new version is still ready.', errorCtx()),

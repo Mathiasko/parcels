@@ -275,7 +275,7 @@ describe('verifyStaged', () => {
     const workDir = join(root, 'support', 'updates')
     const calls: Array<[string, string[]]> = []
     const deps: VerifyStagedDeps = {
-      appBundle, staged, version: VERSION, expectedCertSha: sha(CERT), workDir,
+      appBundle, staged, version: VERSION, running: '0.1.0', expectedCertSha: sha(CERT), workDir,
       run: async (cmd, args) => {
         calls.push([cmd, args])
         if (cmd === CODESIGN && args[0] === '--verify') return { code: fake.verifyCode ?? 0, stdout: '' }
@@ -325,6 +325,14 @@ describe('verifyStaged', () => {
       `${s.staged}/`,
     ]) {
       await refused({ ...s.deps, staged }, /not where Parcels put it/)
+    }
+    expect(s.calls).toEqual([])
+  })
+
+  test('a staged version that is not newer than the running app is refused before anything runs', async () => {
+    const s = setup()
+    for (const running of [VERSION, '0.3.0', 'not-a-version']) {
+      await refused({ ...s.deps, running }, /^The update is not newer than the Parcels that is running, so it was not installed\.$/)
     }
     expect(s.calls).toEqual([])
   })

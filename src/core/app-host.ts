@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { loadRuntimeConfig, type Config } from './config.js'
 import type { ToMain, ToServer } from './app-ipc.js'
@@ -14,12 +14,12 @@ import { createAppNotifier } from '../notify/send.js'
 import { runPollOnce } from '../poll.js'
 import { buildServer, refreshIdle, startServer, type AppWebDeps, type WebDeps } from '../web/server.js'
 import {
-  appUpdateStatusPath, defaultDownload, readAppUpdateStatus, releasesUrlOverride, runCommand, stageUpdate, writeAppUpdateStatus,
-  type AppUpdateStatus, type StageDeps,
+  APP_UPSTREAM, appUpdateStatusPath, compareVersions, defaultDownload, isVersion, readAppUpdateStatus, releasesUrlOverride,
+  runCommand, stageUpdate, stagingDir, writeAppUpdateStatus, type AppUpdateStatus, type StageDeps,
 } from './app-update.js'
 import { resourceRoot } from './host.js'
 import { appVersion } from './version.js'
-import { recordUpdateInstalled } from '../db/update-state.js'
+import { forgetUpdateCheck, getUpdateCheck, recordUpdateInstalled } from '../db/update-state.js'
 
 /** The longest delay `setTimeout` honours; anything larger fires at once, so it is clamped to this. */
 const MAX_TIMER_MS = 2 ** 31 - 1
@@ -88,24 +88,35 @@ export function appStage(
 }
 
 /**
- * Settles what an earlier run of the app left in the updater's status file, before anyone reads it.
+ * Settles what an earlier run of the app left in the updater's status file and the stored check,
+ * before anyone reads them.
  *
  * - `staged` for the version now running: the swap worked and this is the new app, so it becomes
- *   `installed` (Health then says "Updated to <v>."), and the check from before the update, which still
- *   offers this very version, becomes `current`, as the git updater's `recordUpdateInstalled` does.
+ *   `installed` (Health then says "Updated to <v>.").
+ * - `staged` for an older version: a newer Parcels was installed by hand while that one waited.
+ *   Restarting into it would be a downgrade, so the staged copy and the status file are removed.
  * - `downloading`: the staging runs inside the server process, so a download that is "going" while a
  *   new process starts died with the old one. It becomes `failed`, so the button comes back at once
  *   instead of after the staleness bound.
+ * - A stored check made by the git install (a move in copies the database whole) speaks of commits and
+ *   of the git version: it is dropped, so Health says nothing has been checked and the next poll asks
+ *   GitHub. The app's own checks never carry a branch or a commit.
+ * - A stored check offering a version this app has reached becomes `current`, as the git updater's
+ *   `recordUpdateInstalled` does after an update; one offering a newer version is left as it is, so a
+ *   release that came out while an update waited is still offered.
  *
  * Never throws: a status file that cannot be settled must not stop the dashboard from starting.
  */
-function settleUpdateStatus(db: Database, supportDir: string, version: string, at: Date): void {
+function settleUpdateStatus(db: Database, supportDir: string, appBundle: string, version: string, at: Date): void {
   const path = appUpdateStatusPath(supportDir)
+  const known = isVersion(version)
   try {
     const s = readAppUpdateStatus(path)
     if (s?.state === 'staged' && s.version === version) {
       writeAppUpdateStatus(path, { state: 'installed', version, finishedAt: at })
-      recordUpdateInstalled(db, undefined, at)
+    } else if (s?.state === 'staged' && known && compareVersions(s.version, version) < 0) {
+      if (appBundle !== '' && isAbsolute(appBundle)) rmSync(stagingDir(appBundle, s.version), { recursive: true, force: true })
+      rmSync(path, { force: true })
     } else if (s?.state === 'downloading') {
       writeAppUpdateStatus(path, {
         state: 'failed', version: s.version, startedAt: s.startedAt, finishedAt: at,
@@ -114,6 +125,20 @@ function settleUpdateStatus(db: Database, supportDir: string, version: string, a
     }
   } catch (err) {
     console.error(`app-host: could not settle the update status: ${message(err)}`)
+  }
+  try {
+    const check = getUpdateCheck(db)
+    if (!check) return
+    const fromGit = (check.upstream !== undefined && check.upstream !== APP_UPSTREAM)
+      || check.branch !== undefined || check.localSha !== undefined || check.remoteSha !== undefined
+    if (fromGit) {
+      forgetUpdateCheck(db)
+    } else if (check.state === 'behind' && known && check.version !== undefined && isVersion(check.version)
+      && compareVersions(check.version, version) <= 0) {
+      recordUpdateInstalled(db, undefined, at)
+    }
+  } catch (err) {
+    console.error(`app-host: could not settle the stored update check: ${message(err)}`)
   }
 }
 
@@ -156,7 +181,7 @@ export async function startAppHost(deps: AppHostDeps): Promise<AppHost> {
     // Present only when the main process allowed a test feed (ruling R16); GitHub's otherwise.
     ...(releasesUrlOverride(env) !== undefined && { releasesUrl: releasesUrlOverride(env) }),
   }
-  settleUpdateStatus(db, supportDir, version, now())
+  settleUpdateStatus(db, supportDir, appDeps.appBundle, version, now())
   // The app notifier goes to both the dashboard's refresh and the scheduled poll: inside the bundle the
   // configured terminal-notifier or osascript would post under the wrong identity, or not at all.
   const notifier = createAppNotifier(deps.post)

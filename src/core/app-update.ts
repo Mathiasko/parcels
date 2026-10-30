@@ -169,7 +169,8 @@ function changesFrom(body: unknown): string[] {
   return out
 }
 
-const UPSTREAM = 'GitHub Releases'
+/** The `upstream` of every check this module makes, which tells them from the git install's. */
+export const APP_UPSTREAM = 'GitHub Releases'
 
 /**
  * Asks GitHub for the newest release and compares it with `current`.
@@ -205,9 +206,9 @@ export async function checkAppRelease(
     }
     const version = tag.replace(/^v/, '')
     if (r.draft === true || r.prerelease === true || compareVersions(version, current) <= 0) {
-      return { state: 'current', behind: 0, changes: [], version, upstream: UPSTREAM }
+      return { state: 'current', behind: 0, changes: [], version, upstream: APP_UPSTREAM }
     }
-    return { state: 'behind', behind: 1, changes: changesFrom(r.body), version, upstream: UPSTREAM }
+    return { state: 'behind', behind: 1, changes: changesFrom(r.body), version, upstream: APP_UPSTREAM }
   } catch {
     // Nothing above should throw; this is the promise that a surprise still cannot fail a poll.
     return blocked('The check for a new version went wrong; it is retried tomorrow.')

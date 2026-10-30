@@ -341,6 +341,19 @@ describe('POST /update/restart', () => {
     expect(posted).toEqual([])
   })
 
+  test('a staged version that is not newer than the running one is refused, so Restart cannot downgrade', async () => {
+    const s = appServer()
+    for (const version of ['0.2.0', '0.3.0']) {
+      const staged = join(stagingDir(s.appBundle, version), 'Parcels.app')
+      mkdirSync(staged, { recursive: true })
+      writeAppUpdateStatus(s.statusPath, { state: 'staged', version, staged, startedAt: NOW })
+      const res = await s.post('/update/restart')
+      expect(res.statusCode).toBe(409)
+      expect(res.body).toContain(`Parcels ${version} is not newer than the Parcels that is running`)
+    }
+    expect(posted).toEqual([])
+  })
+
   test('refuses a cross-site POST like every other write', async () => {
     const s = appServer()
     stage(s)
@@ -366,6 +379,17 @@ describe('POST /update in app mode', () => {
     recordUpdateCheck(s.db, CURRENT, NOW)
     expect((await s.post('/update')).statusCode).toBe(409)
     expect(s.stages).toEqual([])
+  })
+
+  test('refuses with 409 a stored check whose version is not newer than the running one', async () => {
+    // Running 0.3.0; the check is from the days of an older copy, or names this very version.
+    for (const version of ['0.2.0', '0.3.0', 'not-a-version']) {
+      const s = appServer()
+      recordUpdateCheck(s.db, { ...BEHIND, version }, NOW)
+      const res = await s.post('/update')
+      expect(res.statusCode).toBe(409)
+      expect(s.stages).toEqual([])
+    }
   })
 
   test('a second press while a download is going starts nothing', async () => {

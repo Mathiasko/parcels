@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, test, vi } from 'vitest'
@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net'
 import { createServer } from 'node:net'
 import { appStage, startAppHost, type AppHost, type AppHostDeps } from '../src/core/app-host.js'
 import {
-  appUpdateStatusPath, defaultDownload, readAppUpdateStatus, runCommand, writeAppUpdateStatus, type StageDeps,
+  appUpdateStatusPath, defaultDownload, readAppUpdateStatus, runCommand, stagingDir, writeAppUpdateStatus, type StageDeps,
 } from '../src/core/app-update.js'
 import { getUpdateCheck, recordUpdateCheck } from '../src/db/update-state.js'
 import { nextSlot } from '../src/core/schedule.js'
@@ -350,6 +350,80 @@ describe('the app host fills in what the dashboard says about the app', () => {
     await host.close()
     const check = openDb(h.dbPath)
     try { expect(getUpdateCheck(check)).toMatchObject({ state: 'current' }) } finally { check.close() }
+  })
+
+  test('a staged update older than the version now running is thrown away, so Restart cannot downgrade', async () => {
+    // 0.2.0 was staged under 0.1.0 and never restarted into; the user then dragged in 0.3.0 by hand.
+    const h = harness(at(8, 30))
+    const env = appEnv(h)
+    const status = appUpdateStatusPath(dirname(h.configPath))
+    const staged = join(stagingDir(env.PARCELS_APP_BUNDLE!, '0.2.0'), 'Parcels.app')
+    mkdirSync(staged, { recursive: true })
+    writeAppUpdateStatus(status, { state: 'staged', version: '0.2.0', staged, startedAt: at(8, 0) })
+    const host = await started(h, { env, web: appWeb })
+    expect(readAppUpdateStatus(status)).toBeUndefined()
+    expect(existsSync(stagingDir(env.PARCELS_APP_BUNDLE!, '0.2.0'))).toBe(false)
+    const body = await (await fetch(`http://127.0.0.1:${host.port}/health`)).text()
+    expect(body).not.toContain('Restart to update')
+    expect(body).not.toContain('Parcels 0.2.0')
+  })
+
+  test('a stored check offering a version older than the one running is marked current', async () => {
+    // The daily check said 0.2.0 was out when 0.1.0 ran; 0.3.0 was installed by hand since.
+    const h = harness(at(8, 30))
+    const db = openDb(h.dbPath)
+    recordUpdateCheck(db, { state: 'behind', behind: 1, changes: ['x'], version: '0.2.0', upstream: 'GitHub Releases' }, at(7, 0))
+    db.close()
+    const host = await started(h, { env: appEnv(h), web: appWeb })
+    const body = await (await fetch(`http://127.0.0.1:${host.port}/health`)).text()
+    expect(body).not.toContain('There is a newer version')
+    expect(body).not.toContain('Update now</button>')
+    await host.close()
+    const check = openDb(h.dbPath)
+    try { expect(getUpdateCheck(check)).toMatchObject({ state: 'current' }) } finally { check.close() }
+  })
+
+  test('a newer release found while an update waited is still offered after the update', async () => {
+    // 0.3.0 was staged; before the restart the daily check found 0.4.0.
+    const h = harness(at(8, 30))
+    const status = appUpdateStatusPath(dirname(h.configPath))
+    writeAppUpdateStatus(status, { state: 'staged', version: '0.3.0', staged: '/x/Parcels.app', startedAt: at(7, 0) })
+    const db = openDb(h.dbPath)
+    recordUpdateCheck(db, { state: 'behind', behind: 1, changes: ['x'], version: '0.4.0', upstream: 'GitHub Releases' }, at(8, 0))
+    db.close()
+    const host = await started(h, { env: appEnv(h), web: appWeb })
+    expect(readAppUpdateStatus(status)).toMatchObject({ state: 'installed', version: '0.3.0' })
+    const body = await (await fetch(`http://127.0.0.1:${host.port}/health`)).text()
+    expect(body).toContain('There is a newer version: <strong>Parcels 0.4.0</strong>')
+    expect(body).toContain('Update now</button>')
+  })
+
+  test('a check the git install made, carried over by a move in, is dropped so the app checks for itself', async () => {
+    const h = harness(at(8, 30))
+    const db = openDb(h.dbPath)
+    recordUpdateCheck(db, {
+      state: 'behind', behind: 2, changes: ['fix: something'], version: '0.1.0',
+      branch: 'main', upstream: 'origin/main', localSha: 'a'.repeat(40), remoteSha: 'b'.repeat(40),
+    }, at(7, 0))
+    db.close()
+    const host = await started(h, { env: appEnv(h), web: appWeb })
+    const body = await (await fetch(`http://127.0.0.1:${host.port}/health`)).text()
+    expect(body).toContain('Parcels has not checked for a newer version yet')
+    expect(body).not.toContain('Parcels 0.1.0')
+    await host.close()
+    const check = openDb(h.dbPath)
+    try { expect(getUpdateCheck(check)).toBeUndefined() } finally { check.close() }
+  })
+
+  test('the app\'s own check that could not be made is kept, so a restart does not check again', async () => {
+    const h = harness(at(8, 30))
+    const db = openDb(h.dbPath)
+    recordUpdateCheck(db, { state: 'blocked', behind: 0, changes: [], reason: 'GitHub refused the check (rate limit); it is retried tomorrow.' }, at(7, 0))
+    db.close()
+    const host = await started(h, { env: appEnv(h), web: appWeb })
+    await host.close()
+    const check = openDb(h.dbPath)
+    try { expect(getUpdateCheck(check)).toMatchObject({ state: 'blocked' }) } finally { check.close() }
   })
 })
 
