@@ -305,8 +305,10 @@ const CARRIER_IN_DOMAIN = /(?:^|[.-])(packeta|z[aá]sielkovna|z[aá]silkovna|gls
  * from their brand under many country domains, and one this app does not list is still theirs far more
  * often than not. Someone who buys `packeta.xyz` gets what any sender got before the look-alike rule
  * (a parcel tracked by its number's shape); `packeta.example.com` and `packeta-sk.example.com` do not.
+ * GLS's national companies write from `gls-<country>.<tld>` (`gls-czech.cz`, `gls-hungary.com`), and
+ * some markets sit under a second-level suffix (`dhl.co.uk`, `dhl.com.au`); both are the brand too.
  */
-const BRAND_DOMAIN = /(?:^|\.)(?:packeta|z[aá]sielkovna|z[aá]silkovna|gls|dpd|dhl)\.[a-z]{2,}$/i
+const BRAND_DOMAIN = /(?:^|\.)(?:packeta|z[aá]sielkovna|z[aá]silkovna|gls|gls-[a-z]+|dpd|dhl)\.(?:co\.|com\.)?[a-z]{2,}$/i
 
 const BRAND_CARRIER: Record<string, CarrierId> = { gls: 'gls', dpd: 'dpd', dhl: 'dhl' }
 

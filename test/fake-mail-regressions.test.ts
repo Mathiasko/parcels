@@ -202,8 +202,18 @@ describe('a carrier writing from one of its own brand domains is not taken for a
     ['DHL Express <noreply@dhl.at>', DHL, 'dhl', 'DHL Express'],
     ['Packeta <noreply@packeta.xyz>', PACKETA, 'packeta', 'Packeta'],
     ['GLS <noreply@mail.gls.fr>', 'Číslo balíka GLS: 12345678901', 'gls', 'GLS'],
+    ['GLS <noreply@gls-czech.cz>', 'Číslo balíka GLS: 12345678901', 'gls', 'GLS'],
+    ['DHL Parcel UK <noreply@dhl.co.uk>', DHL, 'dhl', 'DHL Parcel UK'],
   ])('%s: a brand.tld domain is tracked by its number\'s shape, as before the look-alike rule', async (from, body, carrier, merchant) => {
     expect(await extract(eml(from, 'Zásielka', body))).toMatchObject({ carrier, confidence: 'shape', merchant })
+  })
+
+  test.each([
+    'DHL <noreply@dhl.co.evil.example>',
+    'GLS <noreply@gls-czech.cz.evil.example>',
+    'GLS <noreply@my-gls-czech.example>',
+  ])('%s is still a look-alike: the brand is not the registrable name', async (from) => {
+    expect(await extract(eml(from, 'Zásielka', DHL))).not.toMatchObject({ number: 'JJD0001234567890' })
   })
 
   test('ingest: the parcel is made, and nothing waits on /attention', async () => {
