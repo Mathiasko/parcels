@@ -134,6 +134,19 @@ describe('Postal', () => {
     expect(postal.tokens.texture).toContain('filter=\'url(%23n)\'')
   })
 
+  test('the grain decodes back to exactly its SVG: % is escaped first, so no escape is doubled or bare', () => {
+    for (const texture of [postal.tokens.texture, /--texture:(url\("[^"]*"\))/.exec(postal.css ?? '')![1]!]) {
+      const data = /^url\("data:image\/svg\+xml;utf8,([^"]*)"\)$/.exec(texture)![1]!
+      // every % starts a valid escape
+      expect(data).not.toMatch(/%(?![0-9A-F]{2})/)
+      expect(data).toContain("width='100%25' height='100%25'")
+      const svg = decodeURIComponent(data)
+      expect(svg).toMatch(/^<svg xmlns='http:\/\/www\.w3\.org\/2000\/svg' width='180' height='180'>/)
+      expect(svg).toContain("<rect width='100%' height='100%' filter='url(#n)'/></svg>")
+      expect(svg.endsWith('</svg>')).toBe(true)
+    }
+  })
+
   test('loads ten fonts: DM Serif Display 400 roman and italic, Libre Franklin, Courier Prime 400 and 700, latin and latin-ext', () => {
     expect(postal.fonts).toHaveLength(10)
     const keys = postal.fonts.map(f => `${f.family}|${f.style}|${f.weight}`)
@@ -235,9 +248,12 @@ describe('the page stylesheet', () => {
     expect(BASE_CSS).toMatch(/\nbody\{[^}]*background:var\(--paper\);background-image:var\(--texture\)/)
     expect(BASE_CSS).toMatch(/\.mono\{font:400 \.8125rem\/1\.3846 var\(--font-mono\)/)
     expect(BASE_CSS).toMatch(/\npre\{[^}]*font:400 \.75rem\/1\.5 var\(--font-mono\)/)
-    for (const sel of ['h1', '.card-h h2', '.pk-h h2,.pk-h .where']) {
+    for (const sel of ['h1', '.card-h h2', '.pk-h h2,.pk-h .where', '.empty']) {
       expect(BASE_CSS).toMatch(new RegExp(`\\n${sel.replace(/[.]/g, '\\.')}\\{[^}]*font-family:var\\(--font-display\\)`))
     }
+    // the empty state is in the display face too (spec 3.1), at the body weight: DM Serif Display ships only 400
+    expect(BASE_CSS).toContain('\n.empty{color:var(--ink-3);font-family:var(--font-display)}\n')
+    expect(stripComments(BASE_CSS)).not.toMatch(/\.empty\b[^{}]*\{[^}]*font(-weight)?:/)
     expect(BASE_CSS).toContain('.t-signal{color:var(--signal-ink);--bar:var(--signal-ink)}')
     expect(BASE_CSS).toContain('.clock .due{color:var(--signal-ink)}')
     expect(BASE_CSS).toContain('.b.solid.t-signal{background:var(--signal);color:var(--on-signal)}')

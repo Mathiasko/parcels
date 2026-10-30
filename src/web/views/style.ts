@@ -45,7 +45,7 @@ h3{font-size:.9375rem;line-height:1.4667;font-weight:600;margin:0}
 .meta{font-size:.8125rem;line-height:1.3846;color:var(--ink-3)}
 .mono{font:400 .8125rem/1.3846 var(--font-mono);font-variant-numeric:slashed-zero;white-space:nowrap}
 .sel{position:relative;z-index:1;-webkit-user-select:all;user-select:all}
-.empty{color:var(--ink-3)}
+.empty{color:var(--ink-3);font-family:var(--font-display)}
 time{font-variant-numeric:tabular-nums}
 .t-signal{color:var(--signal-ink);--bar:var(--signal-ink)}.t-warn{color:var(--warn);--bar:var(--warn)}.t-ok{color:var(--ok);--bar:var(--ok)}.t-2{color:var(--ink-2);--bar:var(--ink-2)}.t-3{color:var(--ink-3);--bar:var(--ink-3)}
 

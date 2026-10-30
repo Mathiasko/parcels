@@ -15,10 +15,10 @@ export const FONT_FILES: ReadonlySet<string> = new Set(THEMES.flatMap(t => t.fon
 export const fontDir = (): string => join(repoRoot(), 'assets', 'fonts')
 
 /** A given file name is the same bytes forever (the name carries the family, subset, weight and style). */
-export const FONT_HEADERS: Record<string, string> = {
+export const FONT_HEADERS: Readonly<Record<string, string>> = Object.freeze({
   'content-type': 'font/woff2',
   'cache-control': 'public, max-age=31536000, immutable',
-}
+})
 
 /** The font's bytes, or nothing: for a name off the allowlist, and for a listed font that cannot be read. */
 export function readFont(dir: string, file: string): Buffer | undefined {

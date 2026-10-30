@@ -19,11 +19,13 @@ const subsets = (family: string, stem: string, tail: string, style: ThemeFont['s
 /**
  * A grain tile as a CSS `url()`. The SVG source is the paper-grain rule of the Postal moodboard
  * (`.grain`, light; `.dk.grain`, dark): feTurbulence noise tinted by `matrix`. It is percent-encoded
- * (`<` `>` `#` `"`) so the stylesheet never contains `</`, which would end the inline `<style>`.
+ * (`%` first, then `<` `>` `#` `"`) so the stylesheet never contains `</`, which would end the inline
+ * `<style>`, and so the data URL decodes back to exactly the SVG (a raw `%` is not a valid escape).
  */
 const grain = (matrix: string): string => {
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='${matrix}'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>`
-  const encoded = svg.replace(/[<>#"]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`)
+  // `%` first, so the escapes added after it are not themselves re-escaped.
+  const encoded = svg.replace(/%/g, '%25').replace(/[<>#"]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`)
   return `url("data:image/svg+xml;utf8,${encoded}")`
 }
 
