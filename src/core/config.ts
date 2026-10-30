@@ -2,6 +2,7 @@ import { chmodSync, closeSync, fsyncSync, openSync, readFileSync, renameSync, rm
 import { randomBytes } from 'node:crypto'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { DEFAULT_APPEARANCE, MODES, THEME_IDS, type Appearance } from './appearance.js'
 
 export interface Config {
   dbPath: string
@@ -21,6 +22,12 @@ export interface Config {
    * default is seen and can be changed on /settings.
    */
   pickupCalendar?: string
+  /**
+   * The dashboard's theme and light/dark mode. Optional in the type so that hand-built `Config`
+   * literals (tests, fixtures) need not spell it out; `validateConfig` always fills it, and a reader
+   * that finds it missing falls back to `DEFAULT_APPEARANCE`.
+   */
+  appearance?: Appearance
   imap?: { host: string; port: number; user: string; pass: string; mailbox: string }
 }
 
@@ -55,6 +62,22 @@ export function validateConfig(raw: ConfigDocument, label = 'config.json'): Conf
   const notifier = (raw.notifier ?? 'auto') as Config['notifier']
   if (!NOTIFIERS.includes(notifier)) {
     throw new Error(`config ${label}: "notifier" must be one of ${NOTIFIERS.join(', ')}`)
+  }
+  // An absent block, or an empty one, is the defaults. Anything else must name a known theme and mode,
+  // exactly as written: a hand-edited "Postal" or "auto" fails here with the allowed values listed
+  // rather than silently falling back to a look the user did not choose.
+  let appearance: Appearance = { ...DEFAULT_APPEARANCE }
+  if (raw.appearance !== undefined) {
+    if (!isObject(raw.appearance)) throw new Error(`config ${label}: "appearance" must be an object, or absent`)
+    const theme = raw.appearance.theme ?? DEFAULT_APPEARANCE.theme
+    if (!THEME_IDS.includes(theme as Appearance['theme'])) {
+      throw new Error(`config ${label}: "appearance.theme" must be one of ${THEME_IDS.join(', ')}`)
+    }
+    const mode = raw.appearance.mode ?? DEFAULT_APPEARANCE.mode
+    if (!MODES.includes(mode as Appearance['mode'])) {
+      throw new Error(`config ${label}: "appearance.mode" must be one of ${MODES.join(', ')}`)
+    }
+    appearance = { theme: theme as Appearance['theme'], mode: mode as Appearance['mode'] }
   }
   if (raw.mapPreview !== undefined && typeof raw.mapPreview !== 'boolean') {
     throw new Error(`config ${label}: "mapPreview" must be true or false`)
@@ -94,6 +117,7 @@ export function validateConfig(raw: ConfigDocument, label = 'config.json'): Conf
     notifier,
     mapPreview: (raw.mapPreview as boolean | undefined) ?? true,
     ...(typeof raw.pickupCalendar === 'string' && raw.pickupCalendar.trim() !== '' && { pickupCalendar: raw.pickupCalendar.trim() }),
+    appearance,
     imap,
   }
 }
