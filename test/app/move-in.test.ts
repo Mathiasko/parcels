@@ -5,7 +5,9 @@ import {
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { BOOTSTRAP_ATTEMPTS, finishInterruptedMoveIn, moveIn, STOP_WAIT_MS, type MoveInDeps } from '../../app/move-in.js'
+import {
+  BOOTSTRAP_ATTEMPTS, finishInterruptedMoveIn, launchctlFailureLine, moveIn, STOP_WAIT_MS, type MoveInDeps,
+} from '../../app/move-in.js'
 import { authStorePathFor } from '../../src/carriers/dpd.js'
 import { openDb, type Database } from '../../src/db/index.js'
 import { storeMessage } from '../../src/db/messages.js'
@@ -42,7 +44,7 @@ interface Fixture {
   log: string[][]
   /** Every pause the move took, in ms, on a fake clock that each pause moves on. */
   slept: number[]
-  deps: (launchctl?: MoveInDeps['launchctl'], o?: { lingers?: number }) => MoveInDeps
+  deps: (launchctl?: MoveInDeps['launchctl'], o?: { lingers?: number; print?: (label: string) => { code: number; stderr: string } | undefined }) => MoveInDeps
 }
 
 /**
@@ -104,6 +106,8 @@ function fixture(o: { dbPath?: 'absolute' | 'default' | 'other'; dpd?: boolean }
           log.push(args)
           const label = args[1]!.split('/').pop()!
           if (args[0] === 'print') {
+            const scripted = o.print?.(label)
+            if (scripted) return scripted
             const n = lingering.get(label) ?? 0
             if (n > 0) { lingering.set(label, n - 1); return { code: 0, stderr: '' } }
             return { code: 113, stderr: 'Could not find service in domain for user gui: 501' }
@@ -420,6 +424,42 @@ describe('moveIn', () => {
     expect(f.slept).toEqual([500, 500, 500, 500])
   })
 
+  test('a `print` that fails for another reason (a timeout, a spawn error) is not taken for gone', async () => {
+    const f = fixture()
+    // execFileSync's 30 s timeout comes back as exit 1 with nothing on stderr; then launchd answers.
+    let failures = 2
+    const result = await moveIn(f.deps(undefined, {
+      print: l => l === 'local.parcels.poller' && failures-- > 0 ? { code: 1, stderr: '' } : undefined,
+    }))
+    f.db.close()
+    expect(result).toEqual({ ok: true })
+    const P = (l: string) => ['print', `gui/${UID}/${l}`]
+    expect(f.log).toEqual([
+      BOOTOUTS[0], P('local.parcels.poller'), P('local.parcels.poller'), P('local.parcels.poller'),
+      BOOTOUTS[1], P('local.parcels.web'),
+    ])
+    expect(f.slept).toEqual([500, 500])
+  })
+
+  test('a `print` that keeps failing for another reason ends at the time limit, not in a copy', async () => {
+    const f = fixture()
+    const result = await moveIn(f.deps(undefined, { print: () => ({ code: 1, stderr: 'spawnSync /bin/launchctl ETIMEDOUT' }) }))
+    f.db.close()
+    expect(result).toMatchObject({ ok: false, step: 'stop', oldInstall: 'running' })
+    if (!result.ok) expect(result.reason).toContain(`local.parcels.poller was still running ${STOP_WAIT_MS / 1000} seconds`)
+    expect(existsSync(join(f.support, 'data'))).toBe(false)
+  })
+
+  test('"Could not find service" counts as gone whatever the exit code', async () => {
+    const f = fixture()
+    const result = await moveIn(f.deps(undefined, {
+      print: () => ({ code: 1, stderr: 'Bad request.\nCould not find service "local.parcels.web" in domain for user gui: 501' }),
+    }))
+    f.db.close()
+    expect(result).toEqual({ ok: true })
+    expect(f.slept).toEqual([])
+  })
+
   test('a job still there after the time limit fails at "stop" and is started again', async () => {
     const f = fixture()
     const result = await moveIn(f.deps(undefined, { lingers: Infinity }))
@@ -541,5 +581,27 @@ describe('finishInterruptedMoveIn', () => {
     expect(r.kind).toBe('failed')
     expect(existsSync(join(f.support, '.moving-in'))).toBe(true)
     for (const p of f.plists) expect(existsSync(p)).toBe(true)
+  })
+})
+
+describe('launchctlFailureLine', () => {
+  const GONE = { code: 113, stderr: 'Could not find service "local.parcels.web" in domain for user gui: 501\n' }
+
+  test('a job reported gone is logged once, however often `print` is asked', () => {
+    const seen = new Set<string>()
+    const print = (l: string) => ['print', `gui/${UID}/${l}`]
+    expect(launchctlFailureLine(print('local.parcels.web'), GONE, seen))
+      .toBe('launchctl exit 113: Could not find service "local.parcels.web" in domain for user gui: 501')
+    expect(launchctlFailureLine(print('local.parcels.web'), GONE, seen)).toBeUndefined()
+    expect(launchctlFailureLine(print('local.parcels.poller'), GONE, seen)).toBeDefined()
+  })
+
+  test('every other failure is logged every time', () => {
+    const seen = new Set<string>()
+    const print = ['print', `gui/${UID}/local.parcels.web`]
+    for (let i = 0; i < 2; i++) {
+      expect(launchctlFailureLine(print, { code: 1, stderr: '' }, seen)).toBe('launchctl exit 1: ')
+      expect(launchctlFailureLine(['bootout', `gui/${UID}/local.parcels.web`], { code: 113, stderr: 'x' }, seen)).toBe('launchctl exit 113: x')
+    }
   })
 })

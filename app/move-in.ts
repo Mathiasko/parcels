@@ -81,15 +81,16 @@ export const BOOTSTRAP_ATTEMPTS = 8
 /**
  * Waits until launchd has let go of `label`. `bootout` returns before the job is fully gone: until it
  * is, its process may still be writing the database or holding the port, and a `bootstrap` of it fails
- * with EIO (scripts/install-agents.sh learned this on a real Mac). `launchctl print` failing is the
- * sign it is gone. True once gone, false if it is still there after STOP_WAIT_MS.
+ * with EIO (scripts/install-agents.sh learned this on a real Mac). `launchctl print` saying it cannot
+ * find the service is the sign it is gone; any other failure (a timeout, a spawn error) proves nothing
+ * and the wait goes on. True once gone, false if it is still there after STOP_WAIT_MS.
  */
 async function waitGone(d: Launchd, label: string): Promise<boolean> {
   const sleep = d.sleep ?? realSleep
   const now = d.now ?? Date.now
   const deadline = now() + STOP_WAIT_MS
   for (;;) {
-    if (d.launchctl(['print', `gui/${d.uid}/${label}`]).code !== 0) return true
+    if (isGone(d.launchctl(['print', `gui/${d.uid}/${label}`]))) return true
     if (now() >= deadline) return false
     await sleep(STOP_POLL_MS)
   }
@@ -124,6 +125,23 @@ async function startJob(d: Launchd, plist: string): Promise<string | undefined> 
     if (attempt < BOOTSTRAP_ATTEMPTS) await sleep(attempt * 1000)
   }
   return last
+}
+
+/** launchctl's `print` saying there is no such job: exit 113, or the words "Could not find service". */
+export const isGone = (r: { code: number; stderr: string }) => r.code === 113 || /Could not find service/i.test(r.stderr)
+
+/**
+ * The log line for a failed launchctl call. A stop asks `print` every STOP_POLL_MS, and a job that is
+ * gone answers exit 113 to every later ask, so that answer is logged once per job (`reported` keeps
+ * the jobs already logged); every other failure is logged each time.
+ */
+export function launchctlFailureLine(args: string[], r: { code: number; stderr: string }, reported: Set<string>): string | undefined {
+  if (args[0] === 'print' && isGone(r)) {
+    const job = args[1] ?? ''
+    if (reported.has(job)) return undefined
+    reported.add(job)
+  }
+  return `launchctl exit ${r.code}: ${r.stderr.trim()}`
 }
 
 /**

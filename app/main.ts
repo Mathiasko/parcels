@@ -10,7 +10,7 @@ import { decideFirstRun, type FirstRun } from './first-run.js'
 import { dashboardOrigin, isInside, notificationPath } from './guards.js'
 import { offerMoveToApplications, MOVE_DETAIL, MOVE_QUESTION } from './location.js'
 import { appendRotating } from './logs.js'
-import { finishInterruptedMoveIn, moveIn, type MoveInDeps, type MoveInResult } from './move-in.js'
+import { finishInterruptedMoveIn, launchctlFailureLine, moveIn, type MoveInDeps, type MoveInResult } from './move-in.js'
 import { appPaths, bundlePath } from './paths.js'
 import { readPages, registerFirstRun, SCHEME } from './protocol.js'
 import { Supervisor, type Child } from './supervise.js'
@@ -195,6 +195,7 @@ if (!app.requestSingleInstanceLock()) {
 function launchctl(): MoveInDeps['launchctl'] {
   const dev = process.env.PARCELS_DEV_LAUNCHCTL
   const bin = !app.isPackaged && dev ? dev : '/bin/launchctl'
+  const reported = new Set<string>()
   return args => {
     log(`launchctl ${args.join(' ')}${bin === '/bin/launchctl' ? '' : ` (dev: ${bin})`}`)
     try {
@@ -203,7 +204,8 @@ function launchctl(): MoveInDeps['launchctl'] {
     } catch (err) {
       const e = err as { status?: number | null; stderr?: string; message?: string }
       const r = { code: typeof e.status === 'number' ? e.status : 1, stderr: e.stderr || e.message || '' }
-      log(`launchctl exit ${r.code}: ${r.stderr.trim()}`)
+      const line = launchctlFailureLine(args, r, reported)
+      if (line !== undefined) log(line)
       return r
     }
   }
