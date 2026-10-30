@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 import { openDb, type Database } from '../src/db/index.js'
 import {
   ACTIVITY_LOG_KEPT, activityForBundle, bundleStatusRaw, describeActivity, listActivity, logAction,
-  STATUS_RAW_MAX, type Cause,
+  readiedInRun, STATUS_RAW_MAX, type Cause,
 } from '../src/db/activity-log.js'
 import { deleteParcel, getParcel, insertParcel, updateParcelState } from '../src/db/parcels.js'
 import { dismissMessage, dismissMessages } from '../src/db/messages.js'
@@ -388,6 +388,25 @@ describe('saving settings records which fields changed and never a value', () =>
 })
 
 // --- retention -----------------------------------------------------------------------------------
+
+describe('readiedInRun', () => {
+  test('the parcels a run moved to ready_for_pickup, and only those', () => {
+    const db = memDb()
+    const [a, b, c, d] = ['A1', 'B1', 'C1', 'D1'].map(n => gls(db, n))
+    updateParcelState(db, a!, { status: 'ready_for_pickup' }, POLLER)                       // this run, to ready
+    updateParcelState(db, b!, { status: 'ready_for_pickup' }, { ...POLLER, runId: 13 })     // an earlier run
+    updateParcelState(db, c!, { status: 'in_transit' }, POLLER)                             // this run, elsewhere
+    updateParcelState(db, d!, { status: 'ready_for_pickup' }, { actor: 'web', at: NOW })    // outside any run
+    expect([...readiedInRun(db, 14)]).toEqual([a])
+    expect([...readiedInRun(db, 13)]).toEqual([b])
+    expect(readiedInRun(db, 99).size).toBe(0)
+  })
+  test('never throws: an unreadable log is no marker, not a broken dashboard', () => {
+    const db = memDb()
+    db.exec('DROP TABLE activity_log')
+    expect(readiedInRun(db, 14).size).toBe(0)
+  })
+})
 
 describe('the log is bounded', () => {
   test('it is trimmed to its cap on every insert, and the newest rows are the ones kept', () => {

@@ -27,7 +27,7 @@ import { carrierHealth } from '../db/health.js'
 import { getIngestStatus } from '../db/ingest-status.js'
 import { getPickupCode, pickupCodesFor } from '../db/pickup-codes.js'
 import { dismissMessage, dismissMessages, linkMessage } from '../db/messages.js'
-import { listActivity, logAction, type Cause } from '../db/activity-log.js'
+import { listActivity, logAction, readiedInRun, type Cause } from '../db/activity-log.js'
 import { addParcel, cleanPostcode, MAX_LABEL } from './actions.js'
 import { applySettings, changedSettingFields, settingsValues, submittedSettings, type SettingsValues } from './settings.js'
 import { probeImap, type ImapProbeLike, type ImapProbeResult } from '../ingest/imap-probe.js'
@@ -261,6 +261,8 @@ const RUNS_SHOWN = 20
  * How long after a mark the dashboard still shows "Marked X as collected. Undo" for `?collected=<id>`.
  * Long enough for a reload or a slow second look; short enough that a bookmark or a history entry does
  * not resurface the notice days later. Undo stays on the parcel page for as long as the mark stands.
+ * The same window bounds the other one-shot markers: a parcel page's `just-collected` postmark, and the
+ * `just-arrived` cards on a finished run's `?run=N`.
  */
 const COLLECTED_NOTICE_MS = 60 * 60_000
 
@@ -404,7 +406,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    */
   const runState = (
     query: Record<string, unknown>, now: Date, active?: number,
-  ): { note?: RefreshNote; reloadIn?: number; finishedSince?: Date } => {
+  ): { note?: RefreshNote; reloadIn?: number; finished?: PollRun } => {
     const id = one(query.run)
     if (id === undefined || !/^\d{1,12}$/.test(id)) return { note: refreshNote(query) }
     reapStaleRuns(db, now)
@@ -418,7 +420,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
         polled: run.polled, failures: run.failures, busy: false,
         read: run.mailRead, created: run.created, active, error: run.error,
       },
-      finishedSince: run.startedAt,
+      finished: run,
     }
   }
 
@@ -439,10 +441,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     }))
     const c = ctx()
     const r = runState(query, c.now, entries.length)
-    // Ready, with a code, and moved since the finished run began: what that run brought in.
-    const since = r.finishedSince
-    const justArrived = since && new Set(entries.filter(({ parcel: p, code }) => p.status === 'ready_for_pickup'
-      && code !== undefined && p.lastChangedAt !== undefined && p.lastChangedAt >= since).map(e => e.parcel.id))
+    const justArrived = r.finished && arrivedIn(r.finished, entries, c.now)
     return send(reply, indexPage(entries, { ...c, reloadIn: r.reloadIn }, r.note, {
       mailConfigured: config.imap !== undefined, collected: justCollected(query, c.now), justArrived,
       calendar: calendarResult(query, c.now),
@@ -463,6 +462,20 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const mark = parcel && userMark(db, parcel.id)
     if (!parcel || !mark || parcel.archivedAt !== undefined) return undefined
     return isRecent(mark, at) ? { parcel, mark } : undefined
+  }
+
+  /**
+   * What a finished run brought in, for `just-arrived` on its `?run=N` page: the parcels that run moved
+   * to ready for pickup (its own `status` rows in the activity log), that are still waiting and now have
+   * a code. One-shot like the collected notice: a run that finished more than `COLLECTED_NOTICE_MS` ago
+   * marks nothing, so a bookmarked `?run=N` does not replay it.
+   */
+  const arrivedIn = (run: PollRun, entries: Array<{ parcel: Parcel; code?: string }>, at: Date): Set<number> | undefined => {
+    const age = at.getTime() - (run.finishedAt ?? run.startedAt).getTime()
+    if (age < 0 || age > COLLECTED_NOTICE_MS) return undefined
+    const readied = readiedInRun(db, run.id)
+    return new Set(entries.filter(({ parcel: p, code }) => readied.has(p.id) && p.status === 'ready_for_pickup' && code !== undefined)
+      .map(e => e.parcel.id))
   }
 
   /** Whether a mark is recent enough for its one-shot notice or postmark (see `COLLECTED_NOTICE_MS`). */

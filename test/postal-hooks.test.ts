@@ -301,24 +301,55 @@ describe('the postmark and the one-shot markers', () => {
     expect(await get(db, '/')).not.toContain('orn-postmark')
   })
 
-  test('/?run=<finished> marks the cards whose parcel turned ready with a code after the run started', async () => {
+  /** A parcel a run (or no run) moved to ready at `place`, with a code unless `code` is null. */
+  const readied = (db: Db, number: string, place: string, runId: number | undefined, code: string | null = '631285') => {
+    const id = insertParcel(db, { carrier: 'packeta', trackingNumber: number, source: 'email' })
+    updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'zbox', name: place } },
+      { actor: runId === undefined ? 'web' : 'poller', runId, at: NOW })
+    if (code) recordPickupCode(db, id, code, 1, NOW)
+    return id
+  }
+  const finished = (db: Db, startedAt: Date, finishedAt: Date) => {
+    const run = startRun(db, 'web', startedAt)
+    finishRun(db, run, { counts: { polled: 1, newEvents: 1, failures: 0 }, summary: '' }, finishedAt)
+    return run
+  }
+
+  test('/?run=<finished> marks the cards whose parcel that run moved to ready, while it still has a code and is ready', async () => {
     const db = memDb()
-    const run = startRun(db, 'web', new Date(NOW.getTime() - 10 * MIN))
-    ready(db, 'Z1', 'Z-BOX New', new Date(NOW.getTime() - 5 * MIN), '631285')
-    ready(db, 'Z2', 'Z-BOX Old', new Date(NOW.getTime() - 30 * MIN), '111111')
-    ready(db, 'Z3', 'Z-BOX Codeless', new Date(NOW.getTime() - 5 * MIN))
-    finishRun(db, run, { counts: { polled: 3, newEvents: 3, failures: 0 }, summary: '' }, NOW)
+    const earlier = finished(db, new Date(NOW.getTime() - 90 * MIN), new Date(NOW.getTime() - 89 * MIN))
+    const run = finished(db, new Date(NOW.getTime() - 2 * MIN), new Date(NOW.getTime() - MIN))
+    readied(db, 'Z1', 'Z-BOX New', run)
+    readied(db, 'Z2', 'Z-BOX Old', earlier)
+    readied(db, 'Z3', 'Z-BOX Codeless', run, null)
+    readied(db, 'Z4', 'Z-BOX By hand', undefined)
+    // Moved to ready by this run, then on: no longer waiting, so no card says it has just arrived.
+    const gone = readied(db, 'Z5', 'Z-BOX Gone', run)
+    updateParcelState(db, gone, { status: 'out_for_delivery' }, { actor: 'web', at: NOW })
     const body = await get(db, `/?run=${run}`)
     expect(cardOf(body, 'Z-BOX New')).toMatch(/^<article class="card just-arrived" data-status="ready_for_pickup">/)
-    expect(cardOf(body, 'Z-BOX Old')).toMatch(/^<article class="card" data-status="ready_for_pickup">/)
-    expect(cardOf(body, 'Z-BOX Codeless')).toMatch(/^<article class="card" data-status="ready_for_pickup">/)
+    for (const place of ['Z-BOX Old', 'Z-BOX Codeless', 'Z-BOX By hand']) {
+      expect(cardOf(body, place), place).toMatch(/^<article class="card" data-status="ready_for_pickup">/)
+    }
+    expect(body.match(/just-arrived/g)).toHaveLength(1)
     expect(await get(db, '/')).not.toContain('just-arrived')
+    // The earlier run's own page names its parcel, and only that one.
+    const old = await get(db, `/?run=${earlier}`, new Date(NOW.getTime() - 88 * MIN))
+    expect(cardOf(old, 'Z-BOX Old')).toMatch(/^<article class="card just-arrived"/)
+    expect(old.match(/just-arrived/g)).toHaveLength(1)
+  })
+  test('a run that finished more than an hour ago marks nothing: a bookmark does not replay', async () => {
+    const db = memDb()
+    const run = finished(db, new Date(NOW.getTime() - 62 * MIN), new Date(NOW.getTime() - 61 * MIN))
+    readied(db, 'Z1', 'Z-BOX New', run)
+    expect(await get(db, `/?run=${run}`)).not.toContain('just-arrived')
+    expect(await get(db, `/?run=${run}`, new Date(NOW.getTime() - 2 * MIN))).toContain('class="card just-arrived"')
   })
   test('a running run, or an unknown one, marks nothing', async () => {
     const db = memDb()
     // Two minutes old: well inside RUN_STALE_MS, so it is still running rather than reaped.
     const run = startRun(db, 'web', new Date(NOW.getTime() - 2 * MIN))
-    ready(db, 'Z1', 'Z-BOX New', new Date(NOW.getTime() - MIN), '631285')
+    readied(db, 'Z1', 'Z-BOX New', run)
     const body = await get(db, `/?run=${run}`)
     expect(body).toContain('Refreshing.')
     expect(body).not.toContain('just-arrived')

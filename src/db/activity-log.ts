@@ -347,6 +347,23 @@ export function listActivity(db: Database, limit: number): ActivityEntry[] {
 }
 
 /**
+ * The parcels run `runId` moved to `ready_for_pickup`: the `status` rows tagged with that run. This is
+ * what the dashboard's `?run=N` marks as just arrived. A scan of a bounded table (`ACTIVITY_LOG_KEPT`
+ * rows), so no index. Never throws, like `listActivity`: a log that cannot be read means no marker, not
+ * a dashboard that fails to render.
+ */
+export function readiedInRun(db: Database, runId: number): Set<number> {
+  try {
+    const rows = db.prepare(
+      "SELECT DISTINCT parcel_id FROM activity_log WHERE run_id = ? AND kind = 'status' AND to_status = 'ready_for_pickup' AND parcel_id IS NOT NULL",
+    ).all(runId) as Array<{ parcel_id: number }>
+    return new Set(rows.map(r => r.parcel_id))
+  } catch {
+    return new Set()
+  }
+}
+
+/**
  * A carrier status string the support bundle is allowed to carry, or a marker in its place.
  *
  * `raw` is the one field here that is not from a closed vocabulary: most carriers answer with a code
