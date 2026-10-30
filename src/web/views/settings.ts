@@ -95,6 +95,26 @@ const NOTIFIER_LABEL: Record<string, string> = {
   osascript: 'Built-in macOS notifications only',
 }
 
+/**
+ * The three notification switches. Quiet by default (see `DEFAULT_NOTIFICATIONS`): the first is off.
+ * The hidden marker is what lets POST /settings tell an unticked box from a form that never had it.
+ * Each hint says what the switch covers, because the README's list of banners that always arrive
+ * (ready for pickup, out for delivery, a problem) has no switch and the page should say so.
+ */
+function notificationsBlock(v: SettingsValues): Html {
+  const box = (name: string, on: boolean, label: string, hint: string): Html =>
+    html`<label class="check"><input type="checkbox" name="${name}"${on ? raw(' checked') : ''}><span>${label}</span><span class="meta hint">${hint}</span></label>`
+  return html`<h2>Notifications</h2>
+<input type="hidden" name="notificationsForm" value="1">
+<div class="checks">
+${box('notifyProgress', v.notifications.progress, 'Registered and in-transit updates', 'A banner when a parcel is registered with the carrier and when it starts moving.')}
+${box('notifyDailyReminder', v.notifications.dailyReminder, 'A daily reminder while a parcel waits for you', 'At 08:00, until you mark it collected.')}
+${box('notifyDelivered', v.notifications.delivered, 'Delivered', 'When the carrier says it arrived. Never for a parcel you marked yourself.')}
+</div>
+<p class="meta">Ready for pickup, out for delivery and problems with a parcel always send a banner.</p>
+`
+}
+
 const option = (value: string, label: string, current: string): Html =>
   html`<option value="${value}"${value === current ? raw(' selected') : ''}>${label}</option>`
 
@@ -235,6 +255,7 @@ ${gmailGuide(v)}
 ${calendarField(v, state.calendars)}
 </div>
 
+${notificationsBlock(v)}
 <details class="adv"${app ? raw(' id="adv"') : ''}><summary>Advanced</summary>
 <p class="meta">Nothing here normally needs changing.</p>
 <div class="fields">

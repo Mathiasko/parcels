@@ -1,4 +1,4 @@
-import { NOTIFIERS, validateConfig, type Config, type ConfigDocument } from '../core/config.js'
+import { DEFAULT_NOTIFICATIONS, NOTIFIERS, validateConfig, type Config, type ConfigDocument, type NotificationPrefs } from '../core/config.js'
 import type { SettingField } from '../db/activity-log.js'
 
 /**
@@ -17,6 +17,17 @@ export interface SettingsForm {
   imapUser?: string
   imapMailbox?: string
   imapPass?: string
+  /**
+   * `1` on every page this version renders, and the only thing that makes the three checkboxes below
+   * mean anything: an unticked checkbox is not sent at all, so "absent" cannot tell "turned off" from
+   * "this form never had the box" (an old cached page, a crafted POST). Without the marker the stored
+   * `notifications` block is kept as it is; with it, a box that is not `on` is off.
+   */
+  notificationsForm?: string
+  /** `on` when ticked (what a browser sends for a checkbox without a value), absent when not. */
+  notifyProgress?: string
+  notifyDailyReminder?: string
+  notifyDelivered?: string
 }
 
 /**
@@ -37,6 +48,8 @@ export interface SettingsValues {
   imapUser: string
   imapMailbox: string
   passSet: boolean
+  /** The three switches as they are in effect: stored values over the defaults. */
+  notifications: NotificationPrefs
 }
 
 export type ApplyResult =
@@ -59,6 +72,24 @@ const storedPass = (doc: ConfigDocument): string | undefined => {
  */
 const GMAIL_DEFAULTS = { host: 'imap.gmail.com', port: '993', mailbox: 'parcels' } as const
 
+/**
+ * The switches in effect for a document: each stored boolean, the default for anything else. Lenient
+ * on purpose, unlike `validateConfig`: the page must still render for a hand-edited file that the
+ * validator rejects, because it is the place that repairs it.
+ */
+const notificationPrefs = (doc: ConfigDocument): NotificationPrefs => {
+  const stored = isObject(doc.notifications) ? doc.notifications : {}
+  const on = (key: keyof NotificationPrefs): boolean =>
+    typeof stored[key] === 'boolean' ? stored[key] : DEFAULT_NOTIFICATIONS[key]
+  return { progress: on('progress'), dailyReminder: on('dailyReminder'), delivered: on('delivered') }
+}
+
+/** The submitted checkboxes, or null when the form did not carry them (see `SettingsForm.notificationsForm`). */
+const submittedNotifications = (f: SettingsForm): NotificationPrefs | null =>
+  f.notificationsForm === '1'
+    ? { progress: f.notifyProgress === 'on', dailyReminder: f.notifyDailyReminder === 'on', delivered: f.notifyDelivered === 'on' }
+    : null
+
 /** The saved values, for the page's first render. Shows the effective default for anything absent. */
 export function settingsValues(doc: ConfigDocument): SettingsValues {
   const imap = imapBlock(doc)
@@ -74,6 +105,7 @@ export function settingsValues(doc: ConfigDocument): SettingsValues {
     imapUser: text(imap?.user),
     imapMailbox: fresh ? GMAIL_DEFAULTS.mailbox : text(imap?.mailbox),
     passSet: storedPass(doc) !== undefined,
+    notifications: notificationPrefs(doc),
   }
 }
 
@@ -94,6 +126,7 @@ export function submittedSettings(f: SettingsForm, doc: ConfigDocument): Setting
     imapUser: (f.imapUser ?? '').trim(),
     imapMailbox: (f.imapMailbox ?? '').trim(),
     passSet: storedPass(doc) !== undefined,
+    notifications: submittedNotifications(f) ?? notificationPrefs(doc),
   }
 }
 
@@ -177,6 +210,10 @@ export function applySettings(doc: ConfigDocument, f: SettingsForm): ApplyResult
   else next.pickupCalendar = pickupCalendar
   if (imap === undefined) delete next.imap
   else next.imap = imap
+  // Written whole, all three keys, so the file says what the page showed; a form without the marker
+  // leaves the block exactly as it was (and does not add one).
+  const notifications = submittedNotifications(f)
+  if (notifications !== null) next.notifications = { ...notifications }
 
   try {
     return { ok: true, doc: next, config: validateConfig(next, 'these settings') }
@@ -186,6 +223,10 @@ export function applySettings(doc: ConfigDocument, f: SettingsForm): ApplyResult
     return no(err instanceof Error ? err.message : String(err))
   }
 }
+
+const NOTIFICATION_FIELDS = [
+  ['notifications.progress', 'progress'], ['notifications.dailyReminder', 'dailyReminder'], ['notifications.delivered', 'delivered'],
+] as const
 
 /** The mail-block fields the page offers, in the order the form shows them. */
 const IMAP_FIELDS = [
@@ -216,6 +257,9 @@ export function changedSettingFields(before: ConfigDocument, after: ConfigDocume
   if ((before.mapPreview !== false) !== (after.mapPreview !== false)) changed.push('mapPreview')
   // Effective value again: `""` and no key both mean the first writable calendar.
   if (text(before.pickupCalendar).trim() !== text(after.pickupCalendar).trim()) changed.push('pickupCalendar')
+  // By effective value, so a file with no block that is saved with the defaults changed nothing.
+  const [was, now] = [notificationPrefs(before), notificationPrefs(after)]
+  for (const [name, key] of NOTIFICATION_FIELDS) if (was[key] !== now[key]) changed.push(name)
 
   const a = imapBlock(before)
   const b = imapBlock(after)

@@ -9,6 +9,7 @@ import type { ImapConfig } from '../src/ingest/imap.js'
 import { fakeImap, type FakeImap } from './imap-fake.js'
 import { config, memDb, NOW } from './poll-helpers.js'
 import { settingsValues, applySettings } from '../src/web/settings.js'
+import { listActivity } from '../src/db/activity-log.js'
 
 const PASS = 'abcdefghijklmnop'
 
@@ -489,5 +490,87 @@ describe('a first-time mail setup asks for two things, not five', () => {
     if (r.ok) expect(r.config.imap).toEqual({
       host: 'imap.gmail.com', port: 993, user: 'friend@gmail.com', pass: 'abcdefghijklmnop', mailbox: 'parcels',
     })
+  })
+})
+
+describe('the Notifications block', () => {
+  const MARKER = '<input type="hidden" name="notificationsForm" value="1">'
+  const box = (body: string, name: string): string => {
+    const m = new RegExp(`<input[^>]*name="${name}"[^>]*>`).exec(body)
+    expect(m, `a checkbox named ${name}`).not.toBeNull()
+    return m![0]
+  }
+  const NAMES = ['notifyProgress', 'notifyDailyReminder', 'notifyDelivered'] as const
+
+  test('renders the heading, the marker and three labelled checkboxes, on the defaults when the file has no block', async () => {
+    const body = (await harness().get('/settings')).body
+    expect(body).toContain('<h2>Notifications</h2>')
+    expect(body).toContain(MARKER)
+    for (const name of NAMES) expect(box(body, name)).toContain('type="checkbox"')
+    expect(body).toContain('Registered and in-transit updates')
+    expect(body).toContain('A daily reminder while a parcel waits for you')
+    expect(body).toMatch(/<span>Delivered<\/span>/)
+    expect(box(body, 'notifyProgress')).not.toContain('checked')
+    expect(box(body, 'notifyDailyReminder')).toContain('checked')
+    expect(box(body, 'notifyDelivered')).toContain('checked')
+    // between the Parcels fields and Advanced
+    expect(body.indexOf('<h2>Parcels</h2>')).toBeLessThan(body.indexOf('<h2>Notifications</h2>'))
+    expect(body.indexOf('<h2>Notifications</h2>')).toBeLessThan(body.indexOf('<summary>Advanced</summary>'))
+  })
+
+  test('the boxes are ticked per the stored values', async () => {
+    const body = (await harness({ notifications: { progress: true, dailyReminder: false, delivered: false } }).get('/settings')).body
+    expect(box(body, 'notifyProgress')).toContain('checked')
+    expect(box(body, 'notifyDailyReminder')).not.toContain('checked')
+    expect(box(body, 'notifyDelivered')).not.toContain('checked')
+  })
+
+  test('a partial stored block shows the defaults for the absent keys', () => {
+    expect(settingsValues({ notifications: { progress: true } }).notifications)
+      .toEqual({ progress: true, dailyReminder: true, delivered: true })
+  })
+
+  test('posting with the marker and only Delivered ticked writes the whole block', async () => {
+    const h = harness()
+    const res = await h.post('/settings', fields({ notificationsForm: '1', notifyDelivered: 'on' }))
+    expect(res.statusCode).toBe(303)
+    expect(read(h.path).notifications).toEqual({ progress: false, dailyReminder: false, delivered: true })
+  })
+
+  test('posting without the marker leaves the stored block untouched', async () => {
+    const stored = { progress: true, dailyReminder: false, delivered: true }
+    const h = harness({ notifications: stored })
+    const res = await h.post('/settings', fields({ defaultPostalCode: '90031' }))
+    expect(res.statusCode).toBe(303)
+    expect(read(h.path)).toMatchObject({ defaultPostalCode: '90031', notifications: stored })
+  })
+
+  test('posting without the marker adds no block to a file that has none', async () => {
+    const h = harness()
+    await h.post('/settings', fields())
+    expect(read(h.path)).not.toHaveProperty('notifications')
+  })
+
+  test('a rejected save re-renders what was ticked', async () => {
+    const h = harness({ notifications: { progress: false, dailyReminder: true, delivered: true } })
+    const res = await h.post('/settings', fields({ defaultPostalCode: 'nope', notificationsForm: '1', notifyProgress: 'on' }))
+    expect(res.statusCode).toBe(400)
+    expect(box(res.body, 'notifyProgress')).toContain('checked')
+    expect(box(res.body, 'notifyDailyReminder')).not.toContain('checked')
+    expect(box(res.body, 'notifyDelivered')).not.toContain('checked')
+  })
+
+  test('the activity log names notifications.dailyReminder when only it changed', async () => {
+    const h = harness()
+    await h.post('/settings', fields({ notificationsForm: '1', notifyDelivered: 'on' }))
+    expect(listActivity(h.db, 10)[0]).toMatchObject({ kind: 'settings_saved', detail: 'notifications.dailyReminder' })
+  })
+
+  test('a save that keeps the defaults on a file with no block records nothing changed', async () => {
+    const h = harness()
+    await h.post('/settings', fields({ notificationsForm: '1', notifyDailyReminder: 'on', notifyDelivered: 'on' }))
+    expect(read(h.path).notifications).toEqual({ progress: false, dailyReminder: true, delivered: true })
+    expect(listActivity(h.db, 10)[0]).toMatchObject({ kind: 'settings_saved' })
+    expect(listActivity(h.db, 10)[0]!.detail ?? '').toBe('')
   })
 })

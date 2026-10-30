@@ -277,6 +277,19 @@ describe('Settings in app mode', () => {
     expect(fields).not.toContain('notifier')
   })
 
+  test('the Notifications block shows in the app, and its marker survives the notifier re-insertion', async () => {
+    const s = appServer()
+    expect((await s.get('/settings')).body).toContain('<input type="hidden" name="notificationsForm" value="1">')
+    const res = await s.post('/settings', {
+      defaultPostalCode: '01001', mapPreview: 'true', imapHost: '', imapPort: '', imapUser: '', imapMailbox: '', imapPass: '',
+      notificationsForm: '1', notifyProgress: 'on',
+    })
+    expect(res.statusCode).toBe(303)
+    const saved = JSON.parse(readFileSync(s.configPath, 'utf8')) as Record<string, unknown>
+    expect(saved.notifications).toEqual({ progress: true, dailyReminder: false, delivered: false })
+    expect(saved.notifier).toBe('osascript')
+  })
+
   test('Show in Finder asks the app to reveal the support folder, and comes back to Advanced', async () => {
     const s = appServer()
     const res = await s.post('/app/reveal-data')
