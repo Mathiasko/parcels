@@ -209,6 +209,8 @@ form.inline{display:inline}
 .day{padding:1.25rem 0 .5rem;font-size:.8125rem;line-height:1.3846;font-weight:600;color:var(--ink-2)}
 .tl>li:first-child{padding-top:0}
 .day::before,.er::before{content:"";position:absolute;left:calc(3rem + .75rem + 7.5px);top:0;bottom:0;width:1px;background:var(--rule-s)}
+/* a heading wider than the time column ("Sun 18 Oct") would be struck through by the rail; it masks it, as .gl does */
+.day>span{position:relative;z-index:1;background:var(--paper);padding-right:.25rem}
 .tl>li:first-child::before{top:1.75rem}
 .bar::before{width:2px;margin-left:-.5px;background:var(--bar)}
 .day.bar{color:var(--ink-2)}

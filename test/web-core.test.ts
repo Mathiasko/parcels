@@ -259,7 +259,7 @@ describe('web core: faithful rendering', () => {
     const id = parcel(db, { label: 'Shoes' })
     const body = (await get(db, `/parcel/${id}`)).body
     expect(body).toContain('<h3 class="sec">Name</h3>')
-    expect(body).toMatch(/<input name="label" value="Shoes" placeholder="e\.g\. Shoes from Zalando" aria-label="Name">/)
+    expect(body).toMatch(/<input name="label" value="Shoes" placeholder="e\.g\. New shoes" aria-label="Name">/)
     expect(body).toContain('<button>Save name</button>')
     expect(body).not.toContain('<h3 class="sec">Label</h3>')
     // ...and the same word where a parcel is first named, on /add and on each email in /attention.

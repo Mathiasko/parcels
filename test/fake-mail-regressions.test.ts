@@ -329,3 +329,68 @@ describe('F3: a collected or returned parcel shows no "Collect by" line', () => 
     expect(await page(db, `/parcel/${id}`)).toContain('Collect by')
   })
 })
+
+describe('F22: a pickup point whose name already holds its street names the street once', () => {
+  test('"Z-BOX Testovo, Nová 8 (Lidl)" + "Nová 8" + "Testovo"', () => {
+    expect(pickupSummary({ pickup: ZBOX } as Parameters<typeof pickupSummary>[0])).toBe('Z-BOX Testovo, Nová 8 (Lidl), Testovo')
+  })
+
+  test('a name without the street keeps it', () => {
+    expect(pickupSummary({ pickup: { kind: 'locker', name: 'Pickup Station Testovo (OC Fiktív)', street: 'Hlavná 5', city: 'Testovo' } } as Parameters<typeof pickupSummary>[0]))
+      .toBe('Pickup Station Testovo (OC Fiktív), Hlavná 5, Testovo')
+  })
+})
+
+describe('F24: an /attention card for a mail with an empty subject has a heading', () => {
+  test('"(no subject)", in the heading and in the dismiss button\'s label', async () => {
+    const db = memDb()
+    db.prepare(`INSERT INTO messages (message_id, received_at, from_addr, subject, raw_path, parsed_ok, parse_note)
+      VALUES ('<58@fake-mail>', ?, 'scan@example.com', '', '/tmp/58.eml', 0, 'no tracking number found in this message')`)
+      .run(new Date(NOW.getTime() - 3_600_000).toISOString())
+    const body = await page(db, '/attention')
+    expect(body).toContain('<h3>(no subject)</h3>')
+    expect(body).toContain('<span class="vh"> (no subject)</span>')
+  })
+})
+
+describe('F25: the timeline rail does not run through a day heading\'s text', () => {
+  test('the heading text sits on the paper, above the rail', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'dpd', trackingNumber: '01505333333303', source: 'email' })
+    appendEvents(db, id, [{ occurredAtRaw: 'a', occurredAtTz: 'Europe/Bratislava', occurredAt: new Date(NOW.getTime() - 8 * DAY), status: 'in_transit', description: 'On the way' }])
+    expect(await page(db, `/parcel/${id}`)).toMatch(/<li class="day[^"]*"><span>[^<]+<\/span><\/li>/)
+    expect(STYLE).toMatch(/\.day>span\{[^}]*background:var\(--paper\)/)
+  })
+})
+
+describe('F26: the Name field\'s placeholder fits the field', () => {
+  test('a placeholder short enough for the 17rem side column', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'packeta', trackingNumber: 'Z2222222201', source: 'email' })
+    const placeholder = /<input name="label"[^>]*placeholder="([^"]*)"/.exec(await page(db, `/parcel/${id}`))?.[1]
+    expect(placeholder).toBeDefined()
+    expect(placeholder!.length).toBeLessThanOrEqual(14)
+  })
+})
+
+describe('F28: an unnamed parcel\'s card prints its number once', () => {
+  test('the BalíkoBOX card: "EB666666025SK" as the name, and the meta line says only the carrier', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'posta', trackingNumber: 'EB666666025SK', source: 'email' })
+    updateParcelState(db, id, {
+      status: 'ready_for_pickup', statusRaw: 'raw', retainedTill: new Date(NOW.getTime() + DAY),
+      pickup: { kind: 'locker', name: 'BalíkoBOX Testovo – OD Prior', street: 'Hlavná 3', city: 'Testovo', postalCode: '99901' },
+    })
+    // Visible text only: the buttons' screen-reader labels ("Mark as collected: EB666666025SK") stay.
+    const body = (await page(db, '/')).replace(/<span class="vh">[^<]*<\/span>/g, '')
+    expect(body.split('EB666666025SK').length - 1).toBe(1)
+    expect(body).toContain('Slovenská pošta')
+  })
+
+  test('a named parcel still shows its number beside the carrier', async () => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'posta', trackingNumber: 'EB666666025SK', merchant: 'Knihomoľ', source: 'email' })
+    updateParcelState(db, id, { status: 'in_transit', statusRaw: 'raw' })
+    expect(await page(db, '/')).toContain('EB666666025SK')
+  })
+})

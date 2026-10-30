@@ -50,7 +50,7 @@ function timeline(events: StoredEvent[], ctx: PageCtx): Html {
     const head = isKnown(e.status) && !joinedAbove
     // A day heading sits inside a run when the row above it (newer) and this one share a status.
     const heading = day !== prevDay
-      ? html`<li class="day${joinedAbove ? html` bar ${toneClass(e.status)}` : ''}">${formatDayHeading(e.occurredAt, ctx.now)}</li>` : ''
+      ? html`<li class="day${joinedAbove ? html` bar ${toneClass(e.status)}` : ''}"><span>${formatDayHeading(e.occurredAt, ctx.now)}</span></li>` : ''
     prevDay = day
     const bar = joinedAbove || joinedBelow
     return html`${heading}<li class="er${i === 0 ? raw(' now') : ''}${i === shown.length - 1 ? raw(' last') : ''}${bar ? html` bar ${toneClass(e.status)}` : ''}${head && joinedBelow ? raw(' top') : ''}${bar && !joinedBelow ? raw(' end') : ''}">
@@ -248,7 +248,7 @@ ${deleteSection(p)}
 </div>
 <aside class="side">${markSection(p)}<h3 class="sec">Name</h3>
 <form class="inl" method="post" action="/parcel/${p.id}/label">
-  <input name="label" value="${p.label ?? ''}" placeholder="e.g. Shoes from Zalando" aria-label="Name"><button>Save name</button></form>
+  <input name="label" value="${p.label ?? ''}" placeholder="e.g. New shoes" aria-label="Name"><button>Save name</button></form>
 ${plain ? '' : html`<h3 class="sec">Postcode <span class="meta">(used by GLS and DPD)</span></h3>${postcodeForm(p)}`}
 </aside></div>`, ctx)
 }

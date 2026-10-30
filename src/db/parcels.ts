@@ -53,10 +53,15 @@ export interface Parcel {
 /** What a parcel is called wherever it is shown: the user's name for it, else the shop, else its number. */
 export const parcelName = (p: Parcel): string => p.label ?? p.merchant ?? p.trackingNumber
 
-/** `Z-BOX, Hlavna 12, Zilina`: commas throughout, the same in a banner as on the page. */
+/**
+ * `Z-BOX, Hlavna 12, Zilina`: commas throughout, the same in a banner as on the page. A street the
+ * name already holds (`Z-BOX Testovo, Nová 8 (Lidl)` at `Nová 8`) is not said a second time.
+ */
 export function pickupSummary(p: Parcel): string | undefined {
   if (!p.pickup) return undefined
-  const place = [p.pickup.name, p.pickup.street].filter(Boolean).join(', ')
+  const { name, street } = p.pickup
+  const inName = !!name && !!street && name.toLowerCase().includes(street.toLowerCase())
+  const place = [name, inName ? undefined : street].filter(Boolean).join(', ')
   return [place, p.pickup.city].filter(Boolean).join(', ') || undefined
 }
 

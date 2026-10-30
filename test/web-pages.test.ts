@@ -987,7 +987,7 @@ describe('the parcel page timeline and History, as built', () => {
     ])
     const body = (await get(db, `/parcel/${id}`)).body
     const tl = body.slice(body.indexOf('id="timeline"'), body.indexOf('</ol>'))
-    expect(tl).toMatch(/<li class="day[^"]*">[A-Z][a-z]{2} \d+ [A-Z][a-z]{2}<\/li>/)
+    expect(tl).toMatch(/<li class="day[^"]*"><span>[A-Z][a-z]{2} \d+ [A-Z][a-z]{2}<\/span><\/li>/)
     expect(tl).not.toMatch(/<li class="day[^>]*aria-hidden/)   // the glyphs are aria-hidden, the headings are not
     expect(tl).not.toMatch(/<li[^>]*title=/)
     expect(tl).toContain('<div class="tx" title="carrier code DODEX">')

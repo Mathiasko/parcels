@@ -350,7 +350,8 @@ function cardEntry(c: Card, e: Entry, ctx: PageCtx): Html {
     : html`<div class="ev${p.status === 'unknown' ? raw(' prose') : ''}">${e.last.description}${
       e.last.location ? html` <span class="loc">· ${e.last.location}</span>` : ''}</div>`
   return html`<li>${c.placed ? html`<h3 class="who"><a href="/parcel/${p.id}">${parcelName(p)}</a></h3>` : ''}
-<span class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span></span>
+<span class="meta">${CARRIER_NAME[p.carrier]}${parcelName(p) === p.trackingNumber ? ''   // unnamed: its name IS the number
+    : html` · <span class="mono sel">${p.trackingNumber}</span>`}</span>
 ${sentence}${pickupClock(e, ctx.now, calendarForm(p, ctx.now, e.cal, 'home')).out}${pickupCodeLine(e.code)}${postcodeRejected(p)
     ? html`<p class="meta t-warn">${glyph('problem')} Postcode needed: <a class="sel" href="/parcel/${p.id}">set one</a> to resume full tracking.</p>`
     : ''}${p.status === 'ready_for_pickup' ? markForm(p, 'Mark as collected', 'home') : ''}</li>`
