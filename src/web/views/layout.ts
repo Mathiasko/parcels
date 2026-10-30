@@ -15,6 +15,12 @@ export interface PageCtx {
    */
   poller?: PollerStatus
   /**
+   * Emails waiting on /attention: not yet assigned or dismissed. The nav shows the number on every
+   * page, and the index lede says it (and withholds its all-clear) while it is above zero. Absent
+   * counts as none, which is what an error page whose database failed can honestly not show.
+   */
+  attention?: number
+  /**
    * Seconds after which the page re-requests itself, set only while a poll run is in progress. This is
    * the no-JS way to show progress: a `<meta http-equiv="refresh">` on a page that re-renders itself
    * until the work is done. Absent is what ENDS the loop, so nothing may default it to a number - a run
@@ -36,8 +42,19 @@ const NAV = [
   ['/settings', 'Settings'],
 ] as const
 
+/**
+ * The Attention item's count (design-language §5.1): the badge is what the eye finds, the hidden words
+ * are what a screen reader says, since "Attention 2" alone does not say two of what. Label and badge
+ * share one span so the column-flex link keeps them on one line.
+ */
+function attentionLabel(label: string, waiting: number): Html {
+  if (waiting <= 0) return html`${label}`
+  return html`<span class="lb">${label}<span class="n">${String(waiting)}</span><span class="vh"> ${waiting === 1 ? 'email' : 'emails'} waiting</span></span>`
+}
+
 export function layout(title: string, current: string, body: Html, ctx: PageCtx): Html {
   const trouble = carrierTrouble(ctx.health)
+  const waiting = ctx.attention ?? 0
   return html`<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -45,7 +62,7 @@ ${ctx.reloadIn ? html`<meta http-equiv="refresh" content="${ctx.reloadTo ? `${ct
 <style>${raw(STYLE)}</style></head>
 <body>${SPRITE}<div class="frame">
 <header><nav aria-label="Main"><a class="brand" href="/">Parcels</a>${NAV.map(([href, label]) =>
-    html`<a href="${href}" data-t="${label}"${href === current ? raw(' aria-current="page"') : ''}>${label}${href === '/health' && trouble ? html`<span class="dot"></span><span class="vh"> carrier problem</span>` : ''}</a>`)
+    html`<a href="${href}" data-t="${label}"${href === current ? raw(' aria-current="page"') : ''}>${href === '/attention' ? attentionLabel(label, waiting) : label}${href === '/health' && trouble ? html`<span class="dot"></span><span class="vh"> carrier problem</span>` : ''}</a>`)
   }<a class="add" href="/add" data-t="Add parcel"${current === '/add' ? raw(' aria-current="page"') : ''}>Add parcel</a></nav></header>
 <main>${body}</main></div></body></html>
 `

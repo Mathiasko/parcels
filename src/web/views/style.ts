@@ -31,6 +31,8 @@ nav a::after{content:attr(data-t);font-weight:600;height:0;overflow:hidden;visib
 nav a:hover{color:var(--ink)}
 nav a[aria-current]{color:var(--ink);font-weight:600;box-shadow:0 2px 0 var(--ink)}
 nav .add{margin-left:auto}
+/* the Attention count: the count badge of design-language §1 (paper on ink, 13/600, radius 4); its border survives forced colours */
+nav .n{display:inline-block;margin-left:.375rem;padding:0 .3125rem;border:1px solid transparent;border-radius:4px;background:var(--ink);color:var(--paper);font-size:.8125rem;line-height:1.125rem;font-weight:600;font-variant-numeric:tabular-nums}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn);margin-left:.375rem;vertical-align:.1em}
 h1{font-size:1.375rem;line-height:1.25;font-weight:600;margin:0;text-wrap:balance;overflow-wrap:break-word}
 h1.big{font-size:1.75rem;line-height:2rem}

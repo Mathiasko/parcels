@@ -107,6 +107,11 @@ export function listUnparsedMessages(db: Database): UnparsedMessage[] {
   return rows.map(toMessage)
 }
 
+/** How many emails `listUnparsedMessages` would list: the number the nav and the index lede say. */
+export function countUnparsedMessages(db: Database): number {
+  return (db.prepare(`SELECT COUNT(*) AS n FROM messages WHERE ${PENDING}`).get() as { n: number }).n
+}
+
 /** The message plus its RFC message-id (stored on the parcel it becomes), when it is still unassigned. */
 export function getUnparsedMessage(db: Database, id: number): (UnparsedMessage & { messageId?: string }) | undefined {
   const r = db.prepare(`SELECT * FROM messages WHERE id = ? AND ${PENDING}`).get(id) as MessageRow | undefined

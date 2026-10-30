@@ -399,6 +399,14 @@ function inFlightClause(total: number, act: Array<{ n: number; one: string; many
   return `${head}, ${listNames(present.map(a => `${a.n} ${a.n === 1 ? a.one : a.many}`))}.`
 }
 
+/**
+ * Emails on /attention, which the ingest could not turn into a parcel. One of them can be a pickup
+ * notice with a deadline (a persona test found exactly that, under "Nothing needs you."), so they are
+ * said, with the way to them, and they forfeit the all-clear like any other thing waiting on the reader.
+ */
+const mailClause = (n: number): Html =>
+  html`${String(n)} ${n === 1 ? 'email needs' : 'emails need'} a look (see <a href="/attention">Attention</a>).`
+
 /** The index lede: what is known, and a calm all-clear only when the data can support it. See design-language §5.2. */
 export function indexLede(entries: Entry[], ctx: PageCtx): Html {
   const { health, now } = ctx
@@ -422,6 +430,8 @@ export function indexLede(entries: Entry[], ctx: PageCtx): Html {
     { n: ofd, one: 'out for delivery', many: 'out for delivery' },
     { n: attn, one: 'needs attention', many: 'need attention' },
   ])]
+  const mail = ctx.attention ?? 0
+  if (mail) parts.push(mailClause(mail))
   if (noPostcode) parts.push(`${noPostcode} ${noPostcode === 1 ? 'needs' : 'need'} a postcode.`)
   if (dormant) parts.push(html`${dormant} ${dormant === 1 ? 'is' : 'are'} no longer polled (see <a href="/attention">Attention</a>).`)
   if (unclassified) parts.push(`${unclassified} ${unclassified === 1 ? 'has' : 'have'} no status; read ${unclassified === 1 ? 'its' : 'their'} latest message.`)
@@ -433,7 +443,7 @@ export function indexLede(entries: Entry[], ctx: PageCtx): Html {
     parts.push(html`Not checked ${last ? `since ${formatDateTime(last, now)}` : 'lately'}, so this may be out of date — see <a href="/health">Health</a>.`)
   }
   // The all-clear is earned: nothing waiting, nothing unreadable or unpolled, and nothing it depends on is broken.
-  if (!act && !unclassified && !failing.length && !noPostcode && !dormant && !overdue) parts.push('Nothing needs you.')
+  if (!act && !mail && !unclassified && !failing.length && !noPostcode && !dormant && !overdue) parts.push('Nothing needs you.')
   return html`${parts.flatMap((p, i) => (i === 0 ? [p] : [' ', p]))}`
 }
 
@@ -465,8 +475,11 @@ export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote, op
     : html`<p class="empty">Nothing in flight. Parcels appear here when a shipping email arrives, or when you <a href="/add">add one</a>.</p>`
   const marked = html`${collectedNotice(opts.collected)}${calendarNotice(opts.calendar?.outcome, opts.calendar?.parcel, ctx.now)}${
     opts.calendarRefused ? notice('warn', html`<p>${opts.calendarRefused}</p>`, true) : ''}`
+  // With nothing in flight there is no lede ("0 in flight" says nothing), unless mail is waiting: that
+  // is the one thing an empty dashboard must still say.
+  const waiting = ctx.attention ? html`<p class="lede">${mailClause(ctx.attention)}</p>` : ''
   const body = entries.length === 0
-    ? html`${marked}${empty}`
+    ? html`${waiting}${marked}${empty}`
     : html`<p class="lede">${indexLede(entries, ctx)}</p>${refreshBanner(note, ctx.now, REFRESH_DOES)}${marked}${
         cards.map(c => card(c, ctx))}`
   return layout('In flight', '/', html`

@@ -290,6 +290,19 @@ describe('Settings in app mode', () => {
   })
 })
 
+describe('waiting mail in app mode', () => {
+  test('the dashboard says it and the nav counts it, exactly as under git', async () => {
+    const s = appServer()
+    s.db.prepare(`INSERT INTO messages (message_id, received_at, from_addr, subject, raw_path, parsed_ok, parse_note)
+      VALUES ('<a@x>', ?, 'shop@example.com', 'Your order', NULL, 0, 'no tracking number found in this message')`)
+      .run(NOW.toISOString())
+    const body = (await s.get('/')).body
+    expect(body).toContain('<p class="lede">1 email needs a look (see <a href="/attention">Attention</a>).</p>')
+    expect(body).toContain('<span class="n">1</span><span class="vh"> email waiting</span>')
+    expect((await s.get('/settings')).body).toContain('<span class="n">1</span>')
+  })
+})
+
 describe('the app-only routes are not there under git', () => {
   test('POST /app/reveal-data and POST /update/restart answer 404', async () => {
     const app = gitServer()

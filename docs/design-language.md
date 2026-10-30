@@ -344,6 +344,7 @@ Parcels   In flight   History   Attention   Health                Add parcel
 - Other items: ink-3 (5.09:1) at 400. Hover: ink. Padding `.25rem 0` on a 15px/22px line gives ≥ 30px height; the whole word is the target.
 - **Counts and dots live in the nav so that every page answers "is anything wrong?"**, with two caveats I now hold firmly:
   - **`Attention` count: do not ship it until Dismiss exists** (§12.11). The two items on the live page are Packeta app e-mail verifications that can never become parcels; as built, the page never empties and the count is permanently lit.
+    *(Rev 5: Dismiss exists, so the count ships. It is the number of emails waiting, as the count badge of §1 (paper on ink, 13/600, radius 4) after the word, with a visually-hidden "N emails waiting". Nothing is shown at zero.)*
   - **`Health` dot: carrier failure only.** A 7px warn dot plus visually-hidden text ("carrier problem") when any carrier is `failing` or `needs attention`. **A poller that is overdue does not light it** by itself; the overdue state is shown loudly on the Health page itself. If the poller has missed an entire polling day (not one overnight gap) it lights the dot too; the threshold is a product decision and I'd default to "a whole day". A warn that fires on an expected, non-actionable condition trains the user to ignore warns.
   - Both need layout data (§12.1).
 
@@ -358,10 +359,11 @@ Every page has an `h1` (22/28) and optionally a **lede**: one line, 15px, ink-2,
 3. *(Rev 4: merged into clause 1.)*
 4. `Packeta is failing, so this may be out of date.` if a carrier serving an in-flight parcel is `failing` or `needs attention`.
 5. *(Rev 3)* **States that are actionable but are not statuses**, because the poller will never ask about those parcels again, or has stopped asking about all of them: `N needs a postcode.` (a carrier-rejected postcode: `core/poll.ts` skips the parcel for ever), `N is no longer polled (see Attention).` (dormant), and `Not checked since 09:00, so this may be out of date — see Health.` *(Rev 4: the time, not the word "poller")*
+6. *(Rev 5)* `N emails need a look (see Attention).` while mail waits on Attention, said right after clause 1. A persona test found a pickup notice with a deadline sitting there under `Nothing needs you.` It is also the one line an empty dashboard still prints, above `Nothing in flight.`
 
 and the one sentence that must be earned:
 
-> **`Nothing needs you.`** appears **only if** (a) no clause 1 or 2 applies, (b) no in-flight parcel's carrier is failing, **and** (c) *(Rev 3)* none of clause 5 applies. Otherwise it is not printed, and nothing replaces it.
+> **`Nothing needs you.`** appears **only if** (a) no clause 1 or 2 applies, (b) no in-flight parcel's carrier is failing, **and** (c) *(Rev 3)* none of clause 5 applies, and (d) *(Rev 5)* no email waits on Attention (clause 6). Otherwise it is not printed, and nothing replaces it.
 
 Real examples, with the data as it is today:
 

@@ -38,7 +38,7 @@ import { calendarOffered, type CalendarFormState, type CalendarOutcome } from '.
 import { isTime, pickupSlots, slotAllowed, slotStart, timeLabel, type Slots } from './calendar-slots.js'
 import { CARRIER_NAME, DISPLAY_ZONE } from './views/format.js'
 import {
-  deliveryStats, getUnparsedMessage, listUnparsedMessages, rawResponsesFor,
+  countUnparsedMessages, deliveryStats, getUnparsedMessage, listUnparsedMessages, rawResponsesFor,
 } from './queries.js'
 import { html, type Html } from './views/html.js'
 import { errorPage, notFoundPage, serverErrorPage } from './views/error.js'
@@ -307,10 +307,13 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   /** The app update this process is staging right now, if any; see `stageAppUpdate`. */
   let staging: Promise<void> | undefined
   const now = () => (deps.now ?? (() => new Date()))()
-  /** What every page needs besides its own data: the clock, and carrier health (for the lede and the nav dot). */
+  /**
+   * What every page needs besides its own data: the clock, carrier health (for the lede and the nav
+   * dot), and how many emails wait on /attention (for the lede and the nav count).
+   */
   const ctx = (): PageCtx => {
     const at = now()
-    return { now: at, health: carrierHealth(db), poller: pollerStatus(db, at) }
+    return { now: at, health: carrierHealth(db), poller: pollerStatus(db, at), attention: countUnparsedMessages(db) }
   }
 
   // Without authentication, a page the user happens to visit must not be able to drive this server:

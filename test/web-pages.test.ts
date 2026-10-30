@@ -960,6 +960,38 @@ describe('GET /: the lede', () => {
     expect(await lede(memDb())).toBeUndefined()
   })
 
+  // Persona finding A1: "3 in flight. Nothing needs you." while a pickup notice with a deadline sat on
+  // /attention, unseen. Mail waiting there is something that needs you, so it is said, and it forfeits
+  // the all-clear.
+  test('mail waiting on Attention is said, links there, and forfeits the all-clear', async () => {
+    const db = memDb()
+    moving(db, 'RR1')
+    moving(db, 'RR2')
+    expect(await lede(db)).toBe('2 in flight. Nothing needs you.')
+    junkMail(db)
+    const text = await lede(db)
+    expect(text).toBe('2 in flight. 1 email needs a look (see Attention).')
+    expect(text).not.toContain('Nothing needs you')
+    expect(await ledeMarkup(db)).toContain('(see <a href="/attention">Attention</a>)')
+    junkMail(db, '<junk2@x>')
+    expect(await lede(db)).toBe('2 in flight. 2 emails need a look (see Attention).')
+  })
+
+  test('dismissed or assigned mail is not counted: only what is still waiting', async () => {
+    const db = memDb()
+    moving(db, 'RR1')
+    const id = junkMail(db)
+    db.prepare('UPDATE messages SET parsed_ok = 1 WHERE id = ?').run(id)
+    expect(await lede(db)).toBe('1 in flight. Nothing needs you.')
+  })
+
+  test('with nothing in flight, waiting mail still gets its line above the empty state', async () => {
+    const db = memDb()
+    junkMail(db)
+    expect(await lede(db)).toBe('1 email needs a look (see Attention).')
+    expect((await get(db, '/')).body).toContain('Nothing in flight.')
+  })
+
   test('two parcels at one place share one card; what is bound to today comes before it', async () => {
     const db = memDb()
     for (const n of ['A1', 'A2']) {
@@ -1026,6 +1058,22 @@ describe('the parcel page timeline and History, as built', () => {
     const body = (await get(memDb(), '/history')).body
     expect(body).toContain('<a href="/history" data-t="History" aria-current="page">')
     expect(body).toContain('data-t="In flight"')
+  })
+
+  test('the Attention item carries the number of emails waiting there, on every page, and nothing at zero', async () => {
+    const db = memDb()
+    const attentionItem = async (url: string) =>
+      (await get(db, url)).body.match(/<a href="\/attention"[^>]*>([\s\S]*?)<\/a>/)?.[1]
+    expect(await attentionItem('/history')).toBe('Attention')
+    junkMail(db)
+    junkMail(db, '<junk2@x>')
+    for (const url of ['/', '/history', '/attention', '/health', '/settings', '/add']) {
+      const item = await attentionItem(url)
+      expect(item, url).toContain('<span class="n">2</span>')
+      // Read aloud as "Attention, 2 emails waiting", not as a bare number.
+      expect(item!.replace(/<[^>]+>/g, ''), url).toBe('Attention2 emails waiting')
+    }
+    expect(STYLE).toMatch(/nav \.n\{[^}]*background:var\(--ink\)[^}]*color:var\(--paper\)/)
   })
 })
 
