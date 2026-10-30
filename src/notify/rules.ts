@@ -164,11 +164,12 @@ export function buildNotifications(
         parts.push(mine.at(-1)?.description || p.statusRaw || p.trackingNumber)
       }
 
-      const reminder = !speaks && !failedAttempt && !newPickup && !deadlineDue
+      // The reminder is the headline only when it is the sole reason to speak; then it, alone, says how to stop it.
+      const reminder = nudgeDue && !speaks && !failedAttempt && !newPickup && !deadlineDue
       const headline = speaks || failedAttempt || newPickup
         ? STATUS_TITLE[p.status]
         : deadlineDue ? 'Pickup deadline approaching' : waitingSince(p, now)
-      // Only the reminder says how to stop it: it is the one banner that repeats until the reader acts.
+      // It is the one banner that repeats until the reader acts.
       if (reminder) parts.push(STOP_REMINDING)
       parcelUpdates.push({
         groupKey: `parcel-${id}`,

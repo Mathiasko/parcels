@@ -885,7 +885,7 @@ The owner, looking at the live page: *"unify the cards to have one style no matt
 
 ## 17. Mark as collected
 
-The carrier closes a locker pickup hours late, and some parcels never at all; until then the parcel kept its chip, its code and its twice-daily reminder after it was on the kitchen table. The fix is one action, and where it sits follows from §1:
+The carrier closes a locker pickup hours late, and some parcels never at all; until then the parcel kept its chip, its code and its daily reminder after it was on the kitchen table. The fix is one action, and where it sits follows from §1:
 
 - **Dashboard:** only on parcels that are `ready_for_pickup`, as the last line of each parcel's block (so a place card holding three parcels has three, each under its own name). A **secondary button at 28px with ink-2 text** - quieter than `Refresh now`, which is about the whole page. Never `--signal`: the chip already says the parcel is waiting on you, and a blue button beside a blue chip would spend the colour twice on one fact. Lifted above the stretched link (`.got`, like `.calf` and `.sel`) and only as wide as the button, so the rest of the block still opens the parcel. The button's accessible name carries the parcel's name in a `.vh` span; visually the name is still printed once.
 - **Parcel page:** every parcel still in flight, at the top of the side column under a `.sec` heading (`Collected it?`, or `Received it?` for a parcel that was not at a pickup point, whose button then reads `Mark as received`), with one ink-3 line saying what it does and that it can be undone.

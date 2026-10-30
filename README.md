@@ -315,6 +315,7 @@ at the start of every run, so a change reaches mail ingest and the carriers at t
 | `port` | Dashboard port, default `8787`. |
 | `notifier` | `auto` (default), `terminal-notifier` or `osascript`. `auto` tries terminal-notifier and falls back to osascript. |
 | `mapPreview` | `true` (default) or `false`. The pickup-point map. `false` stops all geocoding and tile fetching and removes the map from the page. See [Pickup point maps](#pickup-point-maps). |
+| `notifications` | Which parcel updates send a banner: `{ "progress": false, "dailyReminder": true, "delivered": true }` by default (transit updates quiet, the 08:00 reminder and *Delivered* on). Set with the three switches on Settings; a missing key takes its default. See [Notifications](#notifications). |
 | `pickupCalendar` | The Calendar.app calendar [Add to Calendar](#add-to-calendar) puts pickups into, by name. `""` (the default) or no key: the first calendar you can write to. |
 | `imap` | Optional. Without it, no mail is read and parcels are added by hand. See below. |
 
@@ -878,7 +879,7 @@ Which `node` goes into the plists is discovered, not hard-coded — `scripts/lib
 
 | Agent | What it does |
 |---|---|
-| `local.parcels.poller` | Runs `dist/poll.js` hourly on the hour from 07:00 to 21:00, plus 15:30 for the afternoon reminder (16 slots). |
+| `local.parcels.poller` | Runs `dist/poll.js` hourly on the hour from 07:00 to 21:00, plus 15:30 (16 slots), kept for an earlier afternoon check, so a ready banner or a pickup deadline warning arrives half an hour sooner. |
 | `local.parcels.web` | Runs `dist/server.js` and is `KeepAlive`, so it restarts if it dies. |
 
 Things worth knowing:
@@ -1065,7 +1066,7 @@ Like every banner, it never shows the pickup code.
 
 A parcel at a pickup point leaves the dashboard when the carrier reports it delivered, and that lags:
 you can be home with it while the page still says *Ready for pickup*, still shows the locker code, and
-the poller still sends *Still waiting for you* twice a day. Some parcels the carrier never closes at
+the poller still sends *Still waiting since Tue* every morning at 08:00. Some parcels the carrier never closes at
 all (a shop's own delivery, a tracking number that went quiet), and the only way off the page used to be
 Delete, which throws their history away.
 
