@@ -323,7 +323,7 @@ describe('the card words the code by the kind of pickup point', async () => {
 
   test('the markup is the one the stylesheet knows', () => {
     expect(String(pickupCodeLine('631285', 'zbox')))
-      .toBe('<p class="code"><span class="code-l">Open the box with</span> <b class="mono sel">631285</b></p>')
+      .toBe('<p class="code code-plate" data-kind="box"><span class="code-l">Open the box with</span> <b class="mono sel">631285</b></p>')
   })
 
   test('a locker parcel and a counter parcel read differently on the page', async () => {

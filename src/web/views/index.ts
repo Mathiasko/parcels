@@ -1,13 +1,14 @@
 import { isDormant } from '../../core/backoff.js'
 import { postcodeRejected, type Parcel } from '../../db/parcels.js'
 import type { StoredEvent, UserMark } from '../../db/events.js'
-import type { CanonicalStatus, PickupPoint } from '../../core/types.js'
+import type { CanonicalStatus, CarrierId, PickupPoint } from '../../core/types.js'
 import { isEmailOnlyCarrier } from '../../core/types.js'
 import {
   calendarDaysBetween, CARRIER_NAME, formatAgo, formatDateTime, formatDay, isKnown, plural, quietIndicator,
   statusIndicator,
 } from './format.js'
 import { glyph } from './glyphs.js'
+import { codeKind, placeLine, rubberStamp } from './ornaments.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
 import { calendarForm, calendarNotice, calendarOffered, type CalendarFormState, type CalendarOutcome } from './calendar-form.js'
@@ -154,9 +155,9 @@ export function pickupCodeLabel(kind: PickupPoint['kind'] | undefined): string {
  * screen while standing at the box, or copied, and a mis-read digit is a wasted trip. The markup is
  * the same for every kind, so the stylesheet and the big monospaced digits do not care.
  */
-export function pickupCodeLine(code: string | undefined, kind: PickupPoint['kind'] | undefined): Html {
+export function pickupCodeLine(code: string | undefined, kind: PickupPoint['kind'] | undefined, carrier?: CarrierId): Html {
   if (!code) return html``
-  return html`<p class="code"><span class="code-l">${pickupCodeLabel(kind)}</span> <b class="mono sel">${code}</b></p>`
+  return html`<p class="code code-plate" data-kind="${codeKind(kind)}"><span class="code-l">${pickupCodeLabel(kind)}</span> <b class="mono sel">${code}</b>${placeLine(kind, carrier)}</p>`
 }
 
 /**
@@ -371,7 +372,7 @@ function cardEntry(c: Card, e: Entry, ctx: PageCtx): Html {
   return html`<li>${c.placed ? html`<h3 class="who"><a href="/parcel/${p.id}">${parcelName(p)}</a></h3>` : ''}
 <span class="meta">${CARRIER_NAME[p.carrier]}${parcelName(p) === p.trackingNumber ? ''   // unnamed: its name IS the number
     : html` · <span class="mono sel">${p.trackingNumber}</span>`}</span>
-${sentence}${pickupClock(e, ctx.now, calendarForm(p, ctx.now, e.cal, 'home')).out}${pickupCodeLine(e.code, p.pickup?.kind)}${postcodeRejected(p)
+${sentence}${pickupClock(e, ctx.now, calendarForm(p, ctx.now, e.cal, 'home')).out}${pickupCodeLine(e.code, p.pickup?.kind, p.carrier)}${postcodeRejected(p)
     ? html`<p class="meta t-warn">${glyph('problem')} Postcode needed: <a class="sel" href="/parcel/${p.id}">set one</a> to resume full tracking.</p>`
     : ''}${p.status === 'ready_for_pickup' ? markForm(p, 'Mark as collected', 'home') : ''}</li>`
 }
@@ -394,8 +395,9 @@ function card(c: Card, ctx: PageCtx): Html {
   const note = ready ? noDeadlineNote(c.members) : ''
   const maps = ready ? c.members.map(m => mapsUrl(m.parcel)).find(u => u !== undefined) : undefined
   const facts = pickupFacts(note, maps)
-  return html`<article class="card" data-status="${c.placed ? 'ready_for_pickup' : c.members[0]!.parcel.status}">
-<div class="card-h${dueNow ? raw(' due-now') : ''}">${cardHead(c)}${cardChip(c)}</div>
+  const status = c.placed ? 'ready_for_pickup' : c.members[0]!.parcel.status
+  return html`<article class="card" data-status="${status}">
+<div class="card-h${dueNow ? raw(' due-now') : ''}">${cardHead(c)}${cardChip(c)}${status === 'failed_attempt' ? rubberStamp(c.members[0]!.last?.description) : ''}</div>
 <ul class="card-l">${c.members.map(m => cardEntry(c, m, ctx))}</ul>${facts ? html`<p class="card-f meta">${facts}</p>` : ''}
 </article>`
 }
@@ -503,5 +505,5 @@ export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote, op
 <div class="col"><div class="head"><h1>In flight</h1>
   <form class="inline" method="post" action="/refresh"><button>Refresh now</button></form></div>
 ${lede}${mailOff ? notice('neutral', MAIL_SETUP, false, 'mail-setup') : ''}${refreshBanner(note, ctx.now, REFRESH_DOES)}${marked}${
-  entries.length === 0 ? empty : cards.map(c => card(c, ctx))}</div>`, ctx)
+  entries.length === 0 ? html`<p class="orn-empty" aria-hidden="true">Nothing needs you</p>${empty}` : cards.map(c => card(c, ctx))}</div>`, ctx)
 }
