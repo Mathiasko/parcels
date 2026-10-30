@@ -5,7 +5,8 @@ Gmail label, polls the Slovak and Czech carriers for status, and tells you with 
 notification when something is out for delivery or waiting at a pickup point. A local web
 page is the read surface. Nothing runs off this machine and nothing is forwarded anywhere.
 
-Carriers: Slovenská pošta, Packeta, GLS, SPS, DPD SK, and DHL — which is
+Carriers: Slovenská pošta, Packeta, GLS, SPS, DPD SK, PPL (Czech; polled, but
+[not yet checked against a real parcel](#confirmations-still-owed-spec-section-15)), and DHL — which is
 [tracked from its mail alone](#dhl-and-other-email-only-carriers) rather than polled.
 (123Kuriér is excluded: the company is defunct.)
 
@@ -1268,6 +1269,7 @@ node dist/cli.js probe <carrier> <number>
 | Packeta | Owed: `item` field names and `packetStatusId` values; whether `branchAddress` is absent for courier delivery. |
 | GLS | `rstt028` **confirmed live** (2026-10-27, an `INTRANSIT` parcel): a *bare* object, not wrapped in `tuStatus[]` like `rstt029`; the adapter reads both. Real numbers are 10 digits. Owed: whether `rstt029` includes `history` or only `progressBar`; which `addresses[]` entry is the parcel shop (needs a captured `INPICKUP` record). |
 | DPD | Owed: the postcode-verified shape; diff of step 3 with and without `dataForVerification`. |
+| PPL | Polled, but **not yet checked against a real parcel**: no real PPL number has been seen. The adapter follows the response shape the open-source [ha-ppl-cz](https://github.com/ha-parcel-integrations/ha-ppl-cz) integration parses and a not-found probe of 2026-10-30 (HTTP 400, `service.TrackAndTrace.ShipmentNotFound`). Owed: everything else — the `phase` / `lastEventCode` / event `code` values, the date format of `eventDate`, and how `accessPoint` looks at a ParcelShop and at a Parcelbox. Its numbers are 11 digits like GLS's, so "Detect from number" never picks PPL: choose it on Add. |
 | DHL | Not polled at all (email only), so nothing is owed here. If a key is ever issued, three things need a real parcel: the not-found shape, whether DHL Parcel SK/CZ is in the API at all, and how a pickup looks — the canonical vocabulary has no pickup state. |
 
 ## Your data

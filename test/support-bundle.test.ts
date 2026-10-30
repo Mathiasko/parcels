@@ -532,6 +532,7 @@ describe('redaction keeps pace with the carriers', () => {
     sps: ['70312345678901', 'SKABCDE12ABCDEFGHJ'],
     dpd: ['01234567890123', '01234567890123X'],
     dhl: ['JJD0099999999', 'JVGL9999999999', '3SBCC000123456', '0001234567890123'],
+    ppl: ['40888888801'],
   }
 
   test('every shape a registered carrier claims is redacted out of a bundle', async () => {

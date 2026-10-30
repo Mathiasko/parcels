@@ -132,9 +132,10 @@ export interface SupportApp {
  *   sps     `^703\d{11}[0-4]\d$`           sps     `^SK[A-HJ-NP-Z0-9]{5}\d{2}[A-HJ-NP-Z0-9]{9}$`
  *   dhl     `^JJD\d{10,22}$`, `^JVGL\d{10,22}$`, `^3S[A-Z0-9]{8,18}$`, `^000\d{13,25}$`
  *   dpd     `^\d{14}[0-9A-Z]?$`            gls     `^\d{10,12}$`
+ *   ppl     `^\d{11}$`
  *
- * The bare-digit forms (gls, dpd, and the digits of the dhl and sps prefixed forms) are collapsed into
- * one rule: any run of ten or more digits. Deliberately broader than the union of the shapes - it is
+ * The bare-digit forms (gls, dpd, ppl, and the digits of the dhl and sps prefixed forms) are collapsed
+ * into one rule: any run of ten or more digits. Deliberately broader than the union of the shapes - it is
  * one rule instead of five overlapping ones, and it is a strict superset, so a shape added to a
  * carrier tomorrow is already covered. The cost is that a 13-digit epoch in a stack trace is redacted
  * too; a timestamp is readable in a dozen other forms and a tracking number is not recoverable once

@@ -4,6 +4,7 @@ import { dpdAdapter } from './dpd.js'
 import { glsAdapter } from './gls.js'
 import { packetaAdapter } from './packeta.js'
 import { postaAdapter } from './posta.js'
+import { pplAdapter } from './ppl.js'
 import { spsAdapter } from './sps.js'
 
 const adapters = new Map<CarrierId, Carrier>()
@@ -12,6 +13,12 @@ const adapters = new Map<CarrierId, Carrier>()
  * Most specific shape first. gls (10-12 bare digits) and dpd (14 digits) are ambiguous, so last.
  * dhl sits with the distinctive carriers: its shapes are all prefixed, and the one bare-digit form it
  * accepts is 16 digits or more, which no other carrier claims.
+ *
+ * ppl is registered but deliberately NOT listed. Its numbers are 11 bare digits, which is also a GLS
+ * shape, and nothing in the digits tells the two apart. Listing it would turn every 11-digit number
+ * into "GLS or PPL?" and make Detect refuse numbers it answers today; listing it before gls would
+ * silently move GLS parcels to PPL. So Detect never returns PPL: it is chosen on Add, or comes from
+ * mail that says it is PPL.
  */
 const DETECT_ORDER: readonly CarrierId[] = ['posta', 'packeta', 'sps', 'dhl', 'dpd', 'gls']
 
@@ -114,4 +121,4 @@ export function resolveCarrier(number: string, explicit?: CarrierId): CarrierRes
 
 // Adapters do not register themselves; this is the one place that does. Order here is irrelevant:
 // detectCarrier applies DETECT_ORDER.
-for (const adapter of [postaAdapter, packetaAdapter, glsAdapter, spsAdapter, dpdAdapter, dhlCarrier]) register(adapter)
+for (const adapter of [postaAdapter, packetaAdapter, glsAdapter, spsAdapter, dpdAdapter, pplAdapter, dhlCarrier]) register(adapter)

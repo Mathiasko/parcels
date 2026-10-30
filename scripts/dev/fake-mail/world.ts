@@ -20,6 +20,7 @@ interface WorldParcel {
 
 const ZONE: Record<CarrierId, string> = {
   packeta: 'Europe/Prague', dpd: 'Europe/Bratislava', gls: 'Europe/Bratislava', sps: 'Europe/Bratislava', posta: 'Europe/Bratislava', dhl: 'UTC',
+  ppl: 'Europe/Prague',
 }
 /** Carriers whose real adapters can only code the NEWEST event (prose-only timelines). */
 const PROSE_ONLY = new Set<CarrierId>(['packeta', 'gls', 'sps'])

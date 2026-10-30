@@ -108,6 +108,9 @@ const NUMBER: Record<CarrierId, RegExp> = {
   // The prefixed forms, plus the 16-digits-or-more leading-zero form; see src/carriers/dhl.ts for why
   // the bare ten-digit Express form is deliberately absent.
   dhl: /(?<![A-Z0-9])(?:JJD\d{10,22}|JVGL\d{10,22}|3S[A-Z0-9]{8,18}|000\d{13,25})(?![A-Z0-9])/g,
+  // 11 bare digits, which GLS's shape also covers: never trusted alone. Which mail may call a number
+  // PPL (its own sender, or "PPL" named beside a labelled number) is decided elsewhere, not here.
+  ppl: /(?<!\d)\d{11}(?!\d)/g,
 }
 
 /**

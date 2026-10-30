@@ -7,8 +7,8 @@ import { isPollable } from '../src/core/types.js'
 
 // Importing the registry registered the real carriers; take them before the stand-ins below replace them.
 const real = allAdapters()
-/** The five that are polled; dhl is email-only and has no adapter (see test/carriers/dhl.test.ts). */
-const POLLED: CarrierId[] = ['dpd', 'gls', 'packeta', 'posta', 'sps']
+/** The six that are polled; dhl is email-only and has no adapter (see test/carriers/dhl.test.ts). */
+const POLLED: CarrierId[] = ['dpd', 'gls', 'packeta', 'posta', 'ppl', 'sps']
 const ALL: CarrierId[] = [...POLLED, 'dhl' as CarrierId].sort()
 
 // Lightweight stand-ins with deliberately overlapping shapes, to exercise the ordering independent of the real regexes.
@@ -27,6 +27,7 @@ const shapes: Record<CarrierId, RegExp> = {
   gls: /^\d{10,12}$/,
   dpd: /^\d{14}[A-Z0-9]?$/,
   dhl: /^JJD\d{10,22}$/,
+  ppl: /^\d{11}$/,
 }
 
 describe('with stand-in adapters', () => {
@@ -86,7 +87,7 @@ describe('with stand-in adapters', () => {
 describe('with the real adapters', () => {
   beforeEach(() => { for (const a of real) register(a) })
 
-  test('all six carriers are registered: five polled adapters and one email-only', () => {
+  test('all seven carriers are registered: six polled adapters and one email-only', () => {
     expect(allAdapters().map(a => a.id).sort()).toEqual(ALL)
     expect(real.map(a => a.id).sort()).toEqual(ALL)
     for (const id of ALL) expect(getAdapter(id).id).toBe(id)
@@ -101,6 +102,20 @@ describe('with the real adapters', () => {
     expect(detectCarrier('SK0TEST6000000000X')).toEqual(['sps'])
     expect(detectCarrier('01234567890123')).toEqual(['dpd'])
     expect(detectCarrier('31217533227')).toEqual(['gls'])
+  })
+
+  test('11 digits is PPL\'s shape too, but Detect never says PPL: it stays GLS, and PPL is chosen by hand', () => {
+    // PPL and GLS cannot be told apart by shape, so PPL is left out of DETECT_ORDER on purpose: by
+    // shape alone an 11-digit number is GLS, as it was before PPL existed.
+    expect(getAdapter('ppl').matches('40888888801')).toBe(true)
+    expect(detectCarrier('40888888801')).toEqual(['gls'])
+    expect(resolveCarrier('40888888801')).toEqual({ ok: true, carrier: 'gls' })
+    expect(resolveCarrier('40888888801', 'ppl')).toEqual({ ok: true, carrier: 'ppl' })
+  })
+
+  test('a PPL number keeps its leading zero: PPL is not a zero-padding carrier', () => {
+    expect(canonicalNumber('ppl', '04088888880')).toBe('04088888880')
+    expect(canonicalNumber('ppl', '40888888801')).toBe('40888888801')
   })
 
   test('a 10-digit number (the live GLS parcel length) is gls and nothing else; 9 and 13 are nobody', () => {

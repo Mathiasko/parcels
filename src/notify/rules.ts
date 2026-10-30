@@ -33,6 +33,7 @@ export const STATUS_TITLE: Record<CanonicalStatus, string> = {
 
 export const CARRIER_NAME: Record<CarrierId, string> = {
   posta: 'Slovenská pošta', packeta: 'Packeta', gls: 'GLS', sps: 'SPS', dpd: 'DPD', dhl: 'DHL',
+  ppl: 'PPL',
 }
 
 const collectBy = (d: Date): string =>

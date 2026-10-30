@@ -1,4 +1,4 @@
-export type CarrierId = 'posta' | 'packeta' | 'gls' | 'sps' | 'dpd' | 'dhl'
+export type CarrierId = 'posta' | 'packeta' | 'gls' | 'sps' | 'dpd' | 'dhl' | 'ppl'
 
 /**
  * Carriers that are never polled: everything known about their parcels comes from ingested mail

@@ -195,6 +195,18 @@ describe('web pages', () => {
     expect(row('gls')).toContain('never')
   })
 
+  test('PPL is offered by both carrier pickers and has its own row on /health', async () => {
+    const db = memDb()
+    for (const url of ['/add', '/history']) {
+      expect((await get(db, url)).body).toContain('<option value="ppl">PPL</option>')
+    }
+    const body = (await get(db, '/health')).body
+    const row = body.slice(body.indexOf('data-carrier="ppl"')).split('</tr>')[0]!
+    expect(body).toContain('data-carrier="ppl"')
+    expect(row).toContain('<td>PPL</td>')
+    expect(row).toContain('never')   // polled like the others, just not yet asked
+  })
+
   test('GET /health marks a carrier with a gated error as needing attention', async () => {
     const db = memDb()
     recordHealth(db, 'gls', 'gated', 'endpoint closed')

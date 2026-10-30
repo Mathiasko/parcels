@@ -52,7 +52,7 @@ describe('DHL is an email-only carrier, not a missing adapter', () => {
 
   test('it is registered, so the ingest can create its parcels', () => {
     expect(getAdapter('dhl').id).toBe('dhl')
-    expect(allAdapters().map(c => c.id).sort()).toEqual(['dhl', 'dpd', 'gls', 'packeta', 'posta', 'sps'])
+    expect(allAdapters().map(c => c.id).sort()).toEqual(['dhl', 'dpd', 'gls', 'packeta', 'posta', 'ppl', 'sps'])
   })
 
   test('it declares itself unpollable and has no fetch to call', () => {
