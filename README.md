@@ -1049,23 +1049,45 @@ still in flight - there it reads **Mark as received** when the parcel was not at
   is already delivered, returned or archived cannot be marked, and the buttons are ordinary POST forms
   behind the same Host and cross-site checks as every other write.
 
-### The Z-BOX opening code
+### Pickup codes and PINs
 
-A parcel waiting in a Packeta Z-BOX shows the code that opens the box. **The code is never in the
-tracking API** - it arrives only in the pickup email - so it is read back out of the stored `.eml`
+A parcel waiting at a self-service point shows the code or PIN that opens it. **The code is never in
+any tracking API** - it arrives only in the pickup email - so it is read back out of the stored `.eml`
 during a poll, from local files, with no network call. That is also why historical mail works: a
 parcel whose pickup email arrived before this existed gets its code on the next poll, with no
 backfill command.
 
+Mail from these carriers carries one, and is read:
+
+- **Packeta** Z-BOX (SK and CZ): "Kód pre otvorenie schránky";
+- **GLS** BOX and ParcelShop: the PIN;
+- **DPD** Pickup Station: the PIN;
+- **Slovenská pošta** BalíkoBOX: the PIN;
+- **SPS** balíkovo: the verification code ("Verifikačný kód");
+- **PPL** ParcelShop and Parcelbox: the PIN.
+
+A number is taken only when a label stands right before it. A line that also mentions a phone number
+or an order number is refused, and so is anything with fewer than 4 or more than 10 digits, so a
+tracking number, an order number or a phone number is never mistaken for a code.
+
+**How the card words it** depends on the kind of pickup point the carrier named, because the same
+digits are used in two different ways:
+
+- a Z-BOX or a locker: `Open the box with 631285`;
+- a ParcelShop or a post office: `Show this PIN at the counter: 402211`;
+- no place, or one that is not recognised: just `PIN 402211`, which claims nothing about where it is used.
+
 - Stored as **text**: real codes carry leading zeros (`004467`), and a number would drop them.
-- A **staffed** pickup point ("pripravená na výdaj") has no code, because a person hands the parcel
-  over. Nothing is shown in that case - no empty state, because there is no problem to report.
+- A **staffed** pickup point with no PIN in its mail ("pripravená na výdaj") shows nothing, because a
+  person hands the parcel over. No empty state, because there is no problem to report.
 - A parcel whose mail yielded no code is only rescanned when new mail arrives for it, so a codeless
-  parcel is not re-read from disk every hour.
-- **The code is deliberately kept out of notifications and out of `data/poll.log`.** It opens a
-  physical locker, and notification banners render on the lock screen. The one place it leaves the
-  app is the description of an [Add to Calendar](#add-to-calendar) event you add yourself, and even
-  there it is kept out of the event's title and its alert, which are what a lock screen shows.
+  parcel is not re-read from disk every hour. Parcels that were waiting when the list of carriers
+  above grew were re-read once, so a PIN already sitting in your mail appears without any action.
+- **The code is read from mail only, and is deliberately kept out of notifications and out of
+  `data/poll.log`.** It opens a physical locker, and notification banners render on the lock screen.
+  The one place it leaves the app is the description of an [Add to Calendar](#add-to-calendar) event
+  you add yourself, and even there it is kept out of the event's title and its alert, which are what a
+  lock screen shows.
 
 ### Add to Calendar
 
@@ -1086,7 +1108,7 @@ groups several parcels at one place, each parcel has its own. Opening it shows a
 **One click puts the event straight into Calendar.app** - the server does it with `osascript`, on this
 Mac - and the page says where it went: `Added Bratiska to Calendar “Home”: Wed 28 Oct, 13:00.` The
 event is 30 minutes at that time, titled `Pick up: <name>`, at the pickup address, with the Apple Maps
-link as its URL and a description holding the carrier, the tracking number, the Z-BOX code if one is
+link as its URL and a description holding the carrier, the tracking number, the pickup code if one is
 stored, and the real deadline (`Collect by Thu 29 Oct, 18:00`, or that the carrier gave none). It has
 **one alert, at its start**: the time you chose is the reminder. The code is never in the title or the
 alert. Calendar syncs it to your phone like any other event.

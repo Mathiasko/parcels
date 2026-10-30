@@ -1333,7 +1333,7 @@ describe('GET /: one card design, whatever the state or the carrier', () => {
     recordPickupCode(db, id, '004467', 1, NOW)
     const [only] = cards((await get(db, '/')).body)
     expect(only).toMatch(/Collect by[^<]*2 Nov/)
-    expect(only).toContain('Open the box with')
+    expect(only).toContain('Show this PIN at the counter:')   // a post office counter: the PIN is shown, not typed
     expect(only).toContain('004467')
   })
 

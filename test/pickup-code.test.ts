@@ -275,6 +275,57 @@ test('the code is shown on the parcel page and on the dashboard card', async () 
   expect(dash).toContain('004467')
 })
 
+// --- how the card words the code ----------------------------------------------------------------
+
+describe('the card words the code by the kind of pickup point', async () => {
+  const { pickupCodeLine } = await import('../src/web/views/index.js')
+  const BOX = 'Open the box with'
+  const COUNTER = 'Show this PIN at the counter:'
+  const CODE = '<b class="mono sel">631285</b>'
+
+  test.each(['zbox', 'locker'] as const)('%s: open the box', kind => {
+    const out = String(pickupCodeLine('631285', kind))
+    expect(out).toContain(BOX)
+    expect(out).toContain(CODE)
+    expect(out).not.toContain(COUNTER)
+  })
+
+  test.each(['parcelshop', 'post_office'] as const)('%s: show the PIN at the counter', kind => {
+    const out = String(pickupCodeLine('631285', kind))
+    expect(out).toContain(COUNTER)
+    expect(out).toContain(CODE)
+    expect(out).not.toContain(BOX)
+  })
+
+  test.each(['unknown', undefined] as const)('%s: just "PIN", claiming nothing about the place', kind => {
+    const out = String(pickupCodeLine('402211', kind))
+    expect(out).toContain('<span class="code-l">PIN</span>')
+    expect(out).toContain('<b class="mono sel">402211</b>')
+    expect(out).not.toContain(BOX)
+    expect(out).not.toContain(COUNTER)
+  })
+
+  test('no code, no line, whatever the kind', () => {
+    expect(String(pickupCodeLine(undefined, 'zbox'))).toBe('')
+    expect(String(pickupCodeLine(undefined, undefined))).toBe('')
+  })
+
+  test('the markup is the one the stylesheet knows', () => {
+    expect(String(pickupCodeLine('631285', 'zbox')))
+      .toBe('<p class="code"><span class="code-l">Open the box with</span> <b class="mono sel">631285</b></p>')
+  })
+
+  test('a GLS BOX parcel and a counter parcel read differently on the page', async () => {
+    const { buildServer } = await import('../src/web/server.js')
+    const id = insertParcel(db, { carrier: 'posta', trackingNumber: 'RR123456789SK', source: 'manual' })
+    updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'post_office', name: 'Pošta Bratislava 1', street: 'Nám. SNP 35', city: 'Bratislava', postalCode: '810 00' } })
+    recordPickupCode(db, id, '402211', 1, NOW)
+    const body = (await buildServer({ db, config }).inject({ method: 'GET', url: `/parcel/${id}` })).body
+    expect(body).toContain(COUNTER)
+    expect(body).not.toContain(BOX)
+  })
+})
+
 test('a pickup with no code says nothing at all about codes', async () => {
   const { buildServer } = await import('../src/web/server.js')
   const { config } = await import('./poll-helpers.js')
