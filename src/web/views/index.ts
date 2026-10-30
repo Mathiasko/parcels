@@ -475,15 +475,14 @@ export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote, op
     : html`<p class="empty">Nothing in flight. Parcels appear here when a shipping email arrives, or when you <a href="/add">add one</a>.</p>`
   const marked = html`${collectedNotice(opts.collected)}${calendarNotice(opts.calendar?.outcome, opts.calendar?.parcel, ctx.now)}${
     opts.calendarRefused ? notice('warn', html`<p>${opts.calendarRefused}</p>`, true) : ''}`
-  // With nothing in flight there is no lede ("0 in flight" says nothing), unless mail is waiting: that
-  // is the one thing an empty dashboard must still say.
-  const waiting = ctx.attention ? html`<p class="lede">${mailClause(ctx.attention)}</p>` : ''
-  const body = entries.length === 0
-    ? html`${waiting}${marked}${empty}`
-    : html`<p class="lede">${indexLede(entries, ctx)}</p>${refreshBanner(note, ctx.now, REFRESH_DOES)}${marked}${
-        cards.map(c => card(c, ctx))}`
+  // The lede is the page's first sentence, right under the h1, before any notice or banner. With
+  // nothing in flight there is none ("0 in flight" says nothing), unless mail is waiting: that is the
+  // one thing an empty dashboard must still say.
+  const lede = entries.length > 0 ? html`<p class="lede">${indexLede(entries, ctx)}</p>`
+    : ctx.attention ? html`<p class="lede">${mailClause(ctx.attention)}</p>` : ''
   return layout('In flight', '/', html`
 <div class="col"><div class="head"><h1>In flight</h1>
   <form class="inline" method="post" action="/refresh"><button>Refresh now</button></form></div>
-${mailOff ? notice('neutral', MAIL_SETUP, false, 'mail-setup') : ''}${entries.length === 0 ? refreshBanner(note, ctx.now, REFRESH_DOES) : ''}${body}</div>`, ctx)
+${lede}${mailOff ? notice('neutral', MAIL_SETUP, false, 'mail-setup') : ''}${refreshBanner(note, ctx.now, REFRESH_DOES)}${marked}${
+  entries.length === 0 ? empty : cards.map(c => card(c, ctx))}</div>`, ctx)
 }

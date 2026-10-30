@@ -992,6 +992,20 @@ describe('GET /: the lede', () => {
     expect((await get(db, '/')).body).toContain('Nothing in flight.')
   })
 
+  // The line is the page's first sentence, under the h1 as on a dashboard with parcels: not after the
+  // refresh banner and the Gmail notice, where an empty page put it.
+  test('with nothing in flight, the waiting-mail line comes straight after the heading', async () => {
+    const db = memDb()
+    junkMail(db)
+    const id = startRun(db, 'web', NOW)
+    finishRun(db, id, { counts: { polled: 0, newEvents: 0, failures: 0 }, summary: '' }, NOW)
+    const body = (await buildServer({ db, config: { ...config, imap: undefined }, now: () => NOW, notifier: { send: async () => {} } })
+      .inject({ method: 'GET', url: `/?run=${id}` })).body
+    expect(body).toContain('id="mail-setup"')
+    expect(body).toContain('role="status"')
+    expect(body).toMatch(/<\/form><\/div>\s*<p class="lede">1 email needs a look/)
+  })
+
   test('two parcels at one place share one card; what is bound to today comes before it', async () => {
     const db = memDb()
     for (const n of ['A1', 'A2']) {
@@ -1070,8 +1084,10 @@ describe('the parcel page timeline and History, as built', () => {
     for (const url of ['/', '/history', '/attention', '/health', '/settings', '/add']) {
       const item = await attentionItem(url)
       expect(item, url).toContain('<span class="n">2</span>')
-      // Read aloud as "Attention, 2 emails waiting", not as a bare number.
-      expect(item!.replace(/<[^>]+>/g, ''), url).toBe('Attention2 emails waiting')
+      // The link's text is its accessible name: "Attention, 2 emails waiting", not "Attention2" run
+      // into one word, nor a bare number. The comma is hidden from the eye like the words after it.
+      expect(item!.replace(/<[^>]+>/g, ''), url).toBe('Attention, 2 emails waiting')
+      expect(item, url).toContain('Attention<span class="vh">, </span><span class="n">2</span>')
     }
     expect(STYLE).toMatch(/nav \.n\{[^}]*background:var\(--ink\)[^}]*color:var\(--paper\)/)
   })

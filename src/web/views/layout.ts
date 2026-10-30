@@ -44,12 +44,13 @@ const NAV = [
 
 /**
  * The Attention item's count (design-language §5.1): the badge is what the eye finds, the hidden words
- * are what a screen reader says, since "Attention 2" alone does not say two of what. Label and badge
+ * are what a screen reader says - "Attention, 2 emails waiting" - since "Attention 2" alone does not
+ * say two of what, and with no separator the name ran together as "Attention2". Label and badge
  * share one span so the column-flex link keeps them on one line.
  */
 function attentionLabel(label: string, waiting: number): Html {
   if (waiting <= 0) return html`${label}`
-  return html`<span class="lb">${label}<span class="n">${String(waiting)}</span><span class="vh"> ${waiting === 1 ? 'email' : 'emails'} waiting</span></span>`
+  return html`<span class="lb">${label}<span class="vh">, </span><span class="n">${String(waiting)}</span><span class="vh"> ${waiting === 1 ? 'email' : 'emails'} waiting</span></span>`
 }
 
 export function layout(title: string, current: string, body: Html, ctx: PageCtx): Html {
