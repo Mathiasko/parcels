@@ -56,6 +56,28 @@ ${block ? `<p><strong>Miesto, kde ${kind === 'accepted' ? 'bude' : 'je'} vaša z
 }
 
 // ------------------------------------------------------------------------------------------------
+// Zásilkovna (zasilkovna.cz): the Czech Packeta mail, text only, modelled on corpus mail 31 (ready, with
+// the Z-BOX code one digit per line) and mail 62 (picked up). Same lifecycle as `packeta()`: the accepted
+// mail prints its box block in the FUTURE tense ("kde bude"), the ready mail in the present ("kde je").
+// ------------------------------------------------------------------------------------------------
+export function zasilkovna({ kind, number, sender, place, code, deadline }) {
+  const z = spaced(number)
+  const zbox = /z-box/i.test(place?.name ?? '')
+  const intro = {
+    accepted: `odesílatel ${sender} nám právě předal vaši zásilku, která vám bude doručena ${zbox ? 'do Z-BOXu' : 'na výdejní místo'}. Zásilka byla podána a přijata k přepravě.`,
+    ready: `vaše zásilka od odesílatele ${sender} je pro vás připravena k vyzvednutí ${zbox ? 'v Z-BOXu' : 'na výdejním místě'}.`,
+    pickedup: `vaše zásilka ${z} od odesílatele ${sender} byla úspěšně vyzvednuta. Děkujeme, že jste si vybrali Zásilkovnu.`,
+    returning: `vaše zásilka od odesílatele ${sender} nebyla vyzvednuta v úložní době, a proto ji vracíme odesílateli. Pokud jste ji platili dobírkou, nic neplatíte.`,
+  }[kind]
+  const block = place && (kind === 'accepted' || kind === 'ready')
+    ? `Místo, kde ${kind === 'accepted' ? 'bude' : 'je'} vaše zásilka uložena\n${place.name}\n${place.street} ${place.zip} ${place.city}\n${deadline && kind === 'ready' ? `Vyzvedněte nejpozději do ${deadline} 23:59.\n` : ''}\n`
+    : ''
+  const codeBlock = code && kind === 'ready' ? `Kód pro otevření schránky\n${[...code].join('\n')}\n\n` : ''
+  const text = `Zásilka ${z}\n\nDobrý den,\n${intro}\n\n${codeBlock}${block}Číslo zásilky ${z}\nDěkujeme, že jste si pro doručení vybrali Zásilkovnu.\ntým Zásilkovny\n`
+  return { text }
+}
+
+// ------------------------------------------------------------------------------------------------
 // DPD Slovakia (dpd.sk): html only, base64, the way the real Pickup Station mails arrive.
 // ------------------------------------------------------------------------------------------------
 export function dpd({ kind, number, sender, window, pin, deadline, station, numbers, courier, extra = '' }) {

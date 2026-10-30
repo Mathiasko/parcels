@@ -514,6 +514,10 @@ const MERCHANT: Partial<Record<CarrierId, RegExp[]>> = {
     /od odosielateľa\s+(.{1,400}?),?\s+(?:je pre vás|sme nemohli)/i, /odosielateľ\s+(.{1,400}?)\s+nám práve/i,
     // The same two sentences as Zásilkovna (packeta.cz / zasilkovna.cz) and packeta.com write them.
     /od odesílatele\s+(.{1,400}?),?\s+(?:je pro vás|jsme nemohli)/i, /odesílatel\s+(.{1,400}?)\s+nám právě/i,
+    // Zásilkovna's picked-up and returning mails name the shop in a different sentence: "vaše zásilka
+    // (Z 222 2222 215) od odesílatele X byla úspěšně vyzvednuta" / "... X nebyla vyzvednuta v úložní době,
+    // a proto ji vracíme odesílateli". The verb ends the name, as "je pro vás" does in the ready mail.
+    /od odesílatele\s+(.{1,400}?),?\s+(?:byla (?:úspěšně )?vyzvednuta|nebyla vyzvednuta)/i,
     /from the sender\s+(.{1,400}?),?\s+is (?:ready|waiting)/i, /the sender\s+(.{1,400}?)\s+has just handed/i,
   ],
   dpd: [/Odosielateľ:\s*(.{1,400}?)\s+Číslo balíka/i],

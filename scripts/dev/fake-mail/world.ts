@@ -78,6 +78,19 @@ export const WORLD: Record<string, WorldParcel> = {
     pk('2026-10-28 14:50', 'pre_transit', 'Zásielka bola podaná odosielateľom.'),
     pk('2026-10-30 12:55', 'ready_for_pickup', 'Zásielka bola uložená v Z-BOXe a čaká na vyzdvihnutie.'),
   ] },
+  // CZ Zásilkovna, second story (mails 78-80): accepted, ready in a Z-BOX, collected
+  [Z(15)]: { carrier: 'packeta', retainedTill: '2026-10-29 23:59',
+    pickup: { kind: 'zbox', name: 'Z-BOX Testovice, Nádražní 3 (Penny)', street: 'Nádražní 3', city: 'Testovice' }, events: [
+      pk('2026-10-24 09:50', 'pre_transit', 'Zásilka byla podána.'),
+      pk('2026-10-26 13:55', 'ready_for_pickup', 'Zásilka je připravena k vyzvednutí v Z-BOXu.'),
+      pk('2026-10-28 15:58', 'delivered', 'Zásilka byla vyzvednuta.'),
+    ] },
+  // CZ Zásilkovna, not collected (mail 81): ready, then on its way back to the sender
+  [Z(16)]: { carrier: 'packeta', events: [
+    pk('2026-10-21 11:00', 'pre_transit', 'Zásilka byla podána.'),
+    pk('2026-10-22 12:00', 'ready_for_pickup', 'Zásilka je připravena k vyzvednutí na výdejním místě.'),
+    pk('2026-10-29 08:30', 'returning', 'Zásilka nebyla vyzvednuta v úložní době, vracíme ji odesílateli.'),
+  ] },
   // DPD
   [DPD(1)]: { carrier: 'dpd', events: [
     { at: '2026-10-16 11:40', status: 'pre_transit', text: 'Údaje o zásielke boli prijaté', location: 'Testovo' },

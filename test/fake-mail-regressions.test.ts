@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { extract, mailText, pickupFromMail } from '../src/ingest/extract.js'
+import { extract, extractPickupCode, mailText, pickupFromMail } from '../src/ingest/extract.js'
 import { ingestMessages } from '../src/ingest/ingest.js'
 import { allAdapters } from '../src/carriers/registry.js'
 import { runPickupCodes } from '../src/core/pickup-code.js'
@@ -510,5 +510,28 @@ describe('ordinary dispatch wording is not taken for an order, a customer or a p
   test('a numbered label separated from its number by a no-break space still lists both parcels', async () => {
     const r = await ingest(eml('CykloParts <expedicia@shop.example>', 'Odoslané cez DPD', 'Parcel 1: 01505666666605\nParcel 2: 01505666666606'))
     expect(r.parcels.map(p => (p as { number: string }).number)).toEqual(['01505666666605', '01505666666606'])
+  })
+})
+
+describe('Czech Zásilkovna mail', () => {
+  // The four mails 78-81 (Z2222222215 accepted -> ready -> picked up; Z2222222216 returning), all from
+  // `Zásilkovna <noreply@zasilkovna.cz>`: the Czech wording of the Slovak Packeta lifecycle.
+  test.each([
+    ['78-zasilkovna-cz-accepted', 'Z2222222215', 'Papírnictví Vzorové'],        // "odesílatel … nám právě předal"
+    ['79-zasilkovna-cz-ready-zbox-code', 'Z2222222215', 'Papírnictví Vzorové'], // "od odesílatele … je pro vás"
+    ['80-zasilkovna-cz-pickedup', 'Z2222222215', 'Papírnictví Vzorové'],        // "od odesílatele … byla úspěšně vyzvednuta"
+    ['81-zasilkovna-cz-returning', 'Z2222222216', 'Cyklo Fiktivní s.r.o.'],     // "od odesílatele … nebyla vyzvednuta"
+  ])('%s is Packeta parcel %s from %s', async (name, number, merchant) => {
+    expect(await extract(corpus(name))).toMatchObject({ carrier: 'packeta', number, confidence: 'sender', merchant })
+  })
+
+  test('the ready mail gives the Z-BOX, its address and the opening code', async () => {
+    const text = await mailText(corpus('79-zasilkovna-cz-ready-zbox-code'))
+    expect(pickupFromMail(text)).toMatchObject({ kind: 'zbox', name: 'Z-BOX Testovice, Nádražní 3 (Penny)', street: 'Nádražní 3', postalCode: '999 11', city: 'Testovice' })
+    expect(extractPickupCode(text)).toBe('305118')
+  })
+
+  test('the acceptance mail\'s box block ("kde bude") is a box the parcel has not reached: not a pickup point', async () => {
+    expect(pickupFromMail(await mailText(corpus('78-zasilkovna-cz-accepted')))).toBeUndefined()
   })
 })
