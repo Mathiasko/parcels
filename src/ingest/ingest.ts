@@ -200,6 +200,7 @@ const SHOWN_BECAUSE: Record<ParcelEvidence, string> = {
   'tracking-shape': 'it contains something shaped like a tracking number',
   'shipping-subject': 'its subject is about a shipment',
   unreadable: 'it could not be read at all',
+  'too-long': 'it is too long to read whole',
   'lookalike-sender': 'its sender is named like a carrier but does not write from that carrier\'s address',
 }
 

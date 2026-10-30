@@ -168,3 +168,35 @@ describe('F16: a bare "číslo" (a catalogue or product number) is no sign of a 
       .toMatchObject({ carrier: 'gls', number: '1234567890', confidence: 'shape' })
   })
 })
+
+describe('F5: a number only in the HTML part is found when the text part is a "view in browser" stub', () => {
+  test('multipart/alternative whose text part is one line: the html part\'s number is read', async () => {
+    expect(await extract(corpus('41-eshop-number-only-in-html'))).toMatchObject({
+      carrier: 'packeta', number: 'Z2222222211', confidence: 'shape', merchant: 'Hobby Dielňa',
+    })
+  })
+
+  test('a text part that does yield a number still wins over the html part', async () => {
+    const raw = Buffer.from([
+      'From: Shop <orders@shop.example>', 'Subject: Odoslané', 'MIME-Version: 1.0',
+      'Content-Type: multipart/alternative; boundary="b"', '', '--b', 'Content-Type: text/plain; charset=utf-8', '',
+      'Zásielka Z 222 2222 201', '--b', 'Content-Type: text/html; charset=utf-8', '',
+      '<p>Zásielka Z 222 2222 202</p>', '--b--', '',
+    ].join('\r\n'))
+    expect((await extract(raw)).number).toBe('Z2222222201')
+  })
+})
+
+describe('F15: a very long mail is read at both ends, and one too long to read whole is never silently ignored', () => {
+  test('the number in the last lines of a ~470 KB order summary is found', async () => {
+    expect(await extract(corpus('59-eshop-very-long-mail'))).toMatchObject({
+      carrier: 'packeta', number: 'Z2222222210', confidence: 'shape',
+    })
+  })
+
+  test('a mail cut in the middle with no sign of a parcel at either end waits on /attention', async () => {
+    const body = `${'Obchodné podmienky. '.repeat(20_000)}Zásielka Z 222 2222 210. ${'Článok. '.repeat(10_000)}`
+    expect(await extract(eml('Shop <orders@shop.example>', 'Súhrn objednávky', body)))
+      .toEqual({ confidence: 'none', evidence: 'too-long' })
+  })
+})

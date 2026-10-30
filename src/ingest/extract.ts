@@ -43,10 +43,12 @@ export interface Extraction {
  * - `unreadable`: nothing could be read out of the message, so nothing can be concluded either.
  * - `lookalike-sender`: the sender calls itself a carrier (its display name, or a label of its
  *   domain) but does not write from that carrier's domain - see `claimsCarrier`.
+ * - `too-long`: the message is longer than the caps, so its middle was never read, and neither end
+ *   said anything. Like `unreadable`: nothing is known either way.
  */
 export type ParcelEvidence =
   | 'carrier-sender' | 'carrier-named' | 'tracking-shape' | 'shipping-subject' | 'unreadable'
-  | 'lookalike-sender'
+  | 'lookalike-sender' | 'too-long'
 
 /**
  * Registrable sender domains, measured from the live mailbox (packeta.sk, dpd.sk, sps-sro.sk,
@@ -134,6 +136,12 @@ const MERCHANT_MAX = 80
 const EVENT_TEXT_MAX = 200
 const MAX_TEXT = 400_000
 const MAX_HTML = 1_000_000
+/**
+ * How much of the caps is spent on the END of a message that exceeds them. Order summaries and T&C
+ * mails put the shipping line last, after hundreds of KB of conditions, so a head-only cut read
+ * everything but the one line that mattered.
+ */
+const TAIL_SHARE = 8
 
 /**
  * A number whose digits are all one digit (`Z 000 0000 000`, `RR000000000SK`): the sample a carrier
@@ -407,13 +415,27 @@ const MERCHANT: Partial<Record<CarrierId, RegExp[]>> = {
   gls: [/Odosielateľ:\s*(.{1,400}?)\s+(?:modrá odrážka|Detail zásielky|Odbern[ée] miesto)/i],
 }
 
+/** `s` cut to `max` characters: its start, and its last `max / TAIL_SHARE` characters, when it is longer. */
+function headAndTail(s: string, max: number): string {
+  if (s.length <= max) return s
+  const tail = Math.floor(max / TAIL_SHARE)
+  return `${s.slice(0, max - tail - 1)}\n${s.slice(s.length - tail)}`
+}
+
+/** The html part flattened, capped (both before and after flattening) like `bodyText`. */
+const htmlText = (html: string): string => headAndTail(htmlToText(headAndTail(html, MAX_HTML)), MAX_TEXT)
+
 /**
  * The readable text of a parsed message: its text part, or its html flattened when it has none, capped
  * (both before and after flattening) so a huge message costs a bounded amount of regex work.
  */
 function bodyText(mail: ParsedMail): string {
-  return (mail.text || (typeof mail.html === 'string' ? htmlToText(mail.html.slice(0, MAX_HTML)) : '')).slice(0, MAX_TEXT)
+  return mail.text ? headAndTail(mail.text, MAX_TEXT) : typeof mail.html === 'string' ? htmlText(mail.html) : ''
 }
+
+/** Whether the caps cut anything out of the middle of the message. */
+const isCut = (mail: ParsedMail): boolean =>
+  (mail.text ?? '').length > MAX_TEXT || (typeof mail.html === 'string' && mail.html.length > MAX_HTML)
 
 /**
  * `bodyText` of a raw message, for a reader that wants nothing else from it (the pickup-code pass reads
@@ -437,43 +459,58 @@ export async function extract(raw: Buffer): Promise<Extraction> {
     // bytes, it just yields nothing, so this is the same case as the catch below - and a message
     // nobody could read is no grounds for deciding it is not a parcel.
     if (subject === '' && text === '') return { confidence: 'none', evidence: 'unreadable' }
-    const haystack = `${subject}\n${text}`.normalize('NFC')
-
-    const envelope = mail.from?.value[0]
-    const wrapper = forwardedHeader(text)
-    // The envelope sender first; a hand-forward's wrapper is the fallback.
-    const carrier = carrierForAddress(envelope?.address ?? '') ?? carrierForAddress(wrapper?.from ?? '')
-    // A carrier's own domain outranks everything the prose could say; otherwise ask the prose.
-    const evidence = carrier ? 'carrier-sender' : parcelEvidence(subject, haystack)
-
-    if (carrier) {
-      const number = firstNumber(carrier, haystack)
-      if (!number) return { carrier, confidence: 'none', evidence }
-      return {
-        carrier, number, merchant: carrierMerchant(carrier, haystack), confidence: 'sender', evidence,
-        ...(isEmailOnlyCarrier(carrier) && { eventText: clean(subject, EVENT_TEXT_MAX) }),
-      }
+    let found = extractFrom(mail, subject, text)
+    // A text part that yields nothing may be a stub ("otvorte ho v prehliadači ...") standing in for
+    // the html part that carries the mail. The html is read only then, so a mail whose text part
+    // works is read exactly as before; it is taken if it yields a number, or evidence the text lacked.
+    if (!found.number && mail.text && typeof mail.html === 'string') {
+      const alt = extractFrom(mail, subject, htmlText(mail.html))
+      if (alt.number || (alt.evidence && !found.evidence)) found = alt
     }
-
-    // No hint from the sender: trust only a distinctive shape, and only if it is unambiguous.
-    let found = Object.entries(DISTINCTIVE).flatMap(([c, re]) =>
-      [...new Set((haystack.match(re) ?? []).map(normalizeNumber))].filter(n => !isPlaceholder(n)).map(n => ({ c: c as CarrierId, n })))
-    // An e-shop's dispatch mail has no distinctive shape to go on, but it names the carrier and prints
-    // a labelled number of that carrier's bare-digit shape. Both signals, or nothing.
-    if (found.length === 0) found = namedBareNumbers(haystack)
-    if (found.length !== 1) return { confidence: 'none', ...(evidence && { evidence }) }
-    const origin = wrapper ?? { from: envelope?.address, name: envelope?.name }
-    // Asked only of a mail that would otherwise become a parcel: one that would not keeps the
-    // evidence it has, which already puts it on /attention.
-    if (claimsCarrier(origin)) return { confidence: 'none', evidence: 'lookalike-sender' }
-    return {
-      carrier: found[0]!.c, number: found[0]!.n, confidence: 'shape', ...(evidence && { evidence }),
-      merchant: clean(origin.name) ?? clean(origin.from?.split('@')[1]),
-      ...(isEmailOnlyCarrier(found[0]!.c) && { eventText: clean(subject, EVENT_TEXT_MAX) }),
-    }
+    // Too long to read whole, and nothing at either end: the middle is unknown, so it is a question.
+    if (!found.evidence && isCut(mail)) return { ...found, evidence: 'too-long' }
+    return found
   } catch {
     // Unparseable bytes. Not "no parcel": nothing is known either way, so it is a question, not junk.
     return { confidence: 'none', evidence: 'unreadable' }
+  }
+}
+
+/** `extract` over one rendering of the body (the text part, or the html flattened). */
+function extractFrom(mail: ParsedMail, subject: string, text: string): Extraction {
+  const haystack = `${subject}\n${text}`.normalize('NFC')
+
+  const envelope = mail.from?.value[0]
+  const wrapper = forwardedHeader(text)
+  // The envelope sender first; a hand-forward's wrapper is the fallback.
+  const carrier = carrierForAddress(envelope?.address ?? '') ?? carrierForAddress(wrapper?.from ?? '')
+  // A carrier's own domain outranks everything the prose could say; otherwise ask the prose.
+  const evidence = carrier ? 'carrier-sender' : parcelEvidence(subject, haystack)
+
+  if (carrier) {
+    const number = firstNumber(carrier, haystack)
+    if (!number) return { carrier, confidence: 'none', evidence }
+    return {
+      carrier, number, merchant: carrierMerchant(carrier, haystack), confidence: 'sender', evidence,
+      ...(isEmailOnlyCarrier(carrier) && { eventText: clean(subject, EVENT_TEXT_MAX) }),
+    }
+  }
+
+  // No hint from the sender: trust only a distinctive shape, and only if it is unambiguous.
+  let found = Object.entries(DISTINCTIVE).flatMap(([c, re]) =>
+    [...new Set((haystack.match(re) ?? []).map(normalizeNumber))].filter(n => !isPlaceholder(n)).map(n => ({ c: c as CarrierId, n })))
+  // An e-shop's dispatch mail has no distinctive shape to go on, but it names the carrier and prints
+  // a labelled number of that carrier's bare-digit shape. Both signals, or nothing.
+  if (found.length === 0) found = namedBareNumbers(haystack)
+  if (found.length !== 1) return { confidence: 'none', ...(evidence && { evidence }) }
+  const origin = wrapper ?? { from: envelope?.address, name: envelope?.name }
+  // Asked only of a mail that would otherwise become a parcel: one that would not keeps the
+  // evidence it has, which already puts it on /attention.
+  if (claimsCarrier(origin)) return { confidence: 'none', evidence: 'lookalike-sender' }
+  return {
+    carrier: found[0]!.c, number: found[0]!.n, confidence: 'shape', ...(evidence && { evidence }),
+    merchant: clean(origin.name) ?? clean(origin.from?.split('@')[1]),
+    ...(isEmailOnlyCarrier(found[0]!.c) && { eventText: clean(subject, EVENT_TEXT_MAX) }),
   }
 }
 
