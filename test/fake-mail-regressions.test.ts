@@ -232,6 +232,24 @@ describe('F4: a carrier mail listing two parcel numbers tracks both', () => {
   })
 })
 
+describe('a GLS number followed by another number-shaped string adopts only another parcel number', () => {
+  test.each([
+    ['an order number in the next column of a flattened table', 'Číslo balíka | Číslo objednávky\r\n12345678901 1052281846'],
+    ['a phone number on the next line', 'Číslo balíka: 12345678901\r\n0905123456'],
+    ['a phone number of the same length', 'Číslo balíka: 12345678901\r\n42190012345'],
+    ['an order number of the same length in the same sentence', 'Číslo balíka a číslo objednávky: 12345678901 10522818460'],
+  ])('%s: no second parcel', async (_, body) => {
+    const e = await extract(eml('GLS <info@gls-slovakia.sk>', 'Balík je na ceste', body))
+    expect(e).toMatchObject({ carrier: 'gls', number: '12345678901', confidence: 'sender' })
+    expect(e.moreNumbers).toBeUndefined()
+  })
+
+  test('two GLS parcel numbers listed together are still both read', async () => {
+    expect(await extract(eml('GLS <info@gls-slovakia.sk>', 'Balíky sú na ceste', 'Čísla balíkov: 12345678901, 12345678902')))
+      .toMatchObject({ carrier: 'gls', number: '12345678901', moreNumbers: ['12345678902'] })
+  })
+})
+
 describe('F11: an e-shop mail naming two parcels of one carrier tracks both', () => {
   test('two distinctive Packeta numbers: the first is the number, the second in moreNumbers', async () => {
     expect(await extract(corpus('25-eshop-two-packeta-parcels'))).toMatchObject({

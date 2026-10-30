@@ -170,6 +170,11 @@ const LIST_GAP = /^\s*(?:[,;&]|a|and|aj)?\s*$/i
  * The numbers a carrier's mail LISTS right after `first` (`01505…305, 01505…306`). Only a list counts:
  * a carrier's mail can print other number-shaped strings (a reference, an order number), and a
  * number standing anywhere else is not vouched for by the label in front of the first.
+ *
+ * Even in a list, GLS's `\d{10,12}` is also an order number in the next column of a flattened table
+ * (`12345678901 1052281846`) or a phone on the next line. So the list ends at the first number that
+ * is not the first one's length (parcels in one list share a shape), looks like a phone, or stands in
+ * a sentence that names an order, an invoice or a phone (`NOT_TRACKING`).
  */
 function listedAfter(carrier: CarrierId, haystack: string, first: string): string[] {
   const all = [...haystack.matchAll(SENDER_NUMBER[carrier] ?? NUMBER[carrier])]
@@ -177,8 +182,12 @@ function listedAfter(carrier: CarrierId, haystack: string, first: string): strin
   const out: string[] = []
   for (let i = at + 1; at >= 0 && i < all.length; i++) {
     const prev = all[i - 1]!
-    if (!LIST_GAP.test(haystack.slice(prev.index + prev[0].length, all[i]!.index))) break
-    const n = normalizeNumber(all[i]![0])
+    const m = all[i]!
+    if (!LIST_GAP.test(haystack.slice(prev.index + prev[0].length, m.index))) break
+    const n = normalizeNumber(m[0])
+    const before = haystack.slice(Math.max(0, m.index - 50), m.index)
+    const sentence = before.split(/[.!?\n]/).pop() ?? ''
+    if (n.length !== first.length || PHONE_PREFIX.test(n) || PHONE_LABEL.test(before) || NOT_TRACKING.test(sentence)) break
     if (n !== first && !out.includes(n) && !isPlaceholder(n)) out.push(n)
   }
   return out
