@@ -1,11 +1,13 @@
 /**
  * Postal: cream paper with grain, DM Serif Display headings, Libre Franklin text, Courier Prime for the
  * mono bits. Tokens, fonts and a little scoped CSS over today's markup, then the ornaments (stamps, badges,
- * edges, the postmark: postal-ornaments.ts) that style the neutral hooks the views carry; no motion yet.
+ * edges, the postmark: postal-ornaments.ts) that style the neutral hooks the views carry, then the motion
+ * (postal-motion.ts), all of it inside prefers-reduced-motion:no-preference.
  * The colours are the spec's §3.1 values, every §5 contrast pair checked by test/themes.test.ts. The
  * fonts are in assets/fonts/ (see its README for the licences and ranges).
  */
 import type { Theme, ThemeFont } from './types.js'
+import { POSTAL_MOTION } from './postal-motion.js'
 import { POSTAL_ORNAMENTS } from './postal-ornaments.js'
 import { svgUrl } from './svg-url.js'
 
@@ -93,5 +95,6 @@ export const postal: Theme = {
     `${ROOT}[data-mode="dark"]{${DARK}}`,
     `@media(prefers-color-scheme:dark){${ROOT}[data-mode="system"]{${DARK}}}`,
     POSTAL_ORNAMENTS,
+    POSTAL_MOTION,
   ].join('\n'),
 }

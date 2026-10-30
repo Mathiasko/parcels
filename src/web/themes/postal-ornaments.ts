@@ -11,6 +11,9 @@ import { svgUrl } from './svg-url.js'
 
 const R = ':root[data-theme="postal"]'
 
+/** The airmail stripes' repeat along their -45deg line, in px: the march (postal-motion.ts) moves them by exactly one. */
+export const AIRMAIL_REPEAT = 32
+
 /** The rubber stamp's opacity. Exported so the contrast test measures the ink as it is actually seen. */
 export const RUBBER_OPACITY = 0.85
 
@@ -56,7 +59,7 @@ export const POSTAL_ORNAMENTS = [
   `${R} .st[data-status=delivered],${R} .st[data-status=collected],${R} .st[data-status=received]{padding:.125rem .625rem .125rem .5rem;border-radius:999px;box-shadow:inset 0 0 0 1.5px currentColor}`,
 
   // Airmail (board .airmail, 52-56): an out-for-delivery card wears the red and blue chevrons on its top edge.
-  `${R} .card[data-status=out_for_delivery]::before{content:"";position:absolute;top:0;left:0;right:0;height:6px;background:repeating-linear-gradient(-45deg,var(--warn) 0 10px,var(--surface) 10px 16px,var(--ok) 16px 26px,var(--surface) 26px 32px)}`,
+  `${R} .card[data-status=out_for_delivery]::before{content:"";position:absolute;top:0;left:0;right:0;height:6px;background:repeating-linear-gradient(-45deg,var(--warn) 0 10px,var(--surface) 10px 16px,var(--ok) 16px 26px,var(--surface) 26px ${AIRMAIL_REPEAT}px)}`,
   `${R} .card[data-status=out_for_delivery]>.card-h{padding-top:calc(.75rem + 4px)}`,
   // A failed attempt (board .failed, 217-223): a hatched warn edge down the left.
   `${R} .card[data-status=failed_attempt]::before{content:"";position:absolute;top:0;bottom:0;left:0;width:5px;background:repeating-linear-gradient(-45deg,var(--warn) 0 6px,transparent 6px 11px)}`,

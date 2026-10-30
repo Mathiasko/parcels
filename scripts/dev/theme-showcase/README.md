@@ -15,6 +15,7 @@ THEME=postal OUT=/tmp/showcase command npx vitest run --config scripts/dev/theme
 | `OUT` | Required. The output folder. Shots are written as `<scene>-<1280\|390>[-dark].png`, with `scenes.txt` beside them. |
 | `FRAMES=1` | Also write motion frames to `<OUT>/motion/` (see below). |
 | `SCENES=a,b` | Render only these scenes. |
+| `STRICT=0` | With `FRAMES=1`, only record a skipped motion of the page's own theme instead of failing (for a commit from before that theme had motion). |
 | `KEEP=1` | Keep the work folder (`$TMPDIR/parcels-theme-showcase`), which holds the saved HTML of every scene and frame. |
 
 Only one showcase runs at a time, because the work folder has a fixed name. That way no temp path differs
@@ -59,8 +60,16 @@ between two runs (the settings page shows the database path). A full run takes a
 ## Motion frames (`FRAMES=1`)
 
 Each motion is written as `<OUT>/motion/<motion>-<0|50|100>.png`, at 1280 px, light, with motion
-allowed. `motion/frames.txt` lists how many pixels differ between the frames. The run fails if a
-motion's middle frame matches both of its ends.
+allowed. `motion/frames.txt` lists how many pixels differ between the frames, and how far a keyframe
+motion's 100 % frame is from the scene's static 1280 shot. The run fails if:
+
+- a motion's middle frame matches both of its ends;
+- a motion of the page's own theme (`theme` in `MOTIONS`) is skipped, unless `STRICT=0`;
+- a keyframe motion's 100 % frame is off the static shot by more than 16/255 once both are averaged 4 × 4
+  pixels. Not exact equality: an element that has run an animation keeps a compositor layer, so its text and
+  ink edges anti-alias a little differently (single pixels, up to about 40/255). A wrong end state, such as a
+  lost tilt or a moved card, differs over whole areas (a postmark 8° off measures 92). The exact pixel count is
+  in `frames.txt` too. A hover or a press is not compared: it rests as the page without it.
 
 How a frame is frozen. The saved page gets one extra rule:
 
@@ -92,7 +101,7 @@ The motions are listed in `MOTIONS` in `showcase.run.ts`:
 
 | Motion | Scene | Kind |
 |---|---|---|
-| `slam` (postmark slam and card dip) | `parcel-collected` | `@keyframes slam`, `thud` |
+| `slam` (postmark slam and the status line's dip) | `parcel-collected` | `@keyframes slam`, `thud` |
 | `deal-in` | `dash` | `@keyframes deal` |
 | `ink-settle` | `dash-arrived` | `@keyframes inkin` |
 | `airmail-march` | `dash` | `@keyframes march` |
@@ -101,23 +110,11 @@ The motions are listed in `MOTIONS` in `showcase.run.ts`:
 | `proof-spin` | `refreshing` | `@keyframes spin`: the refresh spinner every theme has |
 | `proof-button-hover` | `dash` | the base `button:hover` rule |
 
-If a theme has no keyframes or rules for a motion, that motion is skipped and the skip is recorded in
-`frames.txt`. Before Task 6, Classic and Postal skip the six Postal motions and show only the two
-proofs.
-
-### For Task 6
-
-Once `POSTAL_MOTION` exists, run:
-
-```bash
-THEME=postal OUT=.superpowers/sdd/2026-10-30-themes-phase-b/shots/postal-motion FRAMES=1 \
-  command npx vitest run --config scripts/dev/theme-showcase/vitest.config.ts
-cat .superpowers/sdd/2026-10-30-themes-phase-b/shots/postal-motion/motion/frames.txt
-```
-
-None of the six may say `skipped`. If one does, check that its `@keyframes` names match the board's
-(`slam`, `thud`, `deal`, `inkin`, `march`); if Task 6 renamed them, change `MOTIONS`. Then look at the
-frames.
+Every theme is in the one stylesheet, so a motion counts only through rules for the page's theme: a rule
+that runs the keyframes (or a matching `:hover`/`:active` rule) and is unscoped or scoped to that theme's
+`:root[data-theme]`. Otherwise the motion is skipped, and the skip is recorded in `frames.txt`. Classic
+skips the six Postal motions and shows only the two proofs. Postal must have all six
+(`src/web/themes/postal-motion.ts`); if a keyframe is renamed there, change `MOTIONS` too.
 
 ## Comparing two commits
 

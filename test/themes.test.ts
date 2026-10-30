@@ -3,7 +3,9 @@ import { COLOR_TOKENS, SHAPE_TOKENS, type Theme } from '../src/web/themes/types.
 import { DEFAULT_THEME, THEMES, themeById, themeCss } from '../src/web/themes/index.js'
 import { classic } from '../src/web/themes/classic.js'
 import { postal } from '../src/web/themes/postal.js'
-import { POSTAL_ORNAMENTS, RUBBER_OPACITY } from '../src/web/themes/postal-ornaments.js'
+import { AIRMAIL_REPEAT, POSTAL_ORNAMENTS, RUBBER_OPACITY } from '../src/web/themes/postal-ornaments.js'
+import { POSTAL_MOTION } from '../src/web/themes/postal-motion.js'
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { DEFAULT_APPEARANCE, THEME_IDS } from '../src/core/appearance.js'
@@ -26,6 +28,21 @@ const PAIRS: ReadonlyArray<readonly [number, string, string]> = [
 ]
 
 const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, '')
+
+/** Every block that `opener` (a global regex ending at its "{") starts, as [start, end) spans, with its nesting. */
+function blocks(css: string, opener: RegExp): Array<[number, number]> {
+  const out: Array<[number, number]> = []
+  for (const m of css.matchAll(opener)) {
+    let depth = 1
+    let i = m.index + m[0].length
+    for (; i < css.length && depth > 0; i++) depth += css[i] === '{' ? 1 : css[i] === '}' ? -1 : 0
+    out.push([m.index, i])
+  }
+  return out
+}
+/** `css` with every block `opener` starts cut out. */
+const withoutBlocks = (css: string, opener: RegExp): string =>
+  blocks(css, opener).reverse().reduce((s, [a, b]) => s.slice(0, a) + s.slice(b), css)
 
 describe('the theme contract', () => {
   test('every theme defines every colour token in both modes, and every shape token', () => {
@@ -166,8 +183,8 @@ describe('Postal', () => {
       expect(own).toContain(`:root[data-theme="postal"] ${sel}`)
     }
     expect(own).toMatch(/font-weight:400/)
-    // every selector (text before a "{") starts with the scope
-    const media = own.replace(/@media\([^)]*\)\{/g, '')
+    // every selector (text before a "{") starts with the scope; a @keyframes block holds no selectors
+    const media = withoutBlocks(own, /@keyframes\s+[\w-]+\s*\{/g).replace(/@media\([^)]*\)\{/g, '')
     for (const m of media.matchAll(/(?:^|\})([^{}]+)\{/g)) {
       for (const sel of m[1].split(',')) expect(sel.trim().startsWith(':root[data-theme="postal"]'), sel).toBe(true)
     }
@@ -292,6 +309,113 @@ describe('Postal ornaments', () => {
     expect(over('#000000', '#ffffff', 1)).toBe('#000000')
     expect(over('#000000', '#ffffff', 0)).toBe('#ffffff')
     expect(over('#ff0000', '#0000ff', 0.5)).toBe('#800080')
+  })
+})
+
+describe('Postal motion', () => {
+  const R = ':root[data-theme="postal"]'
+  const NO_PREF = /@media\(prefers-reduced-motion:no-preference\)\{/g
+  const own = stripComments(POSTAL_MOTION)
+  /** The body of `@keyframes <name>{…}`, or undefined. */
+  const keyframes = (name: string): string | undefined => {
+    const [span] = blocks(own, new RegExp(`@keyframes ${name}\\{`, 'g'))
+    return span && own.slice(span[0], span[1]).replace(/^[^{]*\{/, '').slice(0, -1)
+  }
+  /** The declarations of the rule whose selector list is exactly `sel`. */
+  const rule = (sel: string): string | undefined => {
+    for (const m of own.matchAll(/(?<=^|[{}])([^{}]+)\{([^{}]*)\}/g)) if (m[1]!.trim() === sel) return m[2]
+    return undefined
+  }
+
+  test('is part of Postal\'s css, after the ornaments, and of no other theme', () => {
+    expect(POSTAL_MOTION.length).toBeGreaterThan(0)
+    const css = postal.css ?? ''
+    expect(css).toContain(POSTAL_MOTION)
+    expect(css.indexOf(POSTAL_MOTION)).toBeGreaterThan(css.indexOf(POSTAL_ORNAMENTS))
+    expect(themeCss(classic)).not.toMatch(/@keyframes|animation|transition|translate|rotate/)
+  })
+
+  test('is one prefers-reduced-motion:no-preference block, and Postal has no keyframes, animation or transition outside it', () => {
+    expect(blocks(own, NO_PREF)).toEqual([[0, own.length]])
+    for (const css of [stripComments(postal.css ?? ''), stripComments(themeCss(postal))]) {
+      expect(blocks(css, NO_PREF)).toHaveLength(1)
+      expect(withoutBlocks(css, NO_PREF)).not.toMatch(/animation|@keyframes|transition/)
+    }
+  })
+
+  test('has the board\'s keyframes, none of them a name the base stylesheet uses, and nothing repeats forever', () => {
+    const names = [...own.matchAll(/@keyframes ([\w-]+)\{/g)].map(m => m[1])
+    expect(names.sort()).toEqual(['deal', 'inkin', 'march', 'slam', 'thud'])
+    for (const n of names) expect(BASE_CSS).not.toContain(`@keyframes ${n}{`)
+    expect(own).not.toContain('infinite')
+  })
+
+  test('scopes every selector to data-theme="postal"', () => {
+    const inner = withoutBlocks(own, /@keyframes\s+[\w-]+\s*\{/g).replace(/@media\([^)]*\)\{/g, '')
+    const sels = [...inner.matchAll(/(?:^|\})([^{}]+)\{/g)].flatMap(m => m[1]!.split(','))
+    expect(sels.length).toBeGreaterThan(8)
+    for (const sel of sels) expect(sel.trim().startsWith(R), sel).toBe(true)
+  })
+
+  test('slams the postmark down and dips its notice or status line 3px, without a stacking context over the postmark', () => {
+    expect(rule(`${R} .orn-postmark.just-collected`)).toMatch(/^animation:slam \.55s /)
+    expect(rule(`${R} .notice:has(>div>.orn-postmark.just-collected),${R} .status:has(>.orn-postmark.just-collected)`)).toMatch(/^animation:thud \.55s /)
+    const thud = keyframes('thud')!
+    expect(thud).toContain('top:3px')
+    // the parcel page's postmark is under the status line's words only while no ancestor makes a stacking context
+    expect(thud).not.toMatch(/transform|translate|scale|rotate|filter|opacity|z-index/)
+    // the postmark's big start never gives the parcel page a sideways scroll
+    expect(rule(`${R} .frame:has(.status>.orn-postmark.just-collected)`)).toBe('overflow-x:clip')
+  })
+
+  test('the tilted ornaments keep their tilt: slam and inkin leave transform alone, and end on the static rules', () => {
+    for (const name of ['slam', 'inkin']) {
+      const kf = keyframes(name)!
+      expect(kf, name).not.toMatch(/transform/)
+      // no 100% keyframe: the end is the element's own static values, whatever they are
+      expect(kf, name).not.toMatch(/(^|\})(100%|to)[,{]/)
+    }
+    // the slam's rotate adds to the postmark's resting -10deg: -26deg at the start, as on the board
+    expect(keyframes('slam')).toMatch(/^0%\{[^}]*rotate:-16deg/)
+  })
+
+  test('deals the cards in once per load, 60ms apart up to the sixth', () => {
+    expect(rule(`${R} .card`)).toMatch(/(^|;)animation:deal \.5s cubic-bezier\(\.2,\.8,\.2,1\) 360ms both(;|$)/)
+    for (let n = 1; n <= 6; n++) expect(rule(`${R} .card:nth-child(${n} of .card)`), `card ${n}`).toBe(`animation-delay:${n * 60}ms`)
+    expect(own).not.toContain('nth-child(7')
+    // not on a page that reloads itself every few seconds while a refresh runs
+    expect(rule(`${R}:has(meta[http-equiv=refresh]) .card`)).toBe('animation:none')
+  })
+
+  test('inks in the code of a card that just arrived, keeping a PIN stamp\'s shadow', () => {
+    expect(rule(`${R} .card.just-arrived .code-plate b`)).toMatch(/^animation:inkin \.5s \.25s /)
+    expect(keyframes('inkin')).toMatch(/^0%\{[^}]*filter:var\(--orn-ink-filter,\) blur\(3px\)/)
+    expect(own).toContain(`${R} .code-plate[data-kind=counter] b,${R} .code-plate[data-kind=plain] b{--orn-ink-filter:var(--orn-stamp-shadow)}`)
+  })
+
+  test('marches the airmail edge three times, then stops, by exactly one repeat of its stripes', () => {
+    const decl = /animation:(march [^;}]*)/.exec(rule(`${R} .card[data-status=out_for_delivery]::before`) ?? '')?.[1]
+    expect(decl?.split(' ')).toContain('3')
+    // -45deg stripes repeating every AIRMAIL_REPEAT px repeat every AIRMAIL_REPEAT*sqrt(2) px across; the
+    // stripe image shrinks by that from one repeat wider than the bar to the bar itself
+    const shift = (AIRMAIL_REPEAT * Math.SQRT2).toFixed(4)
+    expect(keyframes('march')).toBe(`from{background-size:calc(100% + ${shift}px) 100%}to{background-size:100% 100%}`)
+  })
+
+  test('lifts a hovered card with translate and rotate, so it never fights the deal\'s transform', () => {
+    expect(own).toContain(`${R} .card:hover{translate:0 -3px;rotate:-.8deg}`)
+    expect(rule(`${R} .card`)).toMatch(/(^|;)transition:translate \.2s ease-out,rotate \.2s ease-out(;|$)/)
+    expect(own).not.toMatch(/:hover\{[^}]*transform/)
+  })
+
+  test('presses a button 1px down', () => {
+    expect(rule(`${R} button:active`)).toBe('translate:0 1px')
+  })
+
+  test('leaves Classic\'s css exactly as it was before Postal had motion', () => {
+    const css = themeCss(classic)
+    expect(css.length).toBe(1069)
+    expect(createHash('sha256').update(css).digest('hex')).toBe('59c7e6bd777ce227b4952ca2aef3fc1d3dbd7deac2805faf3781ca37da8df51e')
   })
 })
 

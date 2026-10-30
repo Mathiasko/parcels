@@ -1,7 +1,7 @@
 // A showcase of every card state, for looking at a theme and for diffing two commits (see README.md).
 //
 //   export PATH=$HOME/.nvm/versions/node/v24.21.0/bin:$PATH
-//   THEME=postal|classic OUT=<dir> [FRAMES=1] [SCENES=dash,settings] [KEEP=1] \
+//   THEME=postal|classic OUT=<dir> [FRAMES=1 [STRICT=0]] [SCENES=dash,settings] [KEEP=1] \
 //     command npx vitest run --config scripts/dev/theme-showcase/vitest.config.ts
 //
 // One long "test" that seeds throw-away databases through the REAL db helpers (parcels, events, pickup
@@ -151,7 +151,8 @@ const SCENES: Scene[] = [
   { name: 'dash-collected-notice', world: 'board', url: ids => `/?collected=${ids.collected}`, has: [cards(8), 'class="undo"'],
     hooks: ['<div class="notice just-collected"', '<span class="orn-postmark just-collected" aria-hidden="true">'] },
   { name: 'dash-arrived', world: 'board', url: ids => `/?run=${ids.run}`, has: [cards(8), 'Polled 8 parcels.'],
-    hooks: [/^(?![\s\S]*just-arrived[\s\S]*just-arrived)[\s\S]*<article class="card just-arrived" data-status="ready_for_pickup">/] },
+    // exactly one card is just-arrived (the stylesheet names the class too, so count only cards)
+    hooks: [/^(?![\s\S]*class="card just-arrived[\s\S]*class="card just-arrived)[\s\S]*<article class="card just-arrived" data-status="ready_for_pickup">/] },
   { name: 'parcel-box', world: 'board', url: ids => `/parcel/${ids.zbox}`, has: ['Open the box with', '631285'], hooks: ['data-kind="box"', 'Z-BOX · Packeta'] },
   { name: 'parcel-counter', world: 'board', url: ids => `/parcel/${ids.parcelshop}`, has: ['Show this PIN at the counter:', '7731'],
     hooks: ['data-kind="counter"', 'ParcelShop · GLS'] },
@@ -172,6 +173,8 @@ const SCENES: Scene[] = [
  */
 interface Motion {
   name: string; scene: string
+  /** The theme the motion belongs to: on that theme's pages a skip fails the run (unless STRICT=0). */
+  theme?: string
   keyframes?: string[]
   state?: { pseudo: ':hover' | ':active'; rule: RegExp; target: (html: string) => string }
 }
@@ -187,14 +190,14 @@ const onFirst = (re: RegExp) => (html: string): string => {
 const firstCard = onFirst(/(<article class="card[^>]*>)/)
 /** The first card's "Mark as collected": the first button that is not folded away in a closed <details>. */
 const markButton = onFirst(/<article class="card[\s\S]*?action="\/parcel\/\d+\/collected"[^>]*>[\s\S]*?(<button\b[^>]*>)/)
-/** Spec §3.3 and plan Task 6. The keyframe names are the board's; if Task 6 names them otherwise, change them here. */
+/** Spec §3.3 and Postal's motion (src/web/themes/postal-motion.ts), with the board's keyframe names. */
 const MOTIONS: Motion[] = [
-  { name: 'slam', scene: 'parcel-collected', keyframes: ['slam', 'thud'] },
-  { name: 'deal-in', scene: 'dash', keyframes: ['deal'] },
-  { name: 'ink-settle', scene: 'dash-arrived', keyframes: ['inkin'] },
-  { name: 'airmail-march', scene: 'dash', keyframes: ['march'] },
-  { name: 'hover-lift', scene: 'dash', state: { pseudo: ':hover', rule: /\.card:hover$/, target: firstCard } },
-  { name: 'button-press', scene: 'dash', state: { pseudo: ':active', rule: /button[^\s]*:active$/, target: markButton } },
+  { name: 'slam', scene: 'parcel-collected', theme: 'postal', keyframes: ['slam', 'thud'] },
+  { name: 'deal-in', scene: 'dash', theme: 'postal', keyframes: ['deal'] },
+  { name: 'ink-settle', scene: 'dash-arrived', theme: 'postal', keyframes: ['inkin'] },
+  { name: 'airmail-march', scene: 'dash', theme: 'postal', keyframes: ['march'] },
+  { name: 'hover-lift', scene: 'dash', theme: 'postal', state: { pseudo: ':hover', rule: /\.card:hover$/, target: firstCard } },
+  { name: 'button-press', scene: 'dash', theme: 'postal', state: { pseudo: ':active', rule: /button[^\s]*:active$/, target: markButton } },
   // The mechanism's own proof, on what every theme already has: the refresh spinner and a button's hover.
   { name: 'proof-spin', scene: 'refreshing', keyframes: ['spin'] },
   { name: 'proof-button-hover', scene: 'dash', state: { pseudo: ':hover', rule: /^button:hover$/, target: markButton } },
@@ -231,19 +234,33 @@ function selectors(list: string): string[] {
   return out
 }
 
-/** The page's CSS for one frame, or undefined when the theme has nothing for this motion. */
-function frameCss(css: string, m: Motion, pct: number): string | undefined {
+/**
+ * Whether a selector can match on a page in `theme`: every theme is in the one stylesheet, so a rule scoped
+ * to another theme's `:root[data-theme]` never applies. Without a theme (a build from before themes),
+ * only unscoped rules exist.
+ */
+const forTheme = (theme: string | undefined) => (sel: string): boolean => {
+  const scope = /^:root\[data-theme="([\w-]+)"\]/.exec(sel.trim())
+  return !scope || scope[1] === theme
+}
+
+/** The page's CSS for one frame, or undefined when the page's theme has nothing for this motion. */
+function frameCss(css: string, theme: string | undefined, m: Motion, pct: number): string | undefined {
   let extra = ''
   let keep: Set<string>
+  const applies = forTheme(theme)
   if (m.keyframes) {
     keep = new Set(m.keyframes)
     if (!keyframeBlocks(css).some(b => keep.has(b.name))) return undefined
+    // ... and a rule of this theme runs one of them (innermost rules: an @media block is taken as applying)
+    const runs = (decls: string) => [...decls.matchAll(/animation(?:-name)?\s*:([^;]*)/g)].some(d => d[1]!.split(/[\s,]+/).some(w => keep.has(w)))
+    if (![...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].some(r => runs(r[2]!) && selectors(r[1]!).some(applies))) return undefined
   } else {
     const { pseudo, rule } = m.state!
     keep = new Set()
     // Innermost rules only: a :hover rule inside an @media block is taken as if the block applied.
     for (const r of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      const sels = selectors(r[1]!).filter(s => s.includes(pseudo) && rule.test(s))
+      const sels = selectors(r[1]!).filter(s => s.includes(pseudo) && rule.test(s) && applies(s))
       if (!sels.length) continue
       const name = `frz-s${keep.size}`
       keep.add(name)
@@ -297,13 +314,28 @@ async function chrome(profile: string, htmlFile: string, out: string, width: num
   return { sd, size }
 }
 
+const sizeOf = async (f: string) => String((await exec(MAGICK, [f, '-format', '%wx%h', 'info:'])).stdout)
+
 /** How many pixels differ between two shots (any channel, any amount), or Infinity when their sizes differ. */
 async function diffPx(a: string, b: string): Promise<number> {
-  const size = async (f: string) => String((await exec(MAGICK, [f, '-format', '%wx%h', 'info:'])).stdout)
-  if (await size(a) !== await size(b)) return Infinity
+  if (await sizeOf(a) !== await sizeOf(b)) return Infinity
   return Number(String((await exec(MAGICK, [a, b, '-compose', 'difference', '-composite', '-colorspace', 'gray', '-threshold', '0',
     '-format', '%[fx:round(mean*w*h)]', 'info:'])).stdout))
 }
+
+/**
+ * How far apart two shots are once anti-aliasing is averaged out: the largest grey difference (0-255) after
+ * both are box-averaged 4 by 4, or Infinity when their sizes differ. An element that has run an animation
+ * keeps a compositor layer, so its text and ink edges anti-alias a little differently from a page that never
+ * animated (single pixels, mostly under 40/255); a wrong end state (a lost tilt, a missing postmark, a moved
+ * card) differs over whole areas, far above REST_TOLERANCE.
+ */
+async function blurredDiff(a: string, b: string): Promise<number> {
+  if (await sizeOf(a) !== await sizeOf(b)) return Infinity
+  return Number(String((await exec(MAGICK, [a, b, '-compose', 'difference', '-composite', '-colorspace', 'gray',
+    '-filter', 'box', '-resize', '25%', '-format', '%[fx:round(maxima*255)]', 'info:'])).stdout))
+}
+const REST_TOLERANCE = 16
 
 async function pool<T>(items: T[], n: number, fn: (item: T, worker: number) => Promise<void>) {
   let next = 0
@@ -319,6 +351,8 @@ test('theme showcase', async () => {
   if (!process.env.OUT) throw new Error('OUT=<dir> is required')
   const OUT = resolve(process.env.OUT)
   const FRAMES = process.env.FRAMES === '1'
+  // A theme's own motion skipped on its own pages fails the run; STRICT=0 (an older commit) only records it.
+  const STRICT = process.env.STRICT !== '0'
   const only = process.env.SCENES?.split(',').filter(Boolean)
   // A fixed folder, not mktemp: no temp path differs between two runs (the settings page shows the
   // database's path). One showcase at a time.
@@ -400,15 +434,21 @@ test('theme showcase', async () => {
       rmSync(dir, { recursive: true, force: true })
       mkdirSync(dir, { recursive: true })
       const report: string[] = []
+      /** The page theme's own motions that were skipped. */
+      const missing: string[] = []
+      const offRest: string[] = []
       const frameJobs: Array<{ m: Motion; pct: number; htmlFile: string }> = []
       for (const m of MOTIONS) {
         const base = pages.get(m.scene)
         if (!base) { report.push(`${m.name}: skipped (scene ${m.scene} not rendered)`); continue }
         const page = m.state ? m.state.target(base) : base
         const css = /<style>([\s\S]*?)<\/style>/.exec(page)![1]!
-        const per = PCTS.map(pct => frameCss(css, m, pct))
+        const theme = /<html [^>]*data-theme="([\w-]+)"/.exec(page)?.[1]
+        const per = PCTS.map(pct => frameCss(css, theme, m, pct))
         if (per.some(c => c === undefined)) {
-          report.push(`${m.name}: skipped (this theme has no ${m.keyframes ? `@keyframes ${m.keyframes.join('/')}` : `${m.state!.pseudo} rule matching ${m.state!.rule}`})`)
+          const what = m.keyframes ? `rule running @keyframes ${m.keyframes.join('/')}` : `${m.state!.pseudo} rule matching ${m.state!.rule}`
+          report.push(`${m.name}: skipped (theme ${theme ?? '(none)'} has no ${what})`)
+          if (STRICT && m.theme && m.theme === theme) missing.push(m.name)
           continue
         }
         PCTS.forEach((pct, i) => {
@@ -424,11 +464,22 @@ test('theme showcase', async () => {
       for (const m of MOTIONS.filter(x => frameJobs.some(j => j.m === x))) {
         const f = (p: number) => join(dir, `${m.name}-${p}.png`)
         const [a, b, c] = [await diffPx(f(0), f(50)), await diffPx(f(50), f(100)), await diffPx(f(0), f(100))]
-        report.push(`${m.name}: pixels differing 0→50 ${a}, 50→100 ${b}, 0→100 ${c}`)
+        // A keyframe motion's 100 % against the scene's static shot (reduced motion): a motion ends on the
+        // static page. (A hover or a press rests as the page without them, which is the static page as is.)
+        const still = join(OUT, `${m.scene}-1280.png`)
+        let rest = 'n/a'
+        if (m.keyframes && existsSync(still)) {
+          const [px, avg] = [await diffPx(f(100), still), await blurredDiff(f(100), still)]
+          rest = `${px} px, ${avg}/255 averaged 4x4`
+          if (avg > REST_TOLERANCE) offRest.push(`${m.name} (${rest})`)
+        }
+        report.push(`${m.name}: pixels differing 0→50 ${a}, 50→100 ${b}, 0→100 ${c}; 100 % vs the static shot: ${rest}`)
         // A frozen motion moves: its middle frame differs from at least one end.
         expect(a > 0 || b > 0, `${m.name}: the three frames are the same`).toBe(true)
       }
       writeFileSync(join(dir, 'frames.txt'), `${report.join('\n')}\n`)
+      expect(missing, 'motions of this theme that were skipped').toEqual([])
+      expect(offRest, `motions whose 100 % frame is off the static page (over ${REST_TOLERANCE}/255 averaged 4x4)`).toEqual([])
       manifest.push('', 'motion frames (1280, light, motion allowed):', ...report)
     }
 
