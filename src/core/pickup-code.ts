@@ -14,7 +14,7 @@ export interface PickupCodeDeps {
 
 export interface PickupCodeReport {
   scanned: number
-  /** Pickup codes (a Z-BOX opening code, a GLS BOX or DPD PIN, ...) found. */
+  /** Pickup codes and PINs found: the code that opens a box, or the PIN shown at a counter. */
   found: number
   /** Parcels that gained a pickup point, or the detail of one, from their own mail. */
   points: number
