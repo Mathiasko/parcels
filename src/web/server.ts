@@ -7,7 +7,7 @@ import {
 } from '../core/config.js'
 import type { CarrierId } from '../core/types.js'
 import type { Database } from '../db/index.js'
-import { latestEvent, listEvents, userMark, userMarks } from '../db/events.js'
+import { latestEvent, listEvents, userMark, userMarks, type UserMark } from '../db/events.js'
 import { markCollected, undoCollected } from '../core/collected.js'
 import { deleteParcel, getParcel, listActive, parcelName, type Parcel } from '../db/parcels.js'
 import type { Carrier, HttpClient } from '../core/types.js'
@@ -404,7 +404,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    */
   const runState = (
     query: Record<string, unknown>, now: Date, active?: number,
-  ): { note?: RefreshNote; reloadIn?: number } => {
+  ): { note?: RefreshNote; reloadIn?: number; finishedSince?: Date } => {
     const id = one(query.run)
     if (id === undefined || !/^\d{1,12}$/.test(id)) return { note: refreshNote(query) }
     reapStaleRuns(db, now)
@@ -418,6 +418,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
         polled: run.polled, failures: run.failures, busy: false,
         read: run.mailRead, created: run.created, active, error: run.error,
       },
+      finishedSince: run.startedAt,
     }
   }
 
@@ -438,8 +439,12 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     }))
     const c = ctx()
     const r = runState(query, c.now, entries.length)
+    // Ready, with a code, and moved since the finished run began: what that run brought in.
+    const since = r.finishedSince
+    const justArrived = since && new Set(entries.filter(({ parcel: p, code }) => p.status === 'ready_for_pickup'
+      && code !== undefined && p.lastChangedAt !== undefined && p.lastChangedAt >= since).map(e => e.parcel.id))
     return send(reply, indexPage(entries, { ...c, reloadIn: r.reloadIn }, r.note, {
-      mailConfigured: config.imap !== undefined, collected: justCollected(query, c.now),
+      mailConfigured: config.imap !== undefined, collected: justCollected(query, c.now), justArrived,
       calendar: calendarResult(query, c.now),
       calendarRefused: refusedElsewhere(refused, active),
     }), status)
@@ -457,8 +462,13 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const parcel = id === undefined ? undefined : parcelFor(id)
     const mark = parcel && userMark(db, parcel.id)
     if (!parcel || !mark || parcel.archivedAt !== undefined) return undefined
+    return isRecent(mark, at) ? { parcel, mark } : undefined
+  }
+
+  /** Whether a mark is recent enough for its one-shot notice or postmark (see `COLLECTED_NOTICE_MS`). */
+  const isRecent = (mark: UserMark, at: Date) => {
     const age = at.getTime() - mark.at.getTime()
-    return age >= 0 && age <= COLLECTED_NOTICE_MS ? { parcel, mark } : undefined
+    return age >= 0 && age <= COLLECTED_NOTICE_MS
   }
 
   /**
@@ -479,12 +489,15 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     // page's refresh only ever asked about one parcel.
     const r = runState(query, c.now)
     const result = calendarResult(query, c.now)
+    const mark = userMark(db, parcel.id)
     return send(reply, parcelPage(
       parcel, listEvents(db, parcel.id), rawResponsesFor(db, parcel.id, parcel.carrier),
       { ...c, reloadIn: r.reloadIn }, r.note, mapFor(parcel),
       parcel.status === 'ready_for_pickup' ? getPickupCode(db, parcel.id) : undefined,
-      userMark(db, parcel.id),
+      mark,
       {
+        // `?collected=1` is where marking from this page lands; like the dashboard's, it is one-shot.
+        justCollected: one(query.collected) === '1' && mark !== undefined && isRecent(mark, c.now),
         cal: calState(parcel, getCalendarEvent(db, parcel.id), refused),
         calendar: result?.parcel.id === parcel.id ? result.outcome : undefined,
         calendarRefused: refusedElsewhere(refused, [parcel]),
@@ -1054,7 +1067,8 @@ export function buildServer(deps: WebDeps): FastifyInstance {
    * double click, not an error worth a page of its own.
    *
    * From the dashboard (`back=home`) a mark lands on the dashboard with the Undo notice, and an undo
-   * lands back on the dashboard, where the parcel has reappeared. From anywhere else, the parcel page.
+   * lands back on the dashboard, where the parcel has reappeared. From anywhere else, the parcel page; a
+   * mark lands on it as `?collected=1`, which gives its postmark the one-shot `just-collected`.
    */
   app.post<{ Params: { id: string } }>('/parcel/:id/collected', async (req, reply) => {
     const parcel = parcelFor(req.params.id)
@@ -1062,7 +1076,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const home = text(form(req).back) === 'home'
     const r = markCollected(db, parcel.id, acted())
     if (!r.ok) return reply.redirect(home ? '/' : `/parcel/${parcel.id}`, 303)
-    return reply.redirect(home ? `/?collected=${parcel.id}` : `/parcel/${parcel.id}`, 303)
+    return reply.redirect(home ? `/?collected=${parcel.id}` : `/parcel/${parcel.id}?collected=1`, 303)
   })
 
   app.post<{ Params: { id: string } }>('/parcel/:id/uncollected', async (req, reply) => {

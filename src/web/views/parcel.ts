@@ -4,11 +4,12 @@ import type { StoredEvent, UserMark } from '../../db/events.js'
 import { canMark, markKindFor } from '../../core/collected.js'
 import type { RawResponse } from '../queries.js'
 import {
-  CARRIER_NAME, dayKey, formatClock, formatDateTime, formatDayHeading, isKnown, plural,
+  CARRIER_NAME, DISPLAY_ZONE, dayKey, formatClock, formatDateTime, formatDayHeading, isKnown, plural,
   quietIndicator, statusIndicator, toneClass, userMarkIndicator,
 } from './format.js'
 import { STATUS_TITLE } from '../../notify/rules.js'
 import { glyph } from './glyphs.js'
+import { postmark } from './ornaments.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
 import {
@@ -170,10 +171,12 @@ function deleteSection(p: Parcel): Html {
  * with events shows nothing: the timeline's first row is the status. Without events, an archived parcel says so
  * and a live one says it has had no updates; never "yet" about a parcel that will not change.
  */
-function statusLine(p: Parcel, events: StoredEvent[], mark?: UserMark): Html {
+function statusLine(p: Parcel, events: StoredEvent[], mark?: UserMark, justCollected = false): Html {
   // The user's own word, said as theirs and with the way back beside it: "Collected — marked by you · Undo".
+  // A collected one (not a received one: the stamp says COLLECTED) also carries the postmark.
   if (mark && p.status === 'delivered') {
-    return html`${userMarkIndicator(mark.kind)}<span class="meta">— marked by you ·</span>${undoForm(p)}`
+    return html`${userMarkIndicator(mark.kind)}<span class="meta">— marked by you ·</span>${undoForm(p)}${
+      mark.kind === 'collected' ? postmark(mark.at, DISPLAY_ZONE, justCollected) : ''}`
   }
   // A parcel waiting at a known place says so in the pickup panel's header; saying it twice is noise.
   if (p.status === 'ready_for_pickup' && pickupSummary(p)) return html``
@@ -224,6 +227,8 @@ export interface ParcelPageOptions {
   calendar?: CalendarOutcome
   /** An "Add to Calendar" submission refused when this parcel no longer shows the form to say it in. */
   calendarRefused?: string
+  /** The page right after "Mark as collected" from it (`?collected=1`, while the mark is recent): the postmark's one shot. */
+  justCollected?: boolean
 }
 
 export function parcelPage(
@@ -236,7 +241,7 @@ export function parcelPage(
 <div class="cols"><div>
 <div class="head"><h1 class="big">${parcelName(p)}</h1>
   ${isTracked(p) ? html`<form class="inline" method="post" action="/refresh"><input type="hidden" name="parcel" value="${p.id}"><button>Refresh this parcel</button></form>` : ''}</div>
-${statusBox(statusLine(p, events, mark))}
+${statusBox(statusLine(p, events, mark, opts.justCollected))}
 <p class="meta">${CARRIER_NAME[p.carrier]} · <span class="mono sel">${p.trackingNumber}</span>${p.merchant && p.merchant !== parcelName(p) ? html` · ${p.merchant}` : ''}${p.statusRaw ? html` · carrier says: ${p.statusRaw}` : ''}</p>${
   // Said on every email-only parcel, with or without events: it is why there is no refresh button and
   // why the timeline is whatever the mail said, which is not guessable from the page otherwise.

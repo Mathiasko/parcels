@@ -8,7 +8,9 @@ import { buildServer } from '../src/web/server.js'
 import { insertParcel, updateParcelState } from '../src/db/parcels.js'
 import { appendEvents } from '../src/db/events.js'
 import { recordPickupCode } from '../src/db/pickup-codes.js'
-import { codeKind, placeName, postmarkDate, rubberText } from '../src/web/views/ornaments.js'
+import { codeKind, placeName, postmark, postmarkDate, rubberText } from '../src/web/views/ornaments.js'
+import { markCollected } from '../src/core/collected.js'
+import { finishRun, startRun } from '../src/db/poll-runs.js'
 import { pickupCodeLine } from '../src/web/views/index.js'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -200,9 +202,12 @@ describe('rubber stamp, empty headline and the orn- rule', () => {
     expect(body).toContain('<span class="orn-place" aria-hidden="true">Z-BOX · Packeta</span>')
   })
   test('every orn- element on the pages is aria-hidden', async () => {
-    const bodies = [await page(() => {}), await page(failed('Adresát nezastihnutý')), await page(withCode)]
+    const collected = (db: Db) => { withCode(db); markCollected(db, 1, { actor: 'web', at: NOW }) }
+    const bodies = [await page(() => {}), await page(failed('Adresát nezastihnutý')), await page(withCode),
+      await page(collected, '/parcel/1?collected=1'), await page(collected, '/?collected=1')]
     const tags = bodies.flatMap(ornTags)
-    expect(tags.length).toBeGreaterThanOrEqual(3)
+    expect(tags.filter(t => t.includes('orn-postmark'))).toHaveLength(2)
+    expect(tags.length).toBeGreaterThanOrEqual(5)
     for (const t of tags) expect(t, t).toContain('aria-hidden="true"')
   })
   test('the base CSS hides every orn- class in one rule, outside any theme scope', () => {
@@ -219,5 +224,104 @@ describe('rubber stamp, empty headline and the orn- rule', () => {
       for (const tok of m[1]!.split(/\s+/)) if (tok.startsWith('orn-')) expect(allowed).toContain(tok)
     }
     expect(src).not.toMatch(/class="[^"]*\b[a-z]+ orn[^-]/)
+  })
+})
+
+describe('the postmark and the one-shot markers', () => {
+  type Db = ReturnType<typeof memDb>
+  const MIN = 60_000
+  const serverAt = (db: Db, at: Date) => buildServer({ db, config, now: () => at, notifier: { send: async () => {} } })
+  /** The page without its inlined stylesheet, so a theme's selectors cannot satisfy an assertion. */
+  const get = async (db: Db, url: string, at = NOW) =>
+    (await serverAt(db, at).inject({ method: 'GET', url })).body.replace(/<style>[\s\S]*?<\/style>/, '')
+  const ready = (db: Db, number: string, place: string, changed: Date, code?: string) => {
+    const id = insertParcel(db, { carrier: 'packeta', trackingNumber: number, source: 'email' })
+    updateParcelState(db, id, { status: 'ready_for_pickup', pickup: { kind: 'zbox', name: place }, lastChangedAt: changed })
+    if (code) recordPickupCode(db, id, code, 1, NOW)
+    return id
+  }
+  const cardOf = (body: string, place: string) => {
+    const i = body.indexOf(`<h2>${place}</h2>`)
+    return body.slice(body.lastIndexOf('<article', i), i)
+  }
+
+  test('the slot: an aria-hidden span, the sprite ring, and the date and time in the display zone', () => {
+    const out = text(postmark(new Date('2026-11-06T13:05:00Z'), 'Europe/Bratislava', false))
+    expect(out).toMatch(/^<span class="orn-postmark" aria-hidden="true"><svg viewBox="0 0 236 142"><use href="#postmark-ring"\/>/)
+    expect(out).toMatch(/<text [^>]*>6·XI·26<\/text><text [^>]*>14:05<\/text>/)
+    expect(text(postmark(new Date('2026-11-06T13:05:00Z'), 'Europe/Bratislava', true)))
+      .toMatch(/^<span class="orn-postmark just-collected" aria-hidden="true">/)
+  })
+  test('the sprite has the ring, with its own filter and arc, and the arc names no town', () => {
+    const sprite = text(SPRITE)
+    expect(sprite).toContain('<symbol id="postmark-ring" viewBox="0 0 236 142">')
+    const defs = sprite.slice(sprite.indexOf('<defs>'), sprite.indexOf('</defs>'))
+    for (const m of sprite.matchAll(/filter="url\(#([^)]+)\)"/g)) expect(defs).toContain(`<filter id="${m[1]}"`)
+    for (const m of sprite.matchAll(/<textPath href="#([^"]+)"/g)) expect(defs).toContain(`<path id="${m[1]}"`)
+    expect(sprite).toContain('>PARCELS ✶ COLLECTED ✶</textPath>')
+    expect(sprite).not.toContain('FIKTÍVNE')
+  })
+
+  test('marking from the parcel page lands on it with ?collected=1, and the postmark slams once', async () => {
+    const db = memDb()
+    const id = ready(db, 'Z1', 'Z-BOX Hlavna 6', new Date(NOW.getTime() - 5 * 60 * MIN))
+    const res = await serverAt(db, NOW).inject({
+      method: 'POST', url: `/parcel/${id}/collected`, payload: '', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    })
+    expect(res.statusCode).toBe(303)
+    expect(res.headers.location).toBe(`/parcel/${id}?collected=1`)
+    const now = await get(db, `/parcel/${id}?collected=1`)
+    expect(now).toContain('<span class="orn-postmark just-collected" aria-hidden="true">')
+    // 26 October 2026 is CET, an hour ahead of UTC.
+    expect(now).toMatch(/>26·X·26<\/text><text [^>]*>11:00<\/text>/)
+    const later = await get(db, `/parcel/${id}?collected=1`, new Date(NOW.getTime() + 61 * MIN))
+    expect(later).toContain('<span class="orn-postmark" aria-hidden="true">')
+    expect(later).not.toContain('just-collected')
+    const plain = await get(db, `/parcel/${id}`)
+    expect(plain).toContain('<span class="orn-postmark" aria-hidden="true">')
+    expect(plain).not.toContain('just-collected')
+  })
+  test('a parcel that is not collected has no postmark, whatever the URL says', async () => {
+    const db = memDb()
+    const id = ready(db, 'Z1', 'Z-BOX Hlavna 6', NOW)
+    expect(await get(db, `/parcel/${id}?collected=1`)).not.toContain('orn-postmark')
+    const received = insertParcel(db, { carrier: 'packeta', trackingNumber: 'Z2', source: 'email' })
+    updateParcelState(db, received, { status: 'in_transit' })
+    markCollected(db, received, { actor: 'web', at: NOW })
+    // Marked as received, not collected: the stamp says COLLECTED, so it is not put on this one.
+    expect(await get(db, `/parcel/${received}?collected=1`)).not.toContain('orn-postmark')
+    expect(await get(db, `/?collected=${received}`)).not.toContain('orn-postmark')
+  })
+  test('the dashboard notice for a recent mark carries just-collected and the postmark', async () => {
+    const db = memDb()
+    const id = ready(db, 'Z1', 'Z-BOX Hlavna 6', NOW)
+    markCollected(db, id, { actor: 'web', at: new Date(NOW.getTime() - 10 * MIN) })
+    const body = await get(db, `/?collected=${id}`)
+    expect(body).toMatch(/<div class="notice just-collected" role="status"><div><div class="undo">[\s\S]*?<\/div><span class="orn-postmark just-collected" aria-hidden="true">[\s\S]*?>10:50<\/text><\/svg><\/span><\/div><\/div>/)
+    expect(await get(db, '/')).not.toContain('orn-postmark')
+  })
+
+  test('/?run=<finished> marks the cards whose parcel turned ready with a code after the run started', async () => {
+    const db = memDb()
+    const run = startRun(db, 'web', new Date(NOW.getTime() - 10 * MIN))
+    ready(db, 'Z1', 'Z-BOX New', new Date(NOW.getTime() - 5 * MIN), '631285')
+    ready(db, 'Z2', 'Z-BOX Old', new Date(NOW.getTime() - 30 * MIN), '111111')
+    ready(db, 'Z3', 'Z-BOX Codeless', new Date(NOW.getTime() - 5 * MIN))
+    finishRun(db, run, { counts: { polled: 3, newEvents: 3, failures: 0 }, summary: '' }, NOW)
+    const body = await get(db, `/?run=${run}`)
+    expect(cardOf(body, 'Z-BOX New')).toMatch(/^<article class="card just-arrived" data-status="ready_for_pickup">/)
+    expect(cardOf(body, 'Z-BOX Old')).toMatch(/^<article class="card" data-status="ready_for_pickup">/)
+    expect(cardOf(body, 'Z-BOX Codeless')).toMatch(/^<article class="card" data-status="ready_for_pickup">/)
+    expect(await get(db, '/')).not.toContain('just-arrived')
+  })
+  test('a running run, or an unknown one, marks nothing', async () => {
+    const db = memDb()
+    // Two minutes old: well inside RUN_STALE_MS, so it is still running rather than reaped.
+    const run = startRun(db, 'web', new Date(NOW.getTime() - 2 * MIN))
+    ready(db, 'Z1', 'Z-BOX New', new Date(NOW.getTime() - MIN), '631285')
+    const body = await get(db, `/?run=${run}`)
+    expect(body).toContain('Refreshing.')
+    expect(body).not.toContain('just-arrived')
+    expect(await get(db, '/?run=999')).not.toContain('just-arrived')
   })
 })

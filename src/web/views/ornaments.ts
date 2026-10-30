@@ -55,3 +55,18 @@ export function postmarkDate(at: Date, zone: string): { date: string; time: stri
   const t = DateTime.fromJSDate(at, { zone })
   return { date: `${t.day}·${ROMAN[t.month - 1]}·${String(t.year % 100).padStart(2, '0')}`, time: t.toFormat('HH:mm') }
 }
+
+/**
+ * The postmark slot: the sprite's ring (`#postmark-ring`) with the mark's own date and time stamped into
+ * it. `oneShot` adds `just-collected`, for the one view right after the click that a theme may animate.
+ * A decoration beside the words that already say the parcel is collected, hence `aria-hidden`.
+ */
+export function postmark(at: Date, zone: string, oneShot: boolean): Html {
+  const { date, time } = postmarkDate(at, zone)
+  const cls = oneShot ? 'orn-postmark just-collected' : 'orn-postmark'
+  return html`<span class="${cls}" aria-hidden="true"><svg viewBox="0 0 236 142"><use href="#postmark-ring"/>${
+    stampText(68, 21, date)}${stampText(88, 13, time)}</svg></span>`
+}
+
+const stampText = (y: number, size: number, s: string): Html =>
+  html`<text x="60" y="${y}" text-anchor="middle" filter="url(#pm-rough)" style="font-family:var(--font-mono)" font-weight="700" font-size="${size}" fill="currentColor">${s}</text>`

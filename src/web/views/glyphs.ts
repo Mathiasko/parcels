@@ -41,7 +41,29 @@ const POSTAL: Partial<Record<GlyphName, string>> = {
   delivered: '<circle cx="9" cy="12" r="6.3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="12" r="1.8" fill="currentColor"/><path d="M13 8.2q2.5-2 5 0t5 0M14.6 12q2-1.6 4.2 0t4.2 0M13 15.8q2.5-2 5 0t5 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
 }
 
-export const SPRITE: Html = raw(`<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false"><defs>${POSTAL_MASK}${
+/**
+ * The postmark's ring, from the mood board's `postmark`: two rough circles, the arc's words and the wavy
+ * cancellation lines, drawn once here. The date and time differ per mark, so each postmark carries its
+ * own two `<text>`s beside a `<use>` of this (see `postmark` in ornaments.ts). The board's town is
+ * dropped from the arc. The filter and the arc path are document-wide ids, so they are prefixed `pm-`.
+ * The font is a theme token through an inline style, because an SVG presentation attribute cannot read
+ * a custom property; `style-src 'unsafe-inline'` allows it.
+ */
+const POSTMARK_DEFS = '<filter id="pm-rough" x="-10%" y="-10%" width="120%" height="120%">'
+  + '<feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7" result="t"/>'
+  + '<feDisplacementMap in="SourceGraphic" in2="t" scale="2.6" result="d"/>'
+  + '<feTurbulence type="fractalNoise" baseFrequency=".35" numOctaves="2" seed="3" result="s"/>'
+  + '<feColorMatrix in="s" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.4 2.05" result="sm"/>'
+  + '<feComposite in="d" in2="sm" operator="in"/></filter>'
+  + '<path id="pm-arc" d="M20 60a40 40 0 1 1 80 0a40 40 0 1 1 -80 0"/>'
+  + '<symbol id="postmark-ring" viewBox="0 0 236 142"><g filter="url(#pm-rough)" fill="none" stroke="currentColor">'
+  + '<circle cx="60" cy="71" r="52" stroke-width="4"/><circle cx="60" cy="71" r="34" stroke-width="1.6"/>'
+  + '<g transform="translate(0 11)"><text style="font-family:var(--font-body)" font-weight="800" font-size="11.5" letter-spacing="2.6" fill="currentColor" stroke="none">'
+  + '<textPath href="#pm-arc" startOffset="0">PARCELS ✶ COLLECTED ✶</textPath></text></g>'
+  + '<path d="M118 44q14-10 28 0t28 0t28 0t28 0M118 62q14-10 28 0t28 0t28 0t28 0M118 80q14-10 28 0t28 0t28 0t28 0M118 98q14-10 28 0t28 0t28 0t28 0" stroke-width="3.4" stroke-linecap="round"/>'
+  + '</g></symbol>'
+
+export const SPRITE: Html = raw(`<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false"><defs>${POSTAL_MASK}${POSTMARK_DEFS}${
   (Object.keys(SYMBOLS) as GlyphName[]).map(n => `<symbol id="g-${n}" viewBox="0 0 16 16">${SYMBOLS[n]}</symbol>`).join('')
 }${
   (Object.keys(SYMBOLS) as GlyphName[]).map(n => {

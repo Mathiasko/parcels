@@ -432,7 +432,7 @@ describe('POST /parcel/:id/collected and /uncollected', () => {
     const db = memDb()
     const id = parcelIn(db, 'ready_for_pickup', { label: 'engaro.sk' })
     const res = await post(db, `/parcel/${id}/collected`)
-    expect(res.headers.location).toBe(`/parcel/${id}`)
+    expect(res.headers.location).toBe(`/parcel/${id}?collected=1`)
     const body = await get(db, `/parcel/${id}`)
     expect(body).toContain(`<div class="status"><span class="st t-ok" data-status="collected">`)
     expect(body).toMatch(/<\/svg>Collected<\/span><span class="meta">— marked by you ·<\/span>/)

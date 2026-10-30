@@ -4,11 +4,11 @@ import type { StoredEvent, UserMark } from '../../db/events.js'
 import type { CanonicalStatus, CarrierId, PickupPoint } from '../../core/types.js'
 import { isEmailOnlyCarrier } from '../../core/types.js'
 import {
-  calendarDaysBetween, CARRIER_NAME, formatAgo, formatDateTime, formatDay, isKnown, plural, quietIndicator,
+  calendarDaysBetween, CARRIER_NAME, DISPLAY_ZONE, formatAgo, formatDateTime, formatDay, isKnown, plural, quietIndicator,
   statusIndicator,
 } from './format.js'
 import { glyph } from './glyphs.js'
-import { codeKind, placeLine, rubberStamp } from './ornaments.js'
+import { codeKind, placeLine, postmark, rubberStamp } from './ornaments.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
 import { calendarForm, calendarNotice, calendarOffered, type CalendarFormState, type CalendarOutcome } from './calendar-form.js'
@@ -186,10 +186,15 @@ export function undoForm(p: Parcel, back?: 'home'): Html {
  * where it went and offers to put it back. The server shows this only for a parcel that really IS marked
  * right now, recently, so a bookmarked `?collected=` can neither replay a stale notice nor offer to
  * undo something that is no longer there.
+ *
+ * A collected mark also carries the postmark, and the notice `just-collected` (it only ever shows right
+ * after the click). Not a received one: the stamp says COLLECTED.
  */
-export function collectedNotice(c: { parcel: Parcel; mark: Pick<UserMark, 'kind'> } | undefined): Html {
+export function collectedNotice(c: { parcel: Parcel; mark: Pick<UserMark, 'kind' | 'at'> } | undefined): Html {
   if (!c) return html``
-  return notice('neutral', html`<div class="undo"><p>Marked <strong>${parcelName(c.parcel)}</strong> as ${c.mark.kind}. It is in <a href="/history">History</a>.</p>${undoForm(c.parcel, 'home')}</div>`, true)
+  const stamped = c.mark.kind === 'collected'
+  return notice('neutral', html`<div class="undo"><p>Marked <strong>${parcelName(c.parcel)}</strong> as ${c.mark.kind}. It is in <a href="/history">History</a>.</p>${undoForm(c.parcel, 'home')}</div>${
+    stamped ? postmark(c.mark.at, DISPLAY_ZONE, true) : ''}`, true, undefined, stamped ? 'just-collected' : undefined)
 }
 
 /** The time that put a parcel where it is: the status change, else the newest event. */
@@ -389,14 +394,15 @@ const cardHead = (c: Card): Html =>
  * already past: the one state that is allowed to interrupt. The filled blue header is gone - it was the
  * main reason a pickup card and a pickup row read as two different kinds of thing.
  */
-function card(c: Card, ctx: PageCtx): Html {
+function card(c: Card, ctx: PageCtx, arrived?: ReadonlySet<number>): Html {
   const dueNow = c.members.some(m => pickupClock(m, ctx.now).urgency === 'now')
   const ready = c.members.some(m => m.parcel.status === 'ready_for_pickup')
   const note = ready ? noDeadlineNote(c.members) : ''
   const maps = ready ? c.members.map(m => mapsUrl(m.parcel)).find(u => u !== undefined) : undefined
   const facts = pickupFacts(note, maps)
   const status = c.placed ? 'ready_for_pickup' : c.members[0]!.parcel.status
-  return html`<article class="card" data-status="${status}">
+  const fresh = arrived !== undefined && c.members.some(m => arrived.has(m.parcel.id))
+  return html`<article class="card${fresh ? raw(' just-arrived') : ''}" data-status="${status}">
 <div class="card-h${dueNow ? raw(' due-now') : ''}">${cardHead(c)}${cardChip(c)}${status === 'failed_attempt' ? rubberStamp(c.members[0]!.last?.description) : ''}</div>
 <ul class="card-l">${c.members.map(m => cardEntry(c, m, ctx))}</ul>${facts ? html`<p class="card-f meta">${facts}</p>` : ''}
 </article>`
@@ -480,7 +486,9 @@ export interface IndexOptions {
   /** Whether a mail account is saved. False shows the "connect Gmail" notice. Absent counts as set up. */
   mailConfigured?: boolean
   /** A parcel just marked collected from this page: the notice with its Undo (see `collectedNotice`). */
-  collected?: { parcel: Parcel; mark: Pick<UserMark, 'kind'> }
+  collected?: { parcel: Parcel; mark: Pick<UserMark, 'kind' | 'at'> }
+  /** Parcels that turned ready with a code during the finished run on `?run=N`: their cards get `just-arrived`. */
+  justArrived?: ReadonlySet<number>
   /** What "Add to Calendar" just did, for the parcel it did it to (see `calendarNotice`). */
   calendar?: { outcome: CalendarOutcome; parcel: Parcel }
   /** An "Add to Calendar" submission refused for a parcel that no longer shows the form to say it in. */
@@ -505,5 +513,5 @@ export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote, op
 <div class="col"><div class="head"><h1>In flight</h1>
   <form class="inline" method="post" action="/refresh"><button>Refresh now</button></form></div>
 ${lede}${mailOff ? notice('neutral', MAIL_SETUP, false, 'mail-setup') : ''}${refreshBanner(note, ctx.now, REFRESH_DOES)}${marked}${
-  entries.length === 0 ? html`<p class="orn-empty" aria-hidden="true">Nothing needs you</p>${empty}` : cards.map(c => card(c, ctx))}</div>`, ctx)
+  entries.length === 0 ? html`<p class="orn-empty" aria-hidden="true">Nothing needs you</p>${empty}` : cards.map(c => card(c, ctx, opts.justArrived))}</div>`, ctx)
 }
