@@ -2,10 +2,23 @@ import BetterSqlite3 from 'better-sqlite3'
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { applyMigrations, isEmptyDatabase, MIGRATIONS, type Migration } from './migrate.js'
+import { PENDING } from './messages.js'
 
 export type Database = BetterSqlite3.Database
 
 const schema = readFileSync(new URL('./schema.sql', import.meta.url), 'utf8')
+
+/**
+ * Indexes over a column a migration adds, created on every open AFTER the migrations. `schema.sql`
+ * runs before them, so there an index naming `messages.ignored` is "no such column" on a database
+ * older than migration 4, and the open fails for good.
+ *
+ * `messages_pending` is the mail waiting on /attention, which the nav counts on every page. SQLite
+ * takes a partial index only when the query's WHERE is the index's own, hence `PENDING` itself rather
+ * than a copy of its SQL; on `parcel_id` because `parcel_id IS NULL` is an equality the planner can
+ * search it by, where on any other column it preferred `messages_parcel` and read every unassigned row.
+ */
+const AFTER_MIGRATIONS = `CREATE INDEX IF NOT EXISTS messages_pending ON messages(parcel_id) WHERE ${PENDING};`
 
 /**
  * The database holds more than tracking numbers: pickup addresses, the user's own postcode, the
@@ -44,6 +57,7 @@ export function openDb(path: string, migrations: Migration[] = MIGRATIONS): Data
     const fresh = isEmptyDatabase(db)
     db.exec(schema)
     applyMigrations(db, migrations, fresh)
+    db.exec(AFTER_MIGRATIONS)
     assertSchemaCurrent(db)
   } catch (err) {
     db.close()

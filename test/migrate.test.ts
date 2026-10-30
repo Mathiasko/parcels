@@ -7,6 +7,7 @@ import { openDb, type Database } from '../src/db/index.js'
 import { applyMigrations, isEmptyDatabase, latestVersion, userVersion, BASELINE, MIGRATIONS, type Migration } from '../src/db/migrate.js'
 import { insertParcel, getParcel, findParcel } from '../src/db/parcels.js'
 import { appendEvents } from '../src/db/events.js'
+import { PENDING } from '../src/db/messages.js'
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'parcels-migrate-'))
 
@@ -387,7 +388,9 @@ test('migration 4 gives an existing database the messages.ignored column, and is
   try {
     const path = join(dir, 'parcels.db')
     const db = openDb(path, [])                       // born at the baseline, before the column existed
-    // Simulate that database: the column is in today's schema.sql, so take it away again.
+    // Simulate that database: the column is in today's schema.sql, so take it away again, with the
+    // index over it that such a database never had.
+    db.exec('DROP INDEX messages_pending')
     db.exec('ALTER TABLE messages DROP COLUMN ignored')
     db.prepare("INSERT INTO messages (message_id, received_at, parsed_ok) VALUES ('<old@x>', '2026-01-01T00:00:00Z', 0)").run()
     db.close()
@@ -417,6 +420,49 @@ test('migration 4 does not fail on a database that already has the column but an
     db.close()
     const after = openDb(path, MIGRATIONS)            // must not throw "duplicate column name"
     expect(columns(after, 'messages')).toContain('ignored')
+    after.close()
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+// --- messages_pending: the partial index behind the nav's count -----------------------------------
+
+/** What SQLite will do for `sql`: the `detail` lines of its query plan, joined. */
+const plan = (db: Database, sql: string): string =>
+  (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all() as { detail: string }[]).map(r => r.detail).join(' | ')
+
+// The nav counts the mail waiting on /attention on every page. Without a partial index on exactly the
+// `PENDING` predicate that count reads the whole messages table each time; SQLite takes a partial
+// index only when the query's WHERE is the index's own, so this asserts the plan, not the index.
+test('the attention count is answered from the messages_pending index', () => {
+  const db = openDb(':memory:')
+  expect(plan(db, `SELECT COUNT(*) AS n FROM messages WHERE ${PENDING}`)).toMatch(/USING INDEX messages_pending/)
+  db.close()
+})
+
+test('a database from before migration 4 opens, and gains the column and then the index', () => {
+  const dir = tmp()
+  try {
+    const path = join(dir, 'parcels.db')
+    const db = openDb(path, [])
+    db.exec('DROP INDEX messages_pending')
+    db.exec('ALTER TABLE messages DROP COLUMN ignored')
+    db.close()
+    const after = openDb(path, MIGRATIONS)            // must not fail with "no such column: ignored"
+    expect(plan(after, `SELECT COUNT(*) AS n FROM messages WHERE ${PENDING}`)).toMatch(/messages_pending/)
+    after.close()
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('a current database made before the index gains it on its next open, with no migration', () => {
+  const dir = tmp()
+  try {
+    const path = join(dir, 'parcels.db')
+    const db = openDb(path, MIGRATIONS)
+    db.exec('DROP INDEX messages_pending')
+    db.close()
+    const after = openDb(path, MIGRATIONS)
+    expect(userVersion(after)).toBe(latestVersion(MIGRATIONS))
+    expect(plan(after, `SELECT COUNT(*) AS n FROM messages WHERE ${PENDING}`)).toMatch(/messages_pending/)
     after.close()
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })

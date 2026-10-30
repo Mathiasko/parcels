@@ -86,6 +86,9 @@ CREATE TABLE IF NOT EXISTS messages (
 -- without this each of those is a scan of the whole mailbox. An existing database gains it on its
 -- next open, like a new table: this file is applied idempotently every time.
 CREATE INDEX IF NOT EXISTS messages_parcel ON messages(parcel_id);
+-- `messages_pending`, the partial index behind the Attention count, is not here but in db/index.ts,
+-- created after the migrations: it names `ignored`, which a database older than migration 4 does not
+-- have yet when this file runs.
 
 CREATE TABLE IF NOT EXISTS carrier_health (
   carrier              TEXT PRIMARY KEY,
