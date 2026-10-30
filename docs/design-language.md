@@ -939,9 +939,9 @@ Nothing is drawn natively that the dashboard already draws. The Health page's Up
 
 ## 21. Themes and Postal
 
-Everything above is **Classic**: the look the dashboard had before themes, unchanged, and still pixel-identical to it. The dashboard now has two themes, **Postal** (the default) and Classic, chosen in Settings under Appearance (config: `appearance.theme`, `appearance.mode`). The rules in §1 to §20 hold for both; where Postal differs, it is below. The reasoning and the mood board are in `docs/superpowers/specs/2026-10-30-themes-design.md`.
+Everything above is **Classic**: the look the dashboard had before themes, unchanged, and still pixel-identical to it. The dashboard now has two themes, **Postal** (the default) and Classic, chosen in Settings under Appearance (config: `appearance.theme`, `appearance.mode`). §1 to §20 describe Classic. Postal keeps their principles (a word, a shape and a colour for every status; "waiting on you" is scarce; no page script; contrast), and changes the hues, fonts and some shapes, as below. The reasoning and the mood board are in `docs/superpowers/specs/2026-10-30-themes-design.md`.
 
-**What a theme is.** One file, `src/web/themes/<id>.ts`, exporting a `Theme`: values for the token contract in `src/web/themes/types.ts`, its fonts, and optional CSS of its own scoped to `:root[data-theme="<id>"]`. The base stylesheet (`src/web/views/style.ts`) uses only the tokens, so a theme cannot change what a page says or where a thing sits, only how it is drawn.
+**What a theme is.** One file, `src/web/themes/<id>.ts`, exporting a `Theme`: values for the token contract in `src/web/themes/types.ts`, its fonts, and optional CSS of its own scoped to `:root[data-theme="<id>"]`. The base stylesheet (`src/web/views/style.ts`) uses only the tokens, so a theme should not change what a page says; it may restyle and rearrange inside its own scope.
 
 - **Colours** (19, each as a light and a dark value, emitted as `light-dark()` pairs): `paper surface hover rule rule-s edge ink ink-2 ink-3 signal signal-ink on-signal signal-wash warn on-warn warn-wash ok ok-wash btn-hover`.
 - **Shape tokens** (set once): `font-display font-body font-mono radius-card radius-badge radius-btn shadow-card texture`.
@@ -953,7 +953,7 @@ Everything above is **Classic**: the look the dashboard had before themes, uncha
 - **"Waiting on you" is yellow, and yellow is only ever a fill.** `#f6c21c` is 1.39:1 on the paper, so it can never carry text or a glyph. Text on it is `--on-signal` (9.36:1), and "waiting on you" as ink is `--signal-ink` (`#7a5600`, 5.56:1 on the paper, 6.16:1 on a card; in dark the signal is already light enough and the two are equal).
 - **Red and blue, not red and green.** `--warn` is a stamp red and `--ok` a cancellation blue: an axis that stays apart for the common colour-vision deficiencies, and still never the only difference (§2.5: every status keeps its word and its silhouette).
 - **Fonts.** DM Serif Display for page titles, place names and the empty headline (only a 400, so display elements say 400 and never get a faked bold); Libre Franklin for text; Courier Prime for codes, PINs, tracking numbers and the postmark. The files are under `assets/fonts/` and served from the app itself, so nothing is fetched. Classic keeps the system stack and loads none.
-- **Shape.** Radii of 6px (card), 4px (button) and 3px (badge); a warm layered shadow; a grain tile on the page background only. Dark is a brown-black, never `#000`.
+- **Shape.** Radii of 6px (card), 4px (button) and 3px (badge); a warm layered shadow; a grain tile on the page background (and on the timeline's masks, so they blend into it). Dark is a brown-black, never `#000`.
 
 **Hooks, and the rule that the base hides every ornament.** The views carry neutral markup that Classic ignores and Postal styles. Each is meaningful markup or `aria-hidden` decoration, and none says anything the page does not say in words.
 
@@ -961,22 +961,15 @@ Everything above is **Classic**: the look the dashboard had before themes, uncha
 - `.code-plate[data-kind=box|counter|plain]`, and `.orn-place` inside it (`Z-BOX · Packeta`).
 - Each status glyph is drawn twice: `.gc` (Classic) and `.gp` (Postal), because CSS cannot change a `<use href>`.
 - `.orn-rubber` (the carrier's own words on a failed card, at most three words and 24 characters, else `Not delivered`), `.orn-postmark` (the collect date and time) and `.orn-empty` (the empty dashboard's headline).
-- `just-collected` (on the postmark) and `just-arrived` (on a card), added by the server for one render only, right after the event.
+- `just-collected` and `just-arrived`, the one-shot markers. The server adds them only on the page an event redirects to, and only for an hour after it (`COLLECTED_NOTICE_MS`), so a reload within that hour replays them. `just-collected` goes on the postmark in two places: on the parcel page (`/parcel/<id>?collected=1`) and in the dashboard's "Marked … as collected" notice (`/?collected=<id>`). `just-arrived` goes on the cards a finished refresh brought in (`/?run=<id>`). They are never added on the self-reloading pages shown while a refresh runs.
 
 **The base hides them**: `style.ts` carries `.gp{display:none}` and `[class^="orn-"],[class*=" orn-"]{display:none}`, so a theme has to opt in to each one. A new theme that forgets an ornament shows nothing, rather than a stray postmark. The rule for any new hook is the same: add it to the markup hidden, and let a theme reveal it.
 
-**The badge set.** Each status keeps its word; Postal changes the colour and the shape.
-
-- `ready_for_pickup`: a solid yellow stamp with perforated top and bottom edges, and a stamp glyph. On a box code, the code itself is a perforated yellow stamp, tilted about 2 degrees; a counter or plain PIN is a smaller stamp tilted the other way.
-- `out_for_delivery`: outlined with a heavier rule and chevrons; the card gets a red-and-blue airmail edge along its top.
-- `failed_attempt`: a voided ring; the card gets a hatched red edge down the left, and a rubber stamp of the carrier's reason.
-- `in_transit`: an envelope.
-- `delivered`, `collected`, `received`: a round blue ring around the word, with a postmark glyph. A collected parcel also carries its postmark.
-- `pre_transit`, `problem`, `returning`, `returned`, `unknown`: Classic's glyphs, unchanged.
+**The badge set.** Each status keeps its word; Postal changes the colour and the shape. `ready_for_pickup` is a yellow perforated stamp (and a box code is a larger one, tilted); `out_for_delivery` is outlined with chevrons, and its card gets a red-and-blue airmail top edge; `failed_attempt` is a voided ring, with a hatched red left edge and a rubber stamp of the carrier's reason; `in_transit` is an envelope; `delivered`, `collected` and `received` are a blue ring with a postmark glyph. The other five keep Classic's glyphs.
 
 **Motion.** CSS only, in `postal-motion.ts`, and all of it inside `@media (prefers-reduced-motion: no-preference)`:
 
-- the postmark slams onto a parcel just marked collected (0.55s), and what it lands on dips 3px;
+- the postmark slams onto a parcel just marked collected (0.55s), and what it lands on dips 3px: the status line on the parcel page, the notice on the dashboard (keyed with `:has()`);
 - cards are dealt in on load, 60ms apart, the first six staggered (0.5s each);
 - a code that has just arrived inks in (a 0.5s blur to sharp);
 - the airmail edge marches three times and stops;
@@ -986,10 +979,4 @@ Under `prefers-reduced-motion: reduce` none of it applies and the page is the st
 
 **Icons: fixed, not themed.** The Mac app's icon is a cream perforated stamp, with a parcel and a postmark, on a blue tile: `assets/icon/app-icon.svg` (and `app-icon-small.svg`, with fewer, bigger perforations, for 16 and 32px), rendered by `scripts/app/make-app-icon.mjs` into the committed `build/icon.icns`. The menu-bar icon is a template stamp silhouette with a dashed edge, drawn pixel by pixel by `scripts/app/make-tray-icon.py` into `app/assets/trayTemplate.png` and `@2x`; the count stays text beside it. Neither follows the theme. §7's rule about icons in the pages is unchanged: Postal's alternates are the same ten glyphs redrawn, not new icons.
 
-**Adding a theme.**
-
-1. Add the id to `THEME_IDS` in `src/core/appearance.ts`, and write `src/web/themes/<id>.ts` exporting a `Theme` with all 19 colours (light and dark) and all 8 shape tokens. The contract test fails with the theme and token named if one is missing.
-2. Register it in `THEMES` in `src/web/themes/index.ts`. Its CSS is scoped to `:root[data-theme="<id>"]` and appended to the page's stylesheet, so no page changes.
-3. Pass the contrast checks in `test/themes.test.ts` (4.5:1 for text pairs, 3:1 for edges, §5 of the spec), and never put the signal as text unless `--signal-ink` passes.
-4. Fonts: committed `.woff2` files under `assets/fonts/` with their licence (the server's allowlist is every file a theme names, and `assets/fonts/**` is packaged). Or use a system stack, as Classic does.
-5. Ornaments are optional. Reveal a hook in the theme's own CSS; keep every selector scoped to `[data-theme]`, put motion inside `prefers-reduced-motion: no-preference`, and keep Classic untouched.
+**Adding a theme.** Write `src/web/themes/<id>.ts` with all 19 colours (light and dark) and all 8 shape tokens; add the id to `THEME_IDS` (`src/core/appearance.ts`) and the theme to `THEMES` (`src/web/themes/index.ts`). Pass the contrast checks in `test/themes.test.ts`, with the signal as text only through `--signal-ink`. Commit any fonts under `assets/fonts/` with their licence. Ornaments are optional: reveal a hook in the theme's own CSS, scope every selector to `[data-theme]`, keep motion inside `prefers-reduced-motion: no-preference`, and leave Classic untouched. The spec has the detail.
