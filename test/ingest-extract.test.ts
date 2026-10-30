@@ -844,6 +844,42 @@ describe('runPoll wiring', () => {
       expect(adapter.calls).toHaveLength(0)
     })
 
+    // Dormancy (no carrier event in 30 days) waits for a sign of life, and mail about the parcel is one.
+    test('a dormant parcel is revived and polled by mail about it', async () => {
+      const db = memDb()
+      const id = quietParcel(db)
+      db.prepare('UPDATE parcels SET first_seen_at = ?, last_changed_at = NULL WHERE id = ?')
+        .run(new Date(NOW.getTime() - 40 * DAY).toISOString(), id)
+      const adapter = stubAdapter('packeta', inputs => inputs.map(i => okResult(i.number, [])))
+      // Dormant, so not even a forced run without mail asks about it.
+      expect((await runPoll({ db, http: bodyHttp(), adapters: [adapter], config, now: NOW, forceAll: true })).polled).toBe(0)
+
+      const report = await run(db, adapter, fakeImap([mail(1, 'packeta-accepted', 0)]).client)
+      expect(report.ingest).toMatchObject({ linked: 1 })
+      expect(adapter.calls.flat().map(i => i.number)).toEqual(['Z0000000001'])
+    })
+
+    // A mail listing several parcels links to its first; the others it names are news about them too.
+    test('a parcel named only among the extra numbers of a multi-parcel mail is polled too', async () => {
+      const db = memDb()
+      db.prepare(`INSERT INTO parcels (carrier, tracking_number, status, first_seen_at, last_changed_at, last_polled_at, source)
+        VALUES ('dpd', '01505666666606', 'in_transit', ?, ?, ?, 'manual')`)
+        .run(new Date(NOW.getTime() - 5 * DAY).toISOString(), new Date(NOW.getTime() - 4 * DAY).toISOString(),
+          new Date(NOW.getTime() - HOUR / 2).toISOString())
+      const adapter = stubAdapter('dpd', inputs => inputs.map(i => okResult(i.number, [])))
+      expect((await run(db, adapter, fakeImap([]).client)).polled).toBe(0)
+
+      const source = eml('CykloParts GmbH <versand@cykloparts.example.de>', 'Shipping confirmation CP-77125',
+        'Dear customer,\r\n\r\nyour order CP-77125 has been dispatched with DPD.\r\nParcel 1: 01505666666605\r\nParcel 2: 01505666666606\r\n')
+      const report = await run(db, adapter, fakeImap([{
+        uid: 1, source, messageId: '<cp-77125@fixture>', subject: 'Shipping confirmation CP-77125',
+        from: 'versand@cykloparts.example.de', date: NOW,
+      }]).client)
+      // 605 is new (and due because it was never polled); 606 is due only because the mail named it.
+      expect(report.ingest).toMatchObject({ created: 1, linked: 0 })
+      expect(adapter.calls.flat().map(i => i.number).sort()).toEqual(['01505666666605', '01505666666606'])
+    })
+
     test('a delivered parcel is not polled again because a late mail mentions it', async () => {
       const db = memDb()
       const id = quietParcel(db)
