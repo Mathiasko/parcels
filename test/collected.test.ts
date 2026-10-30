@@ -143,12 +143,12 @@ describe('the user\'s own action is not announced back to them', () => {
     expect(build(db, new Date(NOW.getTime() + HOUR))).toEqual([])
   })
 
-  test('no "Still waiting for you" at the next reminder slot', () => {
-    // NOW is 11:00 in Bratislava; 15:30 is the next slot.
-    const atSlot = new Date('2026-10-26T14:31:00Z')
+  test('no "Still waiting" reminder at the next reminder slot', () => {
+    // NOW is 11:00 on Monday in Bratislava, the day it became ready; the next slot is 08:00 on Tuesday.
+    const atSlot = new Date('2026-10-27T07:01:00Z')
     const control = memDb()
     parcelIn(control, 'ready_for_pickup', { extra: { pickup: ZBOX } })
-    expect(build(control, atSlot).map(n => n.title)).toEqual([expect.stringMatching(/^Still waiting for you/)])
+    expect(build(control, atSlot).map(n => n.title)).toEqual([expect.stringMatching(/^Still waiting since Mon/)])
 
     const db = memDb()
     const id = parcelIn(db, 'ready_for_pickup', { extra: { pickup: ZBOX } })
@@ -275,12 +275,13 @@ describe('undo', () => {
     const db = memDb()
     const id = parcelIn(db, 'ready_for_pickup', { extra: { pickup: ZBOX } })
     markCollected(db, id, WEB)
-    const afternoon = new Date('2026-10-26T15:00:00Z')            // 16:00, after the 15:30 slot
-    undoCollected(db, id, { actor: 'web', at: afternoon })
-    expect(build(db, new Date(afternoon.getTime() + HOUR))).toEqual([])
-    // The next day's reminders come round as usual.
-    const tomorrow = new Date('2026-10-27T07:30:00Z')            // 08:30
-    expect(build(db, tomorrow).map(n => n.title)).toEqual([expect.stringMatching(/^Still waiting for you/)])
+    // Undone on Tuesday at 09:00, after that day's 08:00 slot (not the ready day, so it would have fired).
+    const tuesday = new Date('2026-10-27T08:00:00Z')
+    undoCollected(db, id, { actor: 'web', at: tuesday })
+    expect(build(db, new Date(tuesday.getTime() + HOUR))).toEqual([])
+    // The next day's reminder comes round as usual.
+    const wednesday = new Date('2026-10-28T07:30:00Z')            // 08:30
+    expect(build(db, wednesday).map(n => n.title)).toEqual([expect.stringMatching(/^Still waiting since Mon/)])
   })
 
   test('restores what the carrier said meanwhile, when a poll in flight answered after the click', async () => {

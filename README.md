@@ -674,6 +674,40 @@ about tracking changes.
 
 ## Notifications
 
+A banner is for something you can act on. By default:
+
+- **These send a banner:** *Out for delivery*, *Ready for pickup* (with where, and the collect-by
+  date if the carrier gave one), a failed delivery attempt, a delivery problem, *Returning to sender*
+  and *Returned to sender*, a pickup point named for the first time, the warning 48 hours before a
+  pickup deadline, and [one reminder a day](#reminders-while-a-parcel-is-waiting) while a parcel waits
+  for you. So do the alarms about the app itself: a carrier's tracking broken or stale, mail ingest
+  failing, the poller having been away, and an update being available.
+- **Registered and in transit are quiet.** They are on the dashboard, on the parcel page and in the
+  activity log as always; they just do not interrupt you.
+- **Delivered sends a banner, unless you said so first.** A parcel you marked
+  [collected or received](#mark-as-collected) yourself gets no *Delivered* banner when the carrier
+  catches up: you already know.
+- **More than four parcel updates in one run** (usually a catch-up after the Mac slept) become one
+  summary banner, with the parcels waiting for pickup first. The app's own alarms are never folded
+  into it.
+- **A pickup code or PIN is never in a banner.** It opens a physical locker, and banners show on the
+  lock screen; see [Pickup codes and PINs](#pickup-codes-and-pins).
+
+The **Notifications** block on Settings has three switches, saved with the rest of the form:
+
+| Switch | Default | What it does |
+|---|---|---|
+| **Registered and in-transit updates** | off | A banner when a parcel is registered with the carrier and when it starts moving. |
+| **A daily reminder while a parcel waits for you** | on | The 08:00 reminder described in [Reminders while a parcel is waiting](#reminders-while-a-parcel-is-waiting). |
+| **Delivered** | on | A banner when the carrier says a parcel was delivered (never for one you marked yourself). |
+
+They are stored as `"notifications": { "progress": false, "dailyReminder": true, "delivered": true }`
+in `config.json`, which the poller re-reads every run. An update a switch kept quiet is still recorded
+as said, so switching one on later sends no backlog of old news, only what changes from then on. The
+other banners above have no switch: each one asks you to do something.
+
+### How banners are sent
+
 Notification text is always passed as process arguments, never built into a shell or AppleScript
 string.
 
@@ -1001,20 +1035,31 @@ that would have made that incident self-diagnosing reads:
 
 ### Reminders while a parcel is waiting
 
-A parcel left at a pickup point is mentioned again **twice a day, at 08:00 and 15:30** local, until
-it is collected or its status changes. The banner says which day of waiting it is (`Still waiting for
-you · day 3`, the day it arrived being day 1, counted in calendar days in Bratislava), where it is
-waiting, and the deadline if the carrier gave one.
+A parcel left at a pickup point is mentioned again **once a day, at 08:00** local, from the day
+**after** it arrived, until it is collected or its status changes. On the day it arrived the *Ready for
+pickup* banner already said it, so there is no reminder that day, not even at 08:00 for a parcel that
+arrived at 06:30.
 
-- The poller's launchd schedule carries a **15:30 slot** on top of the hourly runs for exactly this
-  reason; without it the afternoon reminder would arrive at 16:00, since every other run is on the
-  hour. Re-run `scripts/install-agents.sh` after changing the slots.
-- Only the **newest passed slot** can fire. A Mac asleep all day wakes to one reminder, not to the
-  whole day's slots at once, and a slot that was missed cannot fire retroactively.
-- A transition banner counts: a parcel that became ready at 10:00 already told you, so the 08:00 slot
-  it fell inside is marked spent rather than repeating an hour later. The 15:30 one still arrives.
+The banner reads `Still waiting since Tue — <parcel>`: the weekday it arrived, counted in calendar days
+in Bratislava, or the date (`Still waiting since 3 Nov`) once it has waited a week or more, when a
+weekday alone would be ambiguous. Where the arrival time is not known it reads `Still waiting for you`.
+The text says where it is waiting and the collect-by date if the carrier gave one, and ends with
+`Collected it? Mark it in the app to stop these.`: [marking it](#mark-as-collected) is what stops them.
+Like every banner, it never shows the pickup code.
+
+- **Turned off** with *A daily reminder while a parcel waits for you* on Settings. The 48-hour
+  deadline warning is separate and still arrives. A morning's reminder that the switch held back is
+  not owed: switching it on at 09:00 sends nothing until the next day's 08:00.
+- A Mac asleep all morning wakes to **one** reminder at its first poll, and the reminder of a day it
+  slept through entirely is never sent later.
+- Any other banner about the parcel counts: one sent at 10:00 (a deadline warning, say) marks that
+  day's 08:00 slot spent, so no reminder repeats it an hour later.
 - Sent slots are keyed by local date, so the rows expire by themselves and yesterday can never
   suppress today.
+- The poller's launchd schedule still carries a **15:30 run** on top of the hourly ones. It was added
+  for an afternoon reminder that is gone; it stays because it matches the schedule already installed,
+  and it brings a ready banner or a deadline warning half an hour sooner. Re-run
+  `scripts/install-agents.sh` after changing the poll slots.
 
 ### Mark as collected
 

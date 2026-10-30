@@ -66,7 +66,7 @@ export function markCollected(db: Database, parcelId: number, cause: Cause = UNA
  * Also silent. The restored status is recorded as announced (the user is looking at it, and a "Ready for
  * pickup" banner for a parcel they just un-marked would be the noise the mark avoided), and today's
  * reminder slots that have already passed are marked spent, so the next poll does not answer the
- * undo with "Still waiting for you". The next slot still comes round as usual.
+ * undo with a "Still waiting since ..." reminder. The next slot still comes round as usual.
  */
 export function undoCollected(db: Database, parcelId: number, cause: Cause = UNATTRIBUTED): MarkOutcome {
   const at = cause.at ?? new Date()

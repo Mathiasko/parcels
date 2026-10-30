@@ -2,8 +2,10 @@ import { DateTime } from 'luxon'
 
 /**
  * The times of day the poller runs, in the Mac's local time: hourly 07:00 to 21:00, plus 15:30. The
- * 15:30 slot exists because the twice-daily "still waiting for you" reminder fires at 08:00 and 15:30,
- * and a reminder needs a run to fire from. Ordered, which nextSlot relies on.
+ * 15:30 slot was added for an afternoon "still waiting" reminder, which is gone (the reminder is now
+ * once a day, at 08:00). It stays: it matches the launchd template already installed on every Mac, and
+ * the extra afternoon check still brings a ready banner or the 48-hour pickup deadline warning half an
+ * hour sooner, while there is time to collect that day. Ordered, which nextSlot relies on.
  *
  * The launchd plist template carries the same list for the git install; a test parses the template and
  * checks it against this constant, so the two cannot drift apart unnoticed.
