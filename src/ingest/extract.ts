@@ -640,27 +640,86 @@ function carrierMerchant(carrier: CarrierId, haystack: string): string | undefin
 }
 
 /**
- * The code that opens a Z-BOX. Packeta puts it in the pickup email only - the tracking API never
- * carries it - laid out one digit per cell, so the digits arrive separated:
+ * The code that opens a pickup box or proves the reader at a counter: a Z-BOX's opening code, a PIN
+ * for a GLS BOX or ParcelShop, a pošta BalíkoBOX, a DPD Pickup Station, a PPL ParcelShop or Parcelbox,
+ * SPS Balíkovo's verification code. No carrier's tracking API carries it; only the pickup mail does.
  *
- *     Kód pre otvorenie schránky 7 9 9 8 7 4 Miesto, kde je vaša zásielka uložená ...
+ * Every pattern is a LABEL followed at once by 4-10 digits (spaces allowed between them, see below)
+ * and no further digit. Nothing here looks for a bare six-digit run: a pickup mail is full of numbers
+ * (the parcel number, a phone, a postcode, a date), and only the label says which one opens the box.
+ * The labels, most specific first:
  *
- * The same phrase appears a second time further down, inside the instructions ("...otvorenie
- * schránky ALEBO stiahnutá aktuálna verzia aplikácie Packeta"), with no digits after it. That is why
- * the digits must follow immediately: anchoring on the phrase alone matches the wrong occurrence.
+ *   1. Packeta's Z-BOX, SK and CZ: `Kód pre otvorenie schránky` / `Kód pro otevření schránky`. Laid
+ *      out one digit per cell, so the digits arrive separated:
+ *
+ *          Kód pre otvorenie schránky 7 9 9 8 7 4 Miesto, kde je vaša zásielka uložená ...
+ *
+ *      The same phrase appears a second time further down, inside the instructions ("...otvorenie
+ *      schránky ALEBO stiahnutá aktuálna verzia aplikácie Packeta"), with no digits after it. That is
+ *      why the digits must follow immediately: anchoring on the phrase alone matches the wrong one.
+ *   2. `PIN kód` / `PIN kod`, alone (GLS: "Pre vydanie balíka použite PIN kód 402211.") or with a few
+ *      words up to a colon (pošta: "PIN kód na otvorenie schránky: 631285", and the Czech "PIN kód pro
+ *      otevření schránky:"). The words may not cross a digit, a colon or a sentence end, so DPD's
+ *      "...ktorej poskytnete PIN kód." cannot reach a number in the next sentence.
+ *   3. `PIN:` and `PIN pro vyzvednutí:` / `PIN pre vyzdvihnutie:` (DPD Pickup Station's own phrasing,
+ *      "PIN: 120477", and PPL's), and `PIN na otvorenie schránky` / `PIN pro otevření (schránky)`
+ *      without a colon.
+ *   4. `Verifikačný kód` / `overovací kód`, SPS Balíkovo's word for it ("Verifikačný kód: 551902.").
+ *
+ * Most specific first because a mail can carry more than one label, and the longer label says more
+ * about what follows it: a bare `PIN:` is the loosest of them, so it is only trusted when no label
+ * that names the box or the PIN kód matched anywhere in the mail.
+ *
+ * A match is refused when the sentence it stands in names an order, an invoice or a phone
+ * (`NOT_TRACKING`, the same vocabulary the tracking number is judged by): "PIN: 0905123456 (telefón
+ * kuriéra)" is a phone, "Objednávka č. 123456, PIN kód 4711 nájdete v objednávke" is a shop's. Then
+ * the label's next match is tried, then the next label.
  *
  * Returned as a string because real codes carry leading zeros (004467, 007018); a number would drop
  * them silently and send the reader to the locker with a code one digit short.
  */
-const PICKUP_CODE = /k[oó]d p(?:re|ro) ot(?:vorenie|evřen[ieí]|evren[ieí]) schr[aá]nky[\s:]*((?:\d[ \t ]*){4,10})(?![ \t ]*\d)/i
+const PICKUP_CODES: readonly RegExp[] = [
+  String.raw`k[oó]d p(?:re|ro) ot(?:vorenie|evřen[ieí]|evren[ieí]) schr[aá]nky`,
+  String.raw`\bPIN[ \t]*k[oó]d(?:[^\d:.!?]{0,40}:)?`,
+  String.raw`\bPIN(?: pro vyzvednut[ií]| pre vyzdvihnutie)?[ \t]*:|\bPIN (?:na otvorenie schr[aá]nky|pro otev[řr]en[ií](?: schr[aá]nky)?)`,
+  String.raw`(?:verifika[čc]n[ýy]|overovac[ií]) k[oó]d`,
+].map(label => new RegExp(String.raw`(?:${label})[\s:]*((?:\d[ \t\u00a0]*){4,10})(?![ \t\u00a0]*\d)`, 'gi'))
+
+/** What ends the sentence a code's label stands in, for the `NOT_TRACKING` veto. */
+const PIN_SENTENCE_END = /[.!?\n]/
 
 export function extractPickupCode(text: string): string | undefined {
   // Collapse whitespace first. The digits sit one per table cell, so in the plain-text rendering they
   // are separated by NEWLINES as often as by spaces, and the phrase itself can wrap mid-sentence.
-  const m = PICKUP_CODE.exec(text.replace(/\s+/g, ' '))
-  if (!m) return undefined
-  const digits = m[1]!.replace(/\D/g, '')
-  return digits.length >= 4 && digits.length <= 10 ? digits : undefined
+  // `at[i]` is where the flat text's character i came from, so a match found in the flat text can be
+  // judged by the ORIGINAL lines: the line breaks are where a sentence ends.
+  const at: number[] = []
+  const flat = text.replace(/\s+|[^\s]+/g, (run, offset: number) => {
+    if (/^\s/.test(run)) { at.push(offset); return ' ' }
+    for (let i = 0; i < run.length; i++) at.push(offset + i)
+    return run
+  })
+  for (const pattern of PICKUP_CODES) {
+    for (const m of flat.matchAll(pattern)) {
+      const digits = m[1]!.replace(/\D/g, '')
+      if (digits.length < 4 || digits.length > 10) continue
+      if (NOT_TRACKING.test(sentenceAround(text, at[m.index]!, at[m.index + m[0].length - 1]! + 1))) continue
+      return digits
+    }
+  }
+  return undefined
+}
+
+/**
+ * The sentence from `start` to `end` of `text` stands in: back to the previous sentence end or line
+ * break, on to the next one. Only this is vetoed, never the whole line - a mail whose html is
+ * flattened can arrive as one long line, and a "tel." in its footer says nothing about the PIN.
+ */
+function sentenceAround(text: string, start: number, end: number): string {
+  let from = start
+  while (from > 0 && !PIN_SENTENCE_END.test(text[from - 1]!)) from--
+  const after = text.slice(end).search(PIN_SENTENCE_END)
+  return text.slice(from, after < 0 ? text.length : end + after)
 }
 
 /**

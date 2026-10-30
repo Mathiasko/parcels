@@ -1,11 +1,11 @@
-import { test, expect, beforeEach } from 'vitest'
+import { describe, test, expect, beforeEach } from 'vitest'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openDb, type Database } from '../src/db/index.js'
 import { getParcel, insertParcel, updateParcelState, deleteParcel, setPickupCoords } from '../src/db/parcels.js'
 import { getPickupCode, needsPickupCodeCheck, recordPickupCode, pickupCodesFor } from '../src/db/pickup-codes.js'
-import { extractPickupCode } from '../src/ingest/extract.js'
+import { extractPickupCode, mailText } from '../src/ingest/extract.js'
 import { runPickupCodes } from '../src/core/pickup-code.js'
 import { runPoll } from '../src/core/poll.js'
 import type { Notification } from '../src/notify/types.js'
@@ -68,6 +68,55 @@ test('the Czech spelling is read too', () => {
 test('a run of digits that is too short or too long is not a code', () => {
   expect(extractPickupCode('Kód pre otvorenie schránky 1 2 3 koniec')).toBeUndefined()
   expect(extractPickupCode('Kód pre otvorenie schránky 1 2 3 4 5 6 7 8 9 0 1 2 koniec')).toBeUndefined()
+})
+
+describe('pickup PINs for every carrier', () => {
+  // Read through `mailText`, exactly as the pickup-code pass reads a stored mail, so the tests see the
+  // same text (charset decoded, html flattened) the pass does.
+  const corpus = (name: string) => mailText(readFileSync(new URL(`./fixtures/fake-mail/${name}.eml`, import.meta.url)))
+  const real = (name: string) => mailText(readFileSync(new URL(`./fixtures/mail/${name}.eml`, import.meta.url)))
+
+  test.each([
+    ['20-gls-ready-glsbox-pin', '402211'],                    // GLS BOX: "použite PIN kód 402211."
+    ['43-dpd-pickup-station-ready-pin', '120477'],            // DPD Pickup Station: "PIN: 120477"
+    ['44-posta-balikobox-pin', '631285'],                     // pošta BalíkoBOX: "PIN kód na otvorenie schránky:"
+    ['28-sps-balikovo-cp1250-base64', '551902'],              // SPS Balíkovo: "Verifikačný kód: 551902."
+    ['26-packeta-ready-zbox-code-leading-zero', '040712'],    // Z-BOX, the leading zero kept
+    ['31-zasilkovna-cz-ready-iso8859-2', '918273'],           // Czech Z-BOX, one digit per line
+  ])('corpus mail %s gives %s', async (name, code) => {
+    expect(extractPickupCode(await corpus(name))).toBe(code)
+  })
+
+  // Both real mails print an anonymised PIN of six zeros; it is still the code they print.
+  test('the real GLS pickup mail gives the PIN it prints', async () => {
+    expect(extractPickupCode(await real('gls-ready-for-pickup'))).toBe('000000')
+  })
+
+  test('the real DPD Pickup Station mail gives the PIN it prints', async () => {
+    expect(extractPickupCode(await real('dpd-pickup-station'))).toBe('000000')
+  })
+
+  test('a PPL ParcelShop mail: the PIN, not the parcel number printed before it', () => {
+    expect(extractPickupCode('Dobrý den,\nzásilka 40888888801 je připravena k vyzvednutí na PPL Parcelshop Testovice, Hlavní 1.\nPIN pro vyzvednutí: 402211\nVyzvedněte ji do 5. 11. 2026.'))
+      .toBe('402211')
+  })
+
+  test('a Czech box PIN with its digits spaced', () => {
+    expect(extractPickupCode('PIN kód pro otevření schránky: 7 7 3 1 2 0')).toBe('773120')
+  })
+
+  test.each([
+    ['a phone number with no PIN label', 'Zákaznícka linka 0905 123 456'],
+    ['a tracking number', 'Číslo zásielky: 90444444401'],
+    ['a "PIN" sentence that names a phone', 'PIN: 0905123456 (telefón kuriéra)'],
+    ['a "PIN" sentence that names an order', 'Objednávka č. 123456, PIN kód 4711 nájdete v objednávke'],
+    ['a promo "PIN" with no digits after it', 'Nový PIN kód k vašej karte získate v aplikácii!'],
+    ['a 3-digit run', 'PIN: 123'],
+    ['an 11-digit run', 'PIN: 12345678901'],
+    ['the DPD line that mentions the PIN but prints none', 'Vašu zásielku môže prevziať aj osoba, ktorej poskytnete PIN kód.'],
+  ])('%s is not a code', (_what, text) => {
+    expect(extractPickupCode(text)).toBeUndefined()
+  })
 })
 
 // --- storage ------------------------------------------------------------------------------------
