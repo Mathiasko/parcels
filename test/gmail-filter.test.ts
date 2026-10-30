@@ -114,6 +114,33 @@ describe('gmail-filter.xml', () => {
     }
   })
 
+  /**
+   * Version 2 of the filter labels Czech mail too: Zásilkovna and PPL as senders, and the Czech
+   * dispatch words in BOTH subject lists - the one inside the shop group and the trailing one for
+   * any sender. Gmail does not stem, so every form is listed. The sellers' tip lives in the comment
+   * (the query itself must stay free of negated terms, pinned above).
+   */
+  test('labels Czech mail: carriers, subject words in both lists, and the sellers\' tip', () => {
+    const q = prop('hasTheWord')!
+    const carriers = q.match(/^from:\(([^)]*)\)/)![1]!.split(' OR ')
+    expect(carriers).toContain('zasilkovna.cz')
+    expect(carriers).toContain('ppl.cz')
+
+    const lists = [...q.matchAll(/subject:\(([^)]*)\)/g)].map(m => m[1]!.split(' OR '))
+    expect(lists).toHaveLength(2)   // the shop group's list and the trailing one
+    for (const list of lists) {
+      for (const term of ['zasilka', 'zasilku', 'zasilky', 'pripravena', 'vyzvednuti', '"k vyzvednuti"',
+        '"vydejni misto"', '"vydejnim miste"', 'dorucime']) {
+        expect(list).toContain(term)
+      }
+    }
+
+    expect(xml.match(/<!--[\s\S]*?-->/)![0]).toContain('-from:yourshop.sk')
+    expect(xml).toContain('parcels-2')
+    expect(xml).not.toContain('parcels-1')
+    expect(xml.match(/<updated>2026-10-30T00:00:00Z<\/updated>/g)).toHaveLength(2)
+  })
+
   // Gmail ignores diacritics, so the file can stay plain ASCII - which also keeps it safe to paste
   // through anything with an opinion about encodings.
   test('the query is plain ASCII, since Gmail ignores diacritics', () => {
