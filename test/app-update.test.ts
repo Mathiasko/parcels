@@ -9,8 +9,8 @@ import { execFileSync } from 'node:child_process'
 import { createServer as createNetServer, type AddressInfo } from 'node:net'
 import {
   APP_BUNDLE_ID, appUpdateStatusPath, checkAppRelease, CODESIGN, compareVersions, defaultDownload, DITTO,
-  downloadBaseBeside, githubFetchJson, parseSha256Sums, PLUTIL, readAppUpdateStatus, RELEASES_URL, releasesUrlOverride,
-  runCommand, sha256File, stageUpdate, type StageDeps,
+  downloadBaseBeside, githubFetchJson, isSafeDownloadUrl, parseSha256Sums, PLUTIL, readAppUpdateStatus, RELEASES_URL,
+  releasesUrlOverride, runCommand, sha256File, stageUpdate, SUMS_MAX_BYTES, ZIP_MAX_BYTES, type DownloadOptions, type StageDeps,
 } from '../src/core/app-update.js'
 import {
   readZipEntries, unsafeUnpackedTree, unsafeZipEntry, ZipFormatError, type ZipEntry,
@@ -229,6 +229,7 @@ function setup(fake: Fake = {}, over: Partial<StageDeps> = {}) {
   const staging = join(apps, `.Parcels-update-${VERSION}`)
   const downloads = join(supportDir, 'updates', VERSION)
   const urls: string[] = []
+  const options: Array<DownloadOptions | undefined> = []
   const calls: Array<[string, string[]]> = []
   const zipBytes = fake.zipBytes ?? ZIP_BYTES
   const deps: StageDeps = {
@@ -237,8 +238,9 @@ function setup(fake: Fake = {}, over: Partial<StageDeps> = {}) {
     appBundle,
     supportDir,
     expectedCertSha: sha(CERT),
-    download: async (url, dest) => {
+    download: async (url, dest, o) => {
       urls.push(url)
+      options.push(o)
       if (fake.downloadThrows !== undefined && url.endsWith(fake.downloadThrows)) {
         writeFileSync(dest, 'trunc')
         throw new Error('terminated: other side closed')
@@ -274,7 +276,7 @@ function setup(fake: Fake = {}, over: Partial<StageDeps> = {}) {
     },
     ...over,
   }
-  return { deps, supportDir, appBundle, staging, downloads, urls, calls, statusPath: appUpdateStatusPath(supportDir) }
+  return { deps, supportDir, appBundle, staging, downloads, urls, options, calls, statusPath: appUpdateStatusPath(supportDir) }
 }
 
 describe('stageUpdate', () => {
@@ -633,6 +635,19 @@ describe('stageUpdate', () => {
     expect(local.urls[0]).toBe(`http://127.0.0.1:8899/v0.3.0/${ZIP}`)
   })
 
+  test('each download is capped, and plain http on this Mac is allowed only when the release base is there', async () => {
+    const github = setup()
+    expect((await stageUpdate(github.deps)).state).toBe('staged')
+    expect(github.options).toEqual([
+      { allowLocalHttp: false, maxBytes: ZIP_MAX_BYTES }, { allowLocalHttp: false, maxBytes: SUMS_MAX_BYTES },
+    ])
+    const local = setup({}, { releaseBase: 'http://127.0.0.1:8899/v0.3.0/' })
+    expect((await stageUpdate(local.deps)).state).toBe('staged')
+    expect(local.options).toEqual([
+      { allowLocalHttp: true, maxBytes: ZIP_MAX_BYTES }, { allowLocalHttp: true, maxBytes: SUMS_MAX_BYTES },
+    ])
+  })
+
   test('a version that is not a version touches nothing', async () => {
     const s = setup({}, { version: '../../evil' })
     const out = await stageUpdate(s.deps)
@@ -840,8 +855,9 @@ describe('githubFetchJson', () => {
  * crashes the process on such a body when it arrives faster than the file is written
  * ("assert(!this.paused)"), which is why the download does not use fetch.
  */
-async function rawServer(answer: (path: string) => { head: string; body?: Buffer }) {
+async function rawServer(answer: (path: string) => { head: string; body?: Buffer; stall?: boolean }) {
   const seen: string[] = []
+  const sockets: Array<{ destroy(): void }> = []
   const server = createNetServer(socket => {
     let req = ''
     socket.on('data', chunk => {
@@ -852,17 +868,74 @@ async function rawServer(answer: (path: string) => { head: string; body?: Buffer
       const a = answer(path)
       socket.write(`${a.head}\r\n\r\n`)
       if (a.body) socket.write(a.body)
+      if (a.stall) { sockets.push(socket); return }
       socket.end()
     })
     socket.on('error', () => {})
   })
   await new Promise<void>(r => server.listen(0, '127.0.0.1', r))
   const port = (server.address() as AddressInfo).port
-  return { base: `http://127.0.0.1:${port}`, seen, close: () => new Promise<void>(r => server.close(() => r())) }
+  return {
+    base: `http://127.0.0.1:${port}`, seen,
+    close: () => new Promise<void>(r => { for (const so of sockets) so.destroy(); server.close(() => r()) }),
+  }
 }
 
 describe('defaultDownload', () => {
   const noFetch = () => vi.stubGlobal('fetch', async () => { throw new Error('the download must not use fetch') })
+  /** The test servers are plain http on this Mac, which only a release base on this Mac allows. */
+  const LOCAL: DownloadOptions = { allowLocalHttp: true }
+
+  test('plain http on this Mac is refused without a request unless the release base is there too', async () => {
+    noFetch()
+    const srv = await rawServer(() => ({ head: 'HTTP/1.0 200 OK', body: Buffer.from('zip body') }))
+    try {
+      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'))).rejects.toThrow(/not https/)
+      expect(srv.seen).toEqual([])
+    } finally { await srv.close() }
+  })
+
+  test('a redirect to plain http on this Mac is refused when the download did not start there', () => {
+    // getFollowing checks every hop with the same flag the download was started with.
+    expect(isSafeDownloadUrl('http://127.0.0.1:8899/y.zip', false)).toBe(false)
+    expect(isSafeDownloadUrl('http://localhost/y.zip', false)).toBe(false)
+    expect(isSafeDownloadUrl('http://127.0.0.1:8899/y.zip', true)).toBe(true)
+    expect(isSafeDownloadUrl('http://example.com/y.zip', true)).toBe(false)
+    expect(isSafeDownloadUrl('https://objects.githubusercontent.com/y.zip', false)).toBe(true)
+  })
+
+  test('a Content-Length above the cap is refused before the body is read', async () => {
+    noFetch()
+    const srv = await rawServer(() => ({ head: 'HTTP/1.1 200 OK\r\nContent-Length: 1000', body: Buffer.alloc(1000, 1) }))
+    try {
+      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'), { ...LOCAL, maxBytes: 100 })).rejects.toThrow(/larger than/)
+      expect(existsSync(join(dir, 'out.zip'))).toBe(false)
+    } finally { await srv.close() }
+  })
+
+  test('a body that runs past the cap without saying its length is cut off', async () => {
+    noFetch()
+    const srv = await rawServer(() => ({ head: 'HTTP/1.0 200 OK', body: Buffer.alloc(64 * 1024, 1) }))
+    try {
+      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'), { ...LOCAL, maxBytes: 1000 })).rejects.toThrow(/larger than/)
+    } finally { await srv.close() }
+  })
+
+  test('a body shorter than its Content-Length fails', async () => {
+    noFetch()
+    const srv = await rawServer(() => ({ head: 'HTTP/1.1 200 OK\r\nContent-Length: 1000', body: Buffer.alloc(10, 1) }))
+    try {
+      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'), LOCAL)).rejects.toThrow()
+    } finally { await srv.close() }
+  })
+
+  test('a server that stops sending fails at the time limit', async () => {
+    noFetch()
+    const srv = await rawServer(() => ({ head: 'HTTP/1.1 200 OK\r\nContent-Length: 1000', body: Buffer.alloc(10, 1), stall: true }))
+    try {
+      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'), { ...LOCAL, timeoutMs: 200 })).rejects.toThrow()
+    } finally { await srv.close() }
+  })
 
   test('streams a large body that ends when the server closes the connection, without fetch', async () => {
     noFetch()
@@ -870,7 +943,7 @@ describe('defaultDownload', () => {
     const srv = await rawServer(() => ({ head: 'HTTP/1.0 200 OK\r\nContent-Type: application/zip', body }))
     try {
       const dest = join(dir, 'out.zip')
-      await defaultDownload(`${srv.base}/y.zip`, dest)
+      await defaultDownload(`${srv.base}/y.zip`, dest, LOCAL)
       expect(statSync(dest).size).toBe(body.length)
       expect(sha(readFileSync(dest))).toBe(sha(body))
       expect(statSync(dest).mode & 0o777).toBe(0o600)
@@ -885,7 +958,7 @@ describe('defaultDownload', () => {
     const srvBase = () => srv.base
     try {
       const dest = join(dir, 'out.zip')
-      await defaultDownload(`${srv.base}/a`, dest)
+      await defaultDownload(`${srv.base}/a`, dest, LOCAL)
       expect(readFileSync(dest, 'utf8')).toBe('zip body')
       expect(srv.seen).toEqual(['/a', '/b', '/c'])
     } finally { await srv.close() }
@@ -895,7 +968,7 @@ describe('defaultDownload', () => {
     noFetch()
     const srv = await rawServer(() => ({ head: 'HTTP/1.0 404 Not Found', body: Buffer.from('nope') }))
     try {
-      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'))).rejects.toMatchObject({ status: 404 })
+      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'), LOCAL)).rejects.toMatchObject({ status: 404 })
     } finally { await srv.close() }
   })
 
@@ -903,7 +976,7 @@ describe('defaultDownload', () => {
     noFetch()
     const srv = await rawServer(() => ({ head: 'HTTP/1.1 302 Found\r\nLocation: http://objects.example.com/y.zip\r\nContent-Length: 0' }))
     try {
-      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'))).rejects.toThrow(/redirected away from https/)
+      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'), LOCAL)).rejects.toThrow(/redirected away from https/)
       expect(srv.seen).toEqual(['/y.zip'])
     } finally { await srv.close() }
   })
@@ -912,7 +985,7 @@ describe('defaultDownload', () => {
     noFetch()
     const srv = await rawServer(() => ({ head: 'HTTP/1.1 302 Found\r\nLocation: /again\r\nContent-Length: 0' }))
     try {
-      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'))).rejects.toThrow(/redirects/)
+      await expect(defaultDownload(`${srv.base}/y.zip`, join(dir, 'out.zip'), LOCAL)).rejects.toThrow(/redirects/)
       expect(srv.seen.length).toBeLessThanOrEqual(6)
     } finally { await srv.close() }
   })

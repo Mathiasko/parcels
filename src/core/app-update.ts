@@ -7,6 +7,7 @@ import {
   renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
+import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { CHANGE_MAX, CHANGES_SHOWN, REASON_MAX, UPDATE_STALE_MS, type UpdateCheck } from './update.js'
 import { readZipEntries, unsafeUnpackedTree, unsafeZipEntry, ZipFormatError, type ZipEntry } from './zip-check.js'
@@ -50,7 +51,7 @@ export const RELEASES_URL_ENV = 'PARCELS_RELEASES_URL'
 /** The release feed override the main process passed on, or undefined for GitHub's. */
 export function releasesUrlOverride(env: NodeJS.ProcessEnv = process.env): string | undefined {
   const url = env[RELEASES_URL_ENV]
-  return url !== undefined && url !== '' && isSafeDownloadUrl(url) ? url : undefined
+  return url !== undefined && url !== '' && isSafeDownloadUrl(url, true) ? url : undefined
 }
 
 /** Where a release's files are, beside an overriding `releases/latest` URL (see `RELEASES_URL_ENV`). */
@@ -78,7 +79,9 @@ export const CHECK_TIMEOUT_MS = 30_000
 /** How long one download may take. The zip is about 130 MB, so a slow line needs minutes. */
 export const DOWNLOAD_TIMEOUT_MS = 10 * 60_000
 /** `SHA256SUMS` is a handful of lines; anything bigger is not one, and is not read into memory. */
-const SUMS_MAX_BYTES = 64 * 1024
+export const SUMS_MAX_BYTES = 64 * 1024
+/** The largest release zip a download keeps. A release is about 130 MB; this leaves room to grow. */
+export const ZIP_MAX_BYTES = 400 * 1024 * 1024
 
 // --- versions -----------------------------------------------------------------------------------------
 
@@ -339,7 +342,7 @@ export interface StageDeps {
   /** The running app's bundle; the staging folder goes beside it, so the later swap is a rename. */
   appBundle: string
   supportDir: string
-  download: (url: string, dest: string) => Promise<void>
+  download: (url: string, dest: string, options?: DownloadOptions) => Promise<void>
   /** Runs a program without a shell: `ditto` and `codesign`. Tests always pass a fake. */
   run: (cmd: string, args: string[]) => Promise<RunResult>
   /** The SHA-256 of the leaf certificate this app was signed with (`app/signing-cert.sha256`). */
@@ -367,13 +370,15 @@ function fail(reason: string, detail?: unknown): never {
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]'])
 
 /**
- * True for an address an update may be fetched from: https anywhere, plain http only from this Mac
- * (the dev release server). Anything else would let whoever sits on the network choose the code.
+ * True for an address an update may be fetched from: https anywhere, and plain http from this Mac
+ * only when `allowLocalHttp` (the dev release server: a feed override that is itself on this Mac).
+ * Anything else would let whoever sits on the network choose the code; and a release build following
+ * GitHub must not be redirected to whatever listens on a local port either.
  */
-export function isSafeDownloadUrl(url: string): boolean {
+export function isSafeDownloadUrl(url: string, allowLocalHttp: boolean): boolean {
   try {
     const u = new URL(url)
-    return u.protocol === 'https:' || (u.protocol === 'http:' && LOCAL_HOSTS.has(u.hostname))
+    return u.protocol === 'https:' || (allowLocalHttp && u.protocol === 'http:' && LOCAL_HOSTS.has(u.hostname))
   } catch {
     return false
   }
@@ -529,7 +534,9 @@ export async function stageUpdate(d: StageDeps): Promise<AppUpdateStatus> {
     const base = (d.releaseBase ?? releaseDownloadBase(version)).replace(/\/+$/, '')
     const zipUrl = `${base}/${zipName}`
     const sumsUrl = `${base}/SHA256SUMS`
-    if (!isSafeDownloadUrl(zipUrl)) {
+    // Plain http on this Mac only for a release base that is itself there (the dev feed, ruling R16).
+    const allowLocalHttp = d.releaseBase !== undefined && new URL(base).protocol === 'http:'
+    if (!isSafeDownloadUrl(zipUrl, allowLocalHttp)) {
       fail('The update was to be downloaded over an insecure connection, so nothing was downloaded.', base)
     }
 
@@ -538,8 +545,8 @@ export async function stageUpdate(d: StageDeps): Promise<AppUpdateStatus> {
     const zip = join(downloads, zipName)
     const sumsFile = join(downloads, 'SHA256SUMS')
     try {
-      await d.download(zipUrl, zip)
-      await d.download(sumsUrl, sumsFile)
+      await d.download(zipUrl, zip, { allowLocalHttp, maxBytes: ZIP_MAX_BYTES })
+      await d.download(sumsUrl, sumsFile, { allowLocalHttp, maxBytes: SUMS_MAX_BYTES })
     } catch (err) {
       fail('The update could not be downloaded, so nothing was changed; try again later.', err)
     }
@@ -618,7 +625,9 @@ const MAX_REDIRECTS = 5
  * is checked before it is asked (`isSafeDownloadUrl`). Resolves with the final 2xx response, its body
  * not yet read; anything else rejects, a non-2xx with its status.
  */
-function getFollowing(url: string, signal: AbortSignal, left: number = MAX_REDIRECTS): Promise<IncomingMessage> {
+function getFollowing(
+  url: string, signal: AbortSignal, allowLocalHttp: boolean, left: number = MAX_REDIRECTS,
+): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
     const get = new URL(url).protocol === 'https:' ? httpsGet : httpGet
     const req = get(url, { signal, headers: { 'user-agent': 'Parcels' } }, res => {
@@ -629,8 +638,8 @@ function getFollowing(url: string, signal: AbortSignal, left: number = MAX_REDIR
         if (left <= 0) return reject(new Error(`too many redirects downloading ${url}`))
         let next: string
         try { next = new URL(location, url).href } catch { return reject(new Error(`a redirect from ${url} to an address that is not one`)) }
-        if (!isSafeDownloadUrl(next)) return reject(new Error(`refusing to download from ${next}: redirected away from https`))
-        return getFollowing(next, signal, left - 1).then(resolve, reject)
+        if (!isSafeDownloadUrl(next, allowLocalHttp)) return reject(new Error(`refusing to download from ${next}: redirected away from https`))
+        return getFollowing(next, signal, allowLocalHttp, left - 1).then(resolve, reject)
       }
       if (status < 200 || status >= 300) {
         res.resume()
@@ -642,20 +651,58 @@ function getFollowing(url: string, signal: AbortSignal, left: number = MAX_REDIR
   })
 }
 
+/** How `defaultDownload` may fetch: see `isSafeDownloadUrl`, the size cap, and the time limit. */
+export interface DownloadOptions {
+  /** Plain http on this Mac is allowed, for the start and every redirect. Off unless asked for. */
+  allowLocalHttp?: boolean
+  /** The most bytes kept; a larger body is refused (by its Content-Length) or cut off. */
+  maxBytes?: number
+  /** Defaults to DOWNLOAD_TIMEOUT_MS. */
+  timeoutMs?: number
+}
+
+/** Passes bytes through and fails once more than `max` have gone by, whatever the server said. */
+function byteCap(max: number, url: string): Transform {
+  let seen = 0
+  return new Transform({
+    transform(chunk: Buffer, _enc, done) {
+      seen += chunk.length
+      done(seen > max ? new Error(`refusing ${url}: larger than ${max} bytes`) : null, chunk)
+    },
+  })
+}
+
 /**
  * Downloads `url` to `dest`, streamed. GitHub's asset URLs redirect to its object storage, so
- * redirects are followed - but each address on the way must still be a safe one.
+ * redirects are followed - but each address on the way must still be a safe one. A body larger than
+ * `maxBytes` is refused before it is read when its Content-Length says so, and cut off when it does not
+ * (or lies), so a hostile or broken server cannot fill the disk.
  *
  * `node:http(s)`, not `fetch`: Electron 45's Node (24.22.1, undici 7.30.1) dies on an uncaught
  * `assert(!this.paused)` inside undici when a body that ends with the connection (no length, or
  * `Connection: close`) arrives faster than the file is written, which takes the whole server process
  * down mid-download. The end-to-end test against a plain HTTP server hit it two times in three.
  */
-export async function defaultDownload(url: string, dest: string): Promise<void> {
-  if (!isSafeDownloadUrl(url)) throw new Error(`refusing to download from ${url}: not https`)
-  const signal = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
-  const res = await getFollowing(url, signal)
-  await pipeline(res, createWriteStream(dest, { mode: 0o600 }), { signal })
+export async function defaultDownload(url: string, dest: string, o: DownloadOptions = {}): Promise<void> {
+  const allowLocalHttp = o.allowLocalHttp ?? false
+  if (!isSafeDownloadUrl(url, allowLocalHttp)) throw new Error(`refusing to download from ${url}: not https`)
+  // A timer of our own rather than AbortSignal.timeout, whose signal Node holds only weakly: once
+  // collected, a stalled download would never time out.
+  const timeout = new AbortController()
+  const timer = setTimeout(() => timeout.abort(new Error(`timed out downloading ${url}`)), o.timeoutMs ?? DOWNLOAD_TIMEOUT_MS)
+  const { signal } = timeout
+  try {
+    const res = await getFollowing(url, signal, allowLocalHttp)
+    const max = o.maxBytes ?? Number.POSITIVE_INFINITY
+    const length = Number(res.headers['content-length'])
+    if (Number.isFinite(length) && length > max) {
+      res.destroy()
+      throw new Error(`refusing ${url}: larger than ${max} bytes (Content-Length ${length})`)
+    }
+    await pipeline(res, byteCap(max, url), createWriteStream(dest, { mode: 0o600 }), { signal })
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /**

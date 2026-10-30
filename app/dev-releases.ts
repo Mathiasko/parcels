@@ -45,5 +45,5 @@ export interface DevReleasesInput {
 export function devReleasesUrl(i: DevReleasesInput): string | undefined {
   if (i.url === undefined || i.url === '') return undefined
   if (i.packaged && !i.flagged) return undefined
-  return isSafeDownloadUrl(i.url) ? i.url : undefined
+  return isSafeDownloadUrl(i.url, true) ? i.url : undefined
 }

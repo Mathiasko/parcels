@@ -201,4 +201,41 @@ check "  on Mathiasko/parcels"                        called yes "--repo Mathias
 check "  with the notes file"                         called yes "--notes-file $TMP/notes.md"
 check "  tagging only after the build"                bash -c "grep -n 'build-release\|git tag' '$TMP/yes.calls' | head -1 | grep -q build-release"
 
+# --- build-release.sh's check_app, on its own ---------------------------------------------------------
+# The function is lifted out of build-release.sh as it is and run against two fake bundles: one whose
+# package.json is a release build's, one whose names `parcelsDevReleases` (a test build, ruling R16).
+# codesign is a stub that "extracts" a leaf whose hash is the one wanted, and the fuse check (the one
+# `node -e`) is answered by a stub too, so the test-build check is what decides.
+CA="$TMP/check-app"
+mkdir -p "$CA/bin"
+echo "a leaf certificate" > "$CA/leaf"
+cat > "$CA/bin/codesign" <<STUB
+#!/bin/bash
+for a in "\$@"; do case "\$a" in --extract-certificates=*) cp "$CA/leaf" "\${a#--extract-certificates=}0" ;; esac; done
+exit 0
+STUB
+# shellcheck source=../../scripts/lib/node.sh
+. "$ROOT/scripts/lib/node.sh"
+REAL_NODE="$(find_node)"
+cat > "$CA/node" <<STUB
+#!/bin/bash
+[ "\$1" = "-e" ] && exit 0
+exec "$REAL_NODE" "\$@"
+STUB
+chmod +x "$CA/bin/codesign" "$CA/node"
+for kind in release test; do mkdir -p "$CA/$kind/Parcels.app/Contents/Resources/app"; done
+echo '{"name":"parcels","version":"0.9.0"}' > "$CA/release/Parcels.app/Contents/Resources/app/package.json"
+echo '{"name":"parcels","version":"0.9.0","parcelsDevReleases":true}' > "$CA/test/Parcels.app/Contents/Resources/app/package.json"
+sed -n '/^check_app() {/,/^}/p' "$ROOT/scripts/app/build-release.sh" > "$CA/check_app.sh"
+run_check_app() { # run_check_app <bundle>
+  ( cd "$ROOT" && PATH="$CA/bin:$PATH" NODE="$CA/node" want="$(shasum -a 256 "$CA/leaf" | awk '{ print $1 }')" bash -c '
+      die() { echo "build-release: $1" >&2; exit 1; }
+      . "$1"; check_app "the app" "$2"' _ "$CA/check_app.sh" "$1" )
+}
+check "check_app is in build-release.sh"         grep -q '^check_app() {' "$CA/check_app.sh"
+check "check_app passes a release build"         run_check_app "$CA/release/Parcels.app"
+out="$(run_check_app "$CA/test/Parcels.app" 2>&1)"; rc=$?
+check "check_app refuses a test build"           test "$rc" -ne 0
+check "  saying it is a test build"              grep -q 'this is a test build, not a release build' <<<"$out"
+
 exit "$fail"
