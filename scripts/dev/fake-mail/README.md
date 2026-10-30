@@ -5,7 +5,7 @@ with no network. It never reads `config.json` or `data/`: everything lives in a 
 built from `config.example.json`, and that directory is removed at the end.
 
 ```sh
-N=/Users/matuslaco/.nvm/versions/node/v24.21.0/bin
+N=$HOME/.nvm/versions/node/v24.21.0/bin
 $N/node scripts/dev/fake-mail/generate-corpus.mjs     # (re)write the .eml files, corpus.json, MANIFEST.md
 $N/node node_modules/.bin/vitest run --config scripts/dev/fake-mail/vitest.config.ts scripts/dev/fake-mail/harness.run.ts
 $N/node node_modules/.bin/vitest run --config scripts/dev/fake-mail/vitest.config.ts scripts/dev/fake-mail/probes.run.ts

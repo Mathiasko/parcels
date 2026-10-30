@@ -1,6 +1,6 @@
 // End-to-end harness for the fake parcel-mail corpus (test/fixtures/fake-mail/).
 //
-//   N=/Users/matuslaco/.nvm/versions/node/v24.21.0/bin
+//   N=$HOME/.nvm/versions/node/v24.21.0/bin
 //   $N/node node_modules/.bin/vitest run --config scripts/dev/fake-mail/vitest.config.ts
 //
 // One long "test" that: builds a throw-away config (from config.example.json) + database + mailDir in a
