@@ -152,3 +152,19 @@ describe('F10: Slovenská pošta\'s own mail about an inbound international item
     expect((await extract(eml('Shop <orders@shop.example>', 'Odoslané', 'Číslo zásielky: RB666666042CN'))).number).toBeUndefined()
   })
 })
+
+describe('F16: a bare "číslo" (a catalogue or product number) is no sign of a parcel', () => {
+  test('the number-heavy newsletter is ignored, not put on /attention', async () => {
+    expect(await extract(corpus('07-newsletter-number-like'))).toEqual({ confidence: 'none' })
+  })
+
+  test('a number labelled as a PARCEL\'s is still evidence with no carrier named', async () => {
+    expect(await extract(eml('Shop <orders@shop.example>', 'Novinky', 'Číslo balíka: 1234567890')))
+      .toEqual({ confidence: 'none', evidence: 'tracking-shape' })
+  })
+
+  test('an e-shop mail that NAMES GLS may still label its number with a bare "číslo"', async () => {
+    expect(await extract(eml('Shop <orders@shop.example>', 'Odoslané cez GLS', 'Sledovacie číslo: 1234567890')))
+      .toMatchObject({ carrier: 'gls', number: '1234567890', confidence: 'shape' })
+  })
+})

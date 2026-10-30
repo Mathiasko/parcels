@@ -153,6 +153,12 @@ const firstNumber = (carrier: CarrierId, haystack: string): string | undefined =
  * next, so in the text rendering the number always starts the following line.
  */
 const GLS_LABEL = /(?:parcel|package|tracking|track|number|zásielk\w*|zasielk\w*|balík\w*|balik\w*|číslo|cislo|paket\w*)(?:[^\n\d]{0,30}|[^\n\d]{0,30}:[ \t]*\r?\n[ \t>]*)$/i
+/**
+ * `GLS_LABEL` without the bare "number" words (`číslo`, `number`): a label that says PARCEL. For the
+ * evidence test with no carrier named, where `Katalógové číslo produktu 123456789012` in a newsletter
+ * must not read as a parcel number - beside a named carrier, a bare `Sledovacie číslo:` still does.
+ */
+const PARCEL_LABEL = /(?:parcel|package|tracking|track|zásielk\w*|zasielk\w*|z[áa]silk\w*|balík\w*|balik\w*|paket\w*|sledovac\w*)(?:[^\n\d]{0,30}|[^\n\d]{0,30}:[ \t]*\r?\n[ \t>]*)$/i
 const PHONE_LABEL = /(?:tel\w*|phone|mobil\w*|call|fax|zavolajte|volajte|\+)[^\n\d]{0,15}$/i
 // 10 digits is also the length of a Slovak national-format mobile number (0900123456).
 const PHONE_PREFIX = /^(?:42[01]|00421|00420|09\d{8}$)/
@@ -190,14 +196,14 @@ const NOT_TRACKING = /objedn|order|fakt[uú]r|invoice|variabil|referenc|tel\b|te
  * be cut out of a longer alphanumeric token (a URL id, a message id), and must not look like a phone.
  * Two different such numbers are ambiguous, which is refused rather than guessed.
  */
-function labelledNumber(carrier: keyof typeof STANDALONE, haystack: string): string | undefined {
+function labelledNumber(carrier: keyof typeof STANDALONE, haystack: string, label = GLS_LABEL): string | undefined {
   const found = new Set<string>()
   for (const m of haystack.matchAll(STANDALONE[carrier])) {
     const before = haystack.slice(Math.max(0, m.index - 50), m.index)
     // The label may sit on the line above (`Číslo objednávky:` / number), so it is the label's own
     // line that the NOT_TRACKING words are looked for in, not the empty start of the number's line.
     const sentence = before.replace(/:[ \t]*\r?\n[ \t>]*$/, ': ').split(/[.!?\n\d]/).pop() ?? ''
-    if (!GLS_LABEL.test(before) || PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0]) || NOT_TRACKING.test(sentence) || isPlaceholder(m[0])) continue
+    if (!label.test(before) || PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0]) || NOT_TRACKING.test(sentence) || isPlaceholder(m[0])) continue
     found.add(normalizeNumber(m[0]))
   }
   return found.size === 1 ? [...found][0] : undefined
@@ -312,7 +318,8 @@ const SHIPPING_SUBJECT = new RegExp([
  *      also the shape of Alza's own order numbers (1052281846, 1062794763), of a variable symbol and
  *      of a phone number, so accepting them would show the entire order thread all over again and
  *      give back nothing. This reuses `DISTINCTIVE` and `labelledNumber`, the same tests the parser
- *      itself trusts, rather than a second opinion about what a number looks like.
+ *      itself trusts, rather than a second opinion about what a number looks like - except that with
+ *      no carrier named the label has to say parcel (`PARCEL_LABEL`), not just "číslo".
  *   4. SHIPPING WORDING IN THE SUBJECT (see `SHIPPING_SUBJECT`). This is what catches a real pickup
  *      notice from a shop that names no carrier and prints no number at all - "Pripravené v
  *      AlzaBoxe", "Objednávka č. 1410452 pripravená na prevzatie" - which the app cannot track but
@@ -327,7 +334,7 @@ function parcelEvidence(subject: string, haystack: string): ParcelEvidence | und
   // `.match` rather than `.test`: these are global regexes, and `.test` would advance their lastIndex
   // and make the next call on the same pattern start half-way through a different message.
   if (Object.values(DISTINCTIVE).some(re => haystack.match(re) !== null)) return 'tracking-shape'
-  if (BARE_DIGIT_CARRIERS.some(c => labelledNumber(c, haystack) !== undefined)) return 'tracking-shape'
+  if (BARE_DIGIT_CARRIERS.some(c => labelledNumber(c, haystack, PARCEL_LABEL) !== undefined)) return 'tracking-shape'
   if (SHIPPING_SUBJECT.test(subject)) return 'shipping-subject'
   return undefined
 }
