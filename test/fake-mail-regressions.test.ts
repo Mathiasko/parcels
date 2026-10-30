@@ -120,7 +120,9 @@ describe('F6: a carrier\'s sample number ("Z 000 0000 000") is not a parcel', ()
 
 describe('F7: a sender dressed up as a carrier, writing from someone else\'s domain, makes no parcel', () => {
   test('"Packeta" <noreply@packeta-sk.example.com> asking for a fee: /attention, saying why', async () => {
-    expect(await extract(corpus('76-phishing-lookalike-packeta'))).toEqual({ confidence: 'none', evidence: 'lookalike-sender' })
+    expect(await extract(corpus('76-phishing-lookalike-packeta'))).toEqual({
+      confidence: 'none', evidence: 'lookalike-sender', claimed: { carrier: 'packeta', host: 'packeta-sk.example.com' },
+    })
   })
 
   test.each([
@@ -129,7 +131,7 @@ describe('F7: a sender dressed up as a carrier, writing from someone else\'s dom
     ['Slovenská pošta in the display name', 'Slovenská pošta <notify@posta-sk.example.net>'],
   ])('%s', async (_, from) => {
     expect(await extract(eml(from, 'Zásielka', 'Vaša zásielka Z 222 2222 299 čaká.')))
-      .toEqual({ confidence: 'none', evidence: 'lookalike-sender' })
+      .toMatchObject({ confidence: 'none', evidence: 'lookalike-sender' })
   })
 
   test('a shop that merely names the carrier in the BODY is still tracked, titled by the shop', async () => {
@@ -137,15 +139,55 @@ describe('F7: a sender dressed up as a carrier, writing from someone else\'s dom
       .toMatchObject({ carrier: 'packeta', number: 'Z2222222205', confidence: 'shape', merchant: 'Mobilonline' })
   })
 
-  test('ingest: no parcel, and the note on /attention says the sender was not trusted', async () => {
+  test.each([
+    ['"Packeta" from a stranger\'s domain', '"Packeta" <x@random.example>'],
+    ['a carrier\'s brand as a subdomain of someone else\'s', 'Packeta <noreply@packeta.example.com>'],
+    ['a carrier\'s brand with a suffix in the domain', 'Packeta <noreply@packeta-sk.example.com>'],
+  ])('still refused: %s', async (_, from) => {
+    expect(await extract(eml(from, 'Zásielka', 'Vaša zásielka Z 222 2222 299 čaká.')))
+      .toEqual({ confidence: 'none', evidence: 'lookalike-sender', claimed: expect.objectContaining({ carrier: 'packeta' }) })
+  })
+
+  test('ingest: no parcel, and the note on /attention names the carrier and the address, and what to do', async () => {
     const { parcels, notes } = await ingest('76-phishing-lookalike-packeta')
     expect(parcels).toEqual([])
-    expect(notes).toEqual(['not tracked: its sender is named like a carrier but does not write from that carrier\'s address'])
+    expect(notes).toEqual(['not tracked on its own: the sender calls itself Packeta but writes from packeta-sk.example.com, which is not one of Packeta\'s known addresses. Assign it if you trust it.'])
   })
 
   test('the real carrier, from its own domain, is unaffected', async () => {
     expect(await extract(eml('Packeta <noreply@packeta.sk>', 'Zásielka', 'Vaša zásielka Z 222 2222 299 čaká.')))
       .toMatchObject({ carrier: 'packeta', number: 'Z2222222299', confidence: 'sender' })
+  })
+})
+
+describe('a carrier writing from one of its own brand domains is not taken for a look-alike', () => {
+  const PACKETA = 'Vaša zásielka Z 222 2222 299 čaká.'
+  const DHL = 'Vaša zásielka JJD0001234567890 je na ceste.'
+
+  test.each([
+    ['Zásilkovna <noreply@packeta.cz>', PACKETA, 'packeta'],
+    ['Zásielkovňa <noreply@zasielkovna.sk>', PACKETA, 'packeta'],
+    ['Packeta <noreply@packeta.hu>', PACKETA, 'packeta'],
+    ['Zásilkovna <info@zasilkovna.cz>', PACKETA, 'packeta'],
+    ['Slovenská pošta <noreply@slposta.sk>', 'Zásielka EB123456785SK je na ceste.', 'posta'],
+    ['DPD <noreply@dpd.cz>', 'Číslo balíka: 01505333333305', 'dpd'],
+  ])('%s is the carrier\'s own address', async (from, body, carrier) => {
+    expect(await extract(eml(from, 'Zásielka', body))).toMatchObject({ carrier, confidence: 'sender' })
+  })
+
+  test.each([
+    ['DHL Parcel <noreply@dhl.nl>', DHL, 'dhl', 'DHL Parcel'],
+    ['DHL Express <noreply@dhl.at>', DHL, 'dhl', 'DHL Express'],
+    ['Packeta <noreply@packeta.xyz>', PACKETA, 'packeta', 'Packeta'],
+    ['GLS <noreply@mail.gls.fr>', 'Číslo balíka GLS: 12345678901', 'gls', 'GLS'],
+  ])('%s: a brand.tld domain is tracked by its number\'s shape, as before the look-alike rule', async (from, body, carrier, merchant) => {
+    expect(await extract(eml(from, 'Zásielka', body))).toMatchObject({ carrier, confidence: 'shape', merchant })
+  })
+
+  test('ingest: the parcel is made, and nothing waits on /attention', async () => {
+    const { parcels, notes } = await ingest(eml('DHL Express <noreply@dhl.at>', 'Zásielka', DHL))
+    expect(parcels).toEqual([{ carrier: 'dhl', number: 'JJD0001234567890', merchant: 'DHL Express' }])
+    expect(notes).toEqual([])
   })
 })
 

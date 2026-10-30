@@ -81,6 +81,7 @@ Medium = wrong or misleading in a way a user will meet; Low = cosmetic, or rare.
 
 ### F7. A phishing look-alike becomes a tracked parcel named "Packeta". *questionable / design choice*
 - **Status (Task 13): fixed** in `6b8b08c`; regression test `test/fake-mail-regressions.test.ts` › "F7: a sender dressed up as a carrier … makes no parcel". Behaviour chosen: /attention with the note "not tracked: its sender is named like a carrier but does not write from that carrier's address" (display name or a domain label naming a carrier, sender not a carrier domain).
+- **Status (final fix wave, review I4): narrowed.** A domain that *is* a carrier's brand (`packeta.cz`, `dhl.nl`, `mail.gls.fr`) is no longer a look-alike: it is tracked by its number's shape, as before Task 13. More carrier domains are listed as senders (`packeta.cz`, `packeta.hu`, `zasielkovna.sk`, `dpd.com`, `dpd.cz`, `slposta.sk`). The note now reads "not tracked on its own: the sender calls itself Packeta but writes from packeta-sk.example.com, which is not one of Packeta's known addresses. Assign it if you trust it."
 - **Input:** `76-phishing-lookalike-packeta.eml`, from `noreply@packeta-sk.example.com`: "uhraďte poplatok 1,99 €".
 - **Expected:** /attention at most, because the sender is not a carrier.
 - **Actual:** parcel `Z2222222299`, titled "Packeta" (the attacker's display name), in flight. It adds no link, but it lends the scam credibility on the dashboard. A distinctive shape is trusted from ANY sender, and the merchant comes from the display name.

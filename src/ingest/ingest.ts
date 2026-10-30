@@ -8,6 +8,7 @@ import { linkMessage, storeMessage } from '../db/messages.js'
 import { accountKey, getImapState, saveImapState, type ImapState } from '../db/imap-state.js'
 import { extract, type Extraction, type ParcelEvidence } from './extract.js'
 import { fetchMessages, type FetchDeps, type ImapConfig, type RawMessage } from './imap.js'
+import { CARRIER_NAME } from '../notify/rules.js'
 
 /** Mail older than this creates its parcel already archived: in the database, never polled. */
 export const ARCHIVE_AFTER_DAYS = 30
@@ -209,6 +210,13 @@ const SHOWN_BECAUSE: Record<ParcelEvidence, string> = {
   'lookalike-sender': 'its sender is named like a carrier but does not write from that carrier\'s address',
 }
 
+/** The note on a mail whose sender calls itself a carrier but does not write from its address. */
+function lookalikeNote(claimed: Extraction['claimed']): string {
+  if (!claimed) return `not tracked on its own: ${SHOWN_BECAUSE['lookalike-sender']}. Assign it if you trust it.`
+  const name = CARRIER_NAME[claimed.carrier]
+  return `not tracked on its own: the sender calls itself ${name} but writes from ${claimed.host.slice(0, 80)}, which is not one of ${name}'s known addresses. Assign it if you trust it.`
+}
+
 /**
  * The note on a message that was stored and then left alone. Deliberately a sentence a person can
  * read, and deliberately distinct from the "no tracking number found" one: the two answer different
@@ -233,9 +241,10 @@ function placeOne(db: Database, it: Item, deps: ReprocessDeps, report: IngestRep
       report.ignored++
       return
     }
-    // A look-alike sender's number WAS found; it is the sender that was not trusted with it.
+    // A look-alike sender's number WAS found; it is the sender that was not trusted with it. Said
+    // without calling it a fraud: a carrier's genuine mail from an address not listed lands here too.
     note(evidence === 'lookalike-sender'
-      ? `not tracked: ${SHOWN_BECAUSE[evidence]}`
+      ? lookalikeNote(it.extraction.claimed)
       : `no tracking number found in this message (${SHOWN_BECAUSE[evidence]})`)
     report.needsAttention++
     return

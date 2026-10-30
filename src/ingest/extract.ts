@@ -35,6 +35,11 @@ export interface Extraction {
    * "is this even about one". See `parcelEvidence` for the rule and for why the two are separate.
    */
   evidence?: ParcelEvidence
+  /**
+   * With `lookalike-sender` only: the carrier the sender calls itself and the domain it writes from,
+   * for the note on /attention.
+   */
+  claimed?: { carrier: CarrierId; host: string }
 }
 
 /**
@@ -48,7 +53,7 @@ export interface Extraction {
  * - `shipping-subject`: the SUBJECT is about a shipment.
  * - `unreadable`: nothing could be read out of the message, so nothing can be concluded either.
  * - `lookalike-sender`: the sender calls itself a carrier (its display name, or a label of its
- *   domain) but does not write from that carrier's domain - see `claimsCarrier`.
+ *   domain) but does not write from that carrier's domain - see `claimedCarrier`.
  * - `too-long`: the message is longer than the caps, so its middle was never read, and neither end
  *   said anything. Like `unreadable`: nothing is known either way.
  */
@@ -58,14 +63,17 @@ export type ParcelEvidence =
 
 /**
  * Registrable sender domains, measured from the live mailbox (packeta.sk, dpd.sk, sps-sro.sk,
- * packeta.com) plus the rest of what the user's Gmail filter targets. A sender matches on the domain
- * itself or any subdomain of it.
+ * packeta.com) plus the rest of what the user's Gmail filter targets, plus the carriers' own brand
+ * domains in the neighbouring markets (Packeta's .cz and .hu, Zásielkovňa's pre-2021 Slovak domain,
+ * DPD's group and Czech domains, Slovenská pošta's slposta.sk). A sender matches on the domain itself
+ * or any subdomain of it.
  */
 const SENDER_DOMAINS: ReadonlyArray<readonly [string, CarrierId]> = [
   ['packeta.sk', 'packeta'], ['packeta.com', 'packeta'], ['zasilkovna.cz', 'packeta'],
-  ['dpd.sk', 'dpd'],
+  ['packeta.cz', 'packeta'], ['packeta.hu', 'packeta'], ['zasielkovna.sk', 'packeta'],
+  ['dpd.sk', 'dpd'], ['dpd.com', 'dpd'], ['dpd.cz', 'dpd'],
   ['sps-sro.sk', 'sps'], ['mysps.sk', 'sps'],
-  ['posta.sk', 'posta'],
+  ['posta.sk', 'posta'], ['slposta.sk', 'posta'],
   // GLS Slovakia writes its own notices from gls-slovakia.sk (the scrubbed real fixture is one), and
   // only some from the group's domains.
   ['gls-group.eu', 'gls'], ['gls-group.com', 'gls'], ['gls-slovakia.sk', 'gls'],
@@ -266,10 +274,11 @@ function namedBareNumbers(haystack: string): { c: CarrierId; n: string }[] {
 }
 
 /**
- * Every way a carrier can be NAMED in prose. The three whose numbers are bare digits come straight
- * from `CARRIER_NAME` - one definition of "this mail says GLS", shared with the e-shop parsing rule
- * above, so the two can never drift apart. The rest are added only for the evidence test, because
- * parsing never needed them: their number shapes speak for themselves.
+ * Every way a carrier can be NAMED in prose, and which carrier each names. The three whose numbers are
+ * bare digits come straight from `CARRIER_NAME` - one definition of "this mail says GLS", shared with
+ * the e-shop parsing rule above, so the two can never drift apart. The rest are added only for the
+ * evidence test and the look-alike rule, because parsing never needed them: their number shapes speak
+ * for themselves.
  *
  * The additions are deliberately NOT the bare carrier word. `pošta` is the Slovak word for "mail"
  * and appears in the footer of half the mail anyone receives ("táto pošta bola odoslaná
@@ -277,31 +286,46 @@ function namedBareNumbers(haystack: string): { c: CarrierId; n: string }[] {
  * with schools and electronics, so it has to stand alone as a token. `Packeta` and `Zásielkovňa` are
  * brand names nothing else uses, so they stand on their own.
  */
-const CARRIER_MENTION: readonly RegExp[] = [
-  ...Object.values(CARRIER_NAME),
-  /(?<![\p{L}\d])(?:packeta|z[áa]sielkovn\w*|z[áa]silkovn\w*)(?![\p{L}])/iu,
+const CARRIER_MENTIONS: ReadonlyArray<readonly [RegExp, CarrierId]> = [
+  ...(Object.entries(CARRIER_NAME) as Array<[keyof typeof CARRIER_NAME, RegExp]>).map(([c, re]) => [re, c] as const),
+  [/(?<![\p{L}\d])(?:packeta|z[áa]sielkovn\w*|z[áa]silkovn\w*)(?![\p{L}])/iu, 'packeta'],
   // Bounded and anchored to a word start: an unbounded run here rescans the rest of a 400 KB body from
   // every `slovensk` in it, which a crafted mail turned into half a minute of a blocked event loop.
   // `\p{L}`, not `\w`: in JS `\w` is ASCII, so `Slovenská pošta` itself used never to match.
-  /(?<![\p{L}\d])slovensk\p{L}{0,12}[  ]+po[šs]t/iu,
-  /(?<![\p{L}\d])(?:SPS|slovak parcel service)(?![\p{L}\d])/iu,
+  [/(?<![\p{L}\d])slovensk\p{L}{0,12}[  ]+po[šs]t/iu, 'posta'],
+  [/(?<![\p{L}\d])(?:SPS|slovak parcel service)(?![\p{L}\d])/iu, 'sps'],
 ]
+const CARRIER_MENTION: readonly RegExp[] = CARRIER_MENTIONS.map(([re]) => re)
 
 /** A carrier brand as a label, or the start of one, of a domain: `packeta-sk.example.com`, `gls.example.net`. */
-const CARRIER_IN_DOMAIN = /(?:^|[.-])(?:packeta|z[aá]sielkovna|z[aá]silkovna|gls|dpd|dhl)(?=[.-])/i
+const CARRIER_IN_DOMAIN = /(?:^|[.-])(packeta|z[aá]sielkovna|z[aá]silkovna|gls|dpd|dhl)(?=[.-])/i
 
 /**
- * Whether a sender that is NOT a carrier presents itself as one: a carrier named in its display name
- * ("Packeta" <noreply@packeta-sk.example.com>) or in its domain. Such a mail is never made a parcel,
- * because a parcel titled "Packeta" on the dashboard is the carrier vouching for it - which is what a
- * phishing mail ("uhraďte poplatok 1,99 €") wants. It waits on /attention instead, with a note saying
- * why. A carrier's genuine mail from a domain not in `SENDER_DOMAINS` costs the same one click there,
- * which is the trade `SENDER_DOMAINS` already makes. A shop that only names the carrier in its BODY
- * ("Prepravca: Packeta") is not affected: only the sender's own name is read.
+ * A domain whose registrable name IS a carrier's brand: `packeta.cz`, `mail.dhl.nl`. Carriers write
+ * from their brand under many country domains, and one this app does not list is still theirs far more
+ * often than not. Someone who buys `packeta.xyz` gets what any sender got before the look-alike rule
+ * (a parcel tracked by its number's shape); `packeta.example.com` and `packeta-sk.example.com` do not.
  */
-function claimsCarrier(origin: { from?: string; name?: string }): boolean {
-  const host = origin.from?.slice(origin.from.lastIndexOf('@') + 1) ?? ''
-  return CARRIER_MENTION.some(re => re.test(origin.name ?? '')) || CARRIER_IN_DOMAIN.test(host)
+const BRAND_DOMAIN = /(?:^|\.)(?:packeta|z[aá]sielkovna|z[aá]silkovna|gls|dpd|dhl)\.[a-z]{2,}$/i
+
+const BRAND_CARRIER: Record<string, CarrierId> = { gls: 'gls', dpd: 'dpd', dhl: 'dhl' }
+
+/**
+ * The carrier a sender that is NOT a known carrier address presents itself as, or undefined: a carrier
+ * named in its display name ("Packeta" <noreply@packeta-sk.example.com>) or in its domain. Such a mail
+ * is never made a parcel, because a parcel titled "Packeta" on the dashboard is the carrier vouching
+ * for it - which is what a phishing mail ("uhraďte poplatok 1,99 €") wants. It waits on /attention
+ * instead, with a note saying why. A domain that is the brand itself (`BRAND_DOMAIN`) is exempt. A
+ * shop that only names the carrier in its BODY ("Prepravca: Packeta") is not affected: only the
+ * sender's own name is read.
+ */
+function claimedCarrier(origin: { from?: string; name?: string }): { carrier: CarrierId; host: string } | undefined {
+  const host = (origin.from?.slice(origin.from.lastIndexOf('@') + 1) ?? '').trim().toLowerCase()
+  if (BRAND_DOMAIN.test(host)) return undefined
+  const named = CARRIER_MENTIONS.find(([re]) => re.test(origin.name ?? ''))?.[1]
+  const brand = CARRIER_IN_DOMAIN.exec(host)?.[1]?.toLowerCase()
+  const carrier = named ?? (brand === undefined ? undefined : BRAND_CARRIER[brand] ?? 'packeta')
+  return carrier && { carrier, host }
 }
 
 /**
@@ -555,7 +579,8 @@ function extractFrom(mail: ParsedMail, subject: string, text: string): Extractio
   const origin = wrapper ?? { from: envelope?.address, name: envelope?.name }
   // Asked only of a mail that would otherwise become a parcel: one that would not keeps the
   // evidence it has, which already puts it on /attention.
-  if (claimsCarrier(origin)) return { confidence: 'none', evidence: 'lookalike-sender' }
+  const claimed = claimedCarrier(origin)
+  if (claimed) return { confidence: 'none', evidence: 'lookalike-sender', claimed }
   return {
     carrier: found[0]!.c, number: found[0]!.n, ...(found.length > 1 && { moreNumbers: found.slice(1).map(f => f.n) }),
     confidence: 'shape', ...(evidence && { evidence }),
