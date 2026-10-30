@@ -7,8 +7,14 @@ import { ingestMessages } from '../src/ingest/ingest.js'
 import { allAdapters } from '../src/carriers/registry.js'
 import { runPickupCodes } from '../src/core/pickup-code.js'
 import { getParcel, insertParcel, updateParcelState } from '../src/db/parcels.js'
+import { appendEvents } from '../src/db/events.js'
+import { buildServer } from '../src/web/server.js'
+import { pickupSummary } from '../src/db/parcels.js'
+import { STYLE } from '../src/web/views/style.js'
+import type { Database } from '../src/db/index.js'
+import type { PickupPoint } from '../src/core/types.js'
 import { fakeImap } from './imap-fake.js'
-import { NOW, memDb } from './poll-helpers.js'
+import { NOW, config, memDb } from './poll-helpers.js'
 
 /**
  * Regression tests for the bugs the fake-mail corpus run found (test/fixtures/fake-mail/FINDINGS.md).
@@ -285,5 +291,41 @@ describe('F23: a postcode read from mail is stored the way the carriers send the
       .run('<26@fake-mail>', NOW.toISOString(), 'noreply@packeta.sk', 'Zásielka je pripravená', '/mail/26.eml', id)
     await runPickupCodes({ db, now: NOW, readMail: () => corpus('26-packeta-ready-zbox-code-leading-zero') })
     expect(getParcel(db, id)?.pickup).toMatchObject({ street: 'Hlavná 5', city: 'Testovo', postalCode: '99901' })
+  })
+})
+
+// --- pages ---------------------------------------------------------------------------------------
+
+const page = async (db: Database, url: string) =>
+  (await buildServer({ db, config, now: () => NOW, notifier: { send: async () => {} } }).inject({ method: 'GET', url })).body
+const DAY = 86_400_000
+const ZBOX: PickupPoint = { kind: 'zbox', name: 'Z-BOX Testovo, Nová 8 (Lidl)', street: 'Nová 8', city: 'Testovo', postalCode: '99901' }
+
+describe('F3: a collected or returned parcel shows no "Collect by" line', () => {
+  const parcel = (status: 'ready_for_pickup' | 'delivered' | 'returned', deadlineDays: number) => {
+    const db = memDb()
+    const id = insertParcel(db, { carrier: 'packeta', trackingNumber: 'Z2222222201', source: 'email' })
+    updateParcelState(db, id, {
+      status, statusRaw: 'raw', pickup: ZBOX, retainedTill: new Date(NOW.getTime() + deadlineDays * DAY),
+      ...(status === 'delivered' && { deliveredAt: NOW }),
+    })
+    return { db, id }
+  }
+
+  test.each([
+    ['delivered, deadline passed', 'delivered', -3],
+    ['delivered, deadline ahead (posta parcel 18: "6 days left")', 'delivered', 6],
+    ['returned, deadline passed', 'returned', -5],
+  ] as const)('%s', async (_, status, days) => {
+    const { db, id } = parcel(status, days)
+    const body = await page(db, `/parcel/${id}`)
+    expect(body).toContain('Z-BOX Testovo')        // the place is still named
+    expect(body).not.toContain('Collect by')
+    expect(body).not.toMatch(/deadline passed|days left/)
+  })
+
+  test('a parcel still waiting keeps its deadline', async () => {
+    const { db, id } = parcel('ready_for_pickup', 3)
+    expect(await page(db, `/parcel/${id}`)).toContain('Collect by')
   })
 })

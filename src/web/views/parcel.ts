@@ -110,7 +110,9 @@ function pickupPanel(p: Parcel, last: StoredEvent | undefined, ctx: PageCtx, map
   const ready = p.status === 'ready_for_pickup'
   // The dashboard's own clock line, so a deadline reads the same on both pages: a deadline whenever the
   // carrier gave one, else how long it has waited - which is only true while it is waiting.
-  const { out: clock, urgency } = p.retainedTill || ready
+  // A collected or returned parcel has no deadline left to meet: "Collect by … 6 days left" on a
+  // parcel already in hand sends the reader to fetch it again.
+  const { out: clock, urgency } = (p.retainedTill && !isTerminalStatus(p.status)) || ready
     ? pickupClock({ parcel: p, last }, ctx.now, calendarForm(p, ctx.now, cal)) : { out: html``, urgency: 'none' }
   const note = ready ? noDeadlineNote([{ parcel: p, last }]) : ''
   const facts = pickupFacts(note, maps)
