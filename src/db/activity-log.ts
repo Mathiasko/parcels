@@ -109,6 +109,7 @@ export const SETTING_FIELDS = [
   'defaultPostalCode', 'notifier', 'mapPreview', 'pickupCalendar',
   'imap', 'imap.host', 'imap.port', 'imap.user', 'imap.mailbox', 'imap.pass',
   'notifications.progress', 'notifications.dailyReminder', 'notifications.delivered',
+  'filterVersion',
 ] as const
 export type SettingField = typeof SETTING_FIELDS[number]
 

@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import {
-  readConfigDocument, runtimeConfigPath, validateConfig, writeConfigDocument, type Config, type ConfigDocument,
+  CURRENT_FILTER_VERSION, readConfigDocument, runtimeConfigPath, validateConfig, writeConfigDocument, type Config, type ConfigDocument,
 } from '../core/config.js'
 import type { CarrierId } from '../core/types.js'
 import type { Database } from '../db/index.js'
@@ -801,6 +801,10 @@ export function buildServer(deps: WebDeps): FastifyInstance {
   app.get('/gmail-filter.xml', async (_req, reply) => {
     let xml: string
     try { xml = readFileSync(join(resourceRoot(), 'gmail-filter.xml'), 'utf8') } catch { return notFound(reply) }
+    // Whoever downloads the current filter is about to import it, so the "import it again" notice is
+    // not for them. Logged like the button's write, as a web action, though a GET: it does change a
+    // setting, and the log is where a changed config file is accounted for.
+    markFilterImported()
     return reply.code(200)
       .type('application/xml; charset=utf-8')
       .header('content-disposition', 'attachment; filename="gmail-filter.xml"')
@@ -836,6 +840,24 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     } catch (err) {
       return { doc, error: err instanceof Error ? err.message : String(err) }
     }
+  }
+
+  /**
+   * Records that the current Gmail filter has been (or is being) imported: `filterVersion` set to
+   * `CURRENT_FILTER_VERSION`, everything else in the file as it was read. Does nothing unless the file
+   * loads AND is below the current version, and swallows a failed write: it serves a download and a
+   * redirect, and neither may fail because a notice could not be dismissed (the notice just stays).
+   */
+  const markFilterImported = (): void => {
+    try {
+      const file = current()
+      if (!file.valid || file.valid.filterVersion >= CURRENT_FILTER_VERSION) return
+      const next: ConfigDocument = { ...file.doc, filterVersion: CURRENT_FILTER_VERSION }
+      const saved = writeConfigDocument(configPath, next)
+      // As POST /settings: the port and the database are bound to this process and stay as they are.
+      config = { ...saved, port: config.port, dbPath: config.dbPath }
+      logAction(db, { kind: 'settings_saved', fields: changedSettingFields(file.doc, next) }, acted())
+    } catch { /* the file or the log could not be written: the notice simply stays */ }
   }
 
   const settings = async (
@@ -893,6 +915,12 @@ export function buildServer(deps: WebDeps): FastifyInstance {
       return reply.redirect(`/settings?saved=1&test=${saveTest.id}`, 303)
     }
     return reply.redirect('/settings?saved=1', 303)
+  })
+
+  /** "Done, I imported it again": see `markFilterImported`. A POST, as it writes the config file. */
+  app.post('/settings/filter-imported', async (_req, reply) => {
+    markFilterImported()
+    return reply.redirect('/settings', 303)
   })
 
   /**

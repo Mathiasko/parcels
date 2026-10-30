@@ -8,7 +8,7 @@ import { DEFAULT_NOTIFICATIONS, type Config } from '../src/core/config.js'
 /** 2026-10-26 11:00 in Europe/Bratislava (CET): slot 4. */
 export const NOW = new Date('2026-10-26T10:00:00Z')
 
-export const config: Config = { dbPath: ':memory:', port: 0, defaultPostalCode: '81101', notifier: 'auto', mapPreview: true, notifications: DEFAULT_NOTIFICATIONS }
+export const config: Config = { dbPath: ':memory:', port: 0, defaultPostalCode: '81101', notifier: 'auto', mapPreview: true, notifications: DEFAULT_NOTIFICATIONS, filterVersion: 1 }
 
 export const memDb = (): Database => openDb(':memory:')
 

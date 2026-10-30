@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest'
 import { fileURLToPath } from 'node:url'
-import { loadConfig, loadRuntimeConfig, validateConfig, DEFAULT_NOTIFICATIONS } from '../src/core/config.js'
+import { loadConfig, loadRuntimeConfig, validateConfig, DEFAULT_NOTIFICATIONS, CURRENT_FILTER_VERSION } from '../src/core/config.js'
 
 const fixturePath = (name: string) =>
   fileURLToPath(new URL(`./fixtures/config/${name}`, import.meta.url))
@@ -60,5 +60,22 @@ describe('the notifications block', () => {
   test('a block that is not an object is rejected', () => {
     expect(() => validateConfig({ ...base, notifications: [] })).toThrow(/"notifications" must be an object/)
     expect(() => validateConfig({ ...base, notifications: 1 })).toThrow(/"notifications" must be an object/)
+  })
+})
+
+describe('the filter version', () => {
+  const base = { defaultPostalCode: '81101' }
+
+  test('absent means 1: a filter imported before versions existed', () => {
+    expect(validateConfig(base).filterVersion).toBe(1)
+  })
+
+  test('a stored version is taken as it is, and this build ships version 2', () => {
+    expect(validateConfig({ ...base, filterVersion: 2 }).filterVersion).toBe(2)
+    expect(CURRENT_FILTER_VERSION).toBe(2)
+  })
+
+  test.each([0, 1.5, -1, '2', null, true])('%j is not a version', (bad) => {
+    expect(() => validateConfig({ ...base, filterVersion: bad })).toThrow(/"filterVersion" must be a whole number from 1/)
   })
 })

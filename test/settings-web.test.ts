@@ -9,7 +9,7 @@ import type { ImapProbeLike } from '../src/ingest/imap-probe.js'
 import type { ImapConfig } from '../src/ingest/imap.js'
 import { fakeImap, type FakeImap } from './imap-fake.js'
 import { config, memDb, NOW } from './poll-helpers.js'
-import { settingsValues, applySettings } from '../src/web/settings.js'
+import { settingsValues, applySettings, changedSettingFields } from '../src/web/settings.js'
 import { listActivity } from '../src/db/activity-log.js'
 
 const PASS = 'abcdefghijklmnop'
@@ -417,7 +417,8 @@ describe('POST /settings/test', () => {
   })
 
   test('the answer is under its own heading, where the form posts to (#test), not at the top of the page', async () => {
-    const { res } = await resultOf(fakeImap([], { exists: 79 }))
+    // filterVersion 2: no re-import notice above the Gmail section, so the first notice is the answer
+    const { res } = await resultOf(fakeImap([], { exists: 79 }), { filterVersion: 2 })
     const heading = res.body.indexOf('<h2 id="test">Test the Gmail connection</h2>')
     expect(heading).toBeGreaterThan(-1)
     expect(res.body.indexOf('<div class="notice')).toBeGreaterThan(heading)
@@ -642,5 +643,79 @@ describe('the Notifications block', () => {
     expect(read(h.path).notifications).toEqual({ progress: false, dailyReminder: true, delivered: true })
     expect(listActivity(h.db, 10)[0]).toMatchObject({ kind: 'settings_saved' })
     expect(listActivity(h.db, 10)[0]!.detail ?? '').toBe('')
+  })
+})
+
+describe('the filter re-import notice', () => {
+  const SENTENCE = 'Set up before 0.2.0? Import the filter again and delete the old one, so Czech mail is labelled too.'
+  const BUTTON = 'Done, I imported it again'
+
+  test('Gmail connected and no filterVersion: the sentence, and a button in a form posting to /settings/filter-imported', async () => {
+    const body = (await harness().get('/settings')).body
+    expect(body).toContain(SENTENCE)
+    expect(body).toContain(BUTTON)
+    expect(body).toMatch(/<form method="post" action="\/settings\/filter-imported" id="filter-imported"><\/form>/)
+    expect(body).toMatch(/<button form="filter-imported"[^>]*>Done, I imported it again<\/button>/)
+    // in the Gmail section, above the guide
+    expect(body.indexOf(SENTENCE)).toBeGreaterThan(body.indexOf('<h2>Gmail</h2>'))
+    expect(body.indexOf(SENTENCE)).toBeLessThan(body.indexOf('How to connect Gmail'))
+  })
+
+  test('absent with filterVersion 2, and without a Gmail connection', async () => {
+    expect((await harness({ filterVersion: 2 }).get('/settings')).body).not.toContain(SENTENCE)
+    const fresh = (await harness({ imap: undefined }).get('/settings')).body
+    expect(fresh).not.toContain(SENTENCE)
+    expect(fresh).not.toContain(BUTTON)
+  })
+
+  test('the button writes filterVersion 2, keeps every other key, and redirects to /settings', async () => {
+    const h = harness({ notifications: { progress: true, dailyReminder: false, delivered: true }, somethingNewer: { a: 1 } })
+    const before = read(h.path)
+    const res = await h.post('/settings/filter-imported')
+    expect(res.statusCode).toBe(303)
+    expect(res.headers.location).toBe('/settings')
+    expect(read(h.path)).toEqual({ ...before, filterVersion: 2 })
+    expect(imapOf(h.path).pass).toBe(PASS)
+    expect(listActivity(h.db, 10)[0]).toMatchObject({ kind: 'settings_saved', detail: 'filterVersion' })
+    expect((await h.get('/settings')).body).not.toContain(SENTENCE)
+  })
+
+  test('the button on a file that is already at 2 changes nothing and logs nothing', async () => {
+    const h = harness({ filterVersion: 2 })
+    const bytes = readFileSync(h.path, 'utf8')
+    expect((await h.post('/settings/filter-imported')).statusCode).toBe(303)
+    expect(readFileSync(h.path, 'utf8')).toBe(bytes)
+    expect(listActivity(h.db, 10)).toHaveLength(0)
+  })
+
+  test('downloading the filter marks it imported, so a new setup never sees the notice', async () => {
+    const h = harness()
+    const res = await h.get('/gmail-filter.xml')
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toContain('application/xml')
+    expect(read(h.path).filterVersion).toBe(2)
+    expect(listActivity(h.db, 10)[0]).toMatchObject({ kind: 'settings_saved', detail: 'filterVersion' })
+    expect((await h.get('/settings')).body).not.toContain(SENTENCE)
+  })
+
+  test('a download from a file that does not validate is still served, and the file is left alone', async () => {
+    const h = harness({ port: 'eighty' })
+    const bytes = readFileSync(h.path, 'utf8')
+    const res = await h.get('/gmail-filter.xml')
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toContain('application/xml')
+    expect(readFileSync(h.path, 'utf8')).toBe(bytes)
+    expect(listActivity(h.db, 10)).toHaveLength(0)
+  })
+
+  test('a file that cannot be written does not stop the download', async () => {
+    const h = harness({}, undefined, { configPath: '/nonexistent-dir/config.json' })
+    const res = await h.get('/gmail-filter.xml')
+    expect(res.statusCode).toBe(200)
+  })
+
+  test('changedSettingFields compares filterVersion by effective value', () => {
+    expect(changedSettingFields({ defaultPostalCode: '1' }, { defaultPostalCode: '1', filterVersion: 1 })).toEqual([])
+    expect(changedSettingFields({ defaultPostalCode: '1' }, { defaultPostalCode: '1', filterVersion: 2 })).toEqual(['filterVersion'])
   })
 })

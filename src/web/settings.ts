@@ -50,6 +50,8 @@ export interface SettingsValues {
   passSet: boolean
   /** The three switches as they are in effect: stored values over the defaults. */
   notifications: NotificationPrefs
+  /** The Gmail filter version last imported, as in effect: a stored whole number from 1, else 1. */
+  filterVersion: number
 }
 
 export type ApplyResult =
@@ -84,6 +86,13 @@ const notificationPrefs = (doc: ConfigDocument): NotificationPrefs => {
   return { progress: on('progress'), dailyReminder: on('dailyReminder'), delivered: on('delivered') }
 }
 
+/**
+ * The filter version in effect for a document. Lenient like `notificationPrefs`: a hand-edited value
+ * that the validator would reject reads as 1, so the page still renders and still offers the notice.
+ */
+export const effectiveFilterVersion = (doc: ConfigDocument): number =>
+  Number.isInteger(doc.filterVersion) && (doc.filterVersion as number) >= 1 ? (doc.filterVersion as number) : 1
+
 /** The submitted checkboxes, or null when the form did not carry them (see `SettingsForm.notificationsForm`). */
 const submittedNotifications = (f: SettingsForm): NotificationPrefs | null =>
   f.notificationsForm === '1'
@@ -106,6 +115,7 @@ export function settingsValues(doc: ConfigDocument): SettingsValues {
     imapMailbox: fresh ? GMAIL_DEFAULTS.mailbox : text(imap?.mailbox),
     passSet: storedPass(doc) !== undefined,
     notifications: notificationPrefs(doc),
+    filterVersion: effectiveFilterVersion(doc),
   }
 }
 
@@ -127,6 +137,7 @@ export function submittedSettings(f: SettingsForm, doc: ConfigDocument): Setting
     imapMailbox: (f.imapMailbox ?? '').trim(),
     passSet: storedPass(doc) !== undefined,
     notifications: submittedNotifications(f) ?? notificationPrefs(doc),
+    filterVersion: effectiveFilterVersion(doc),
   }
 }
 
@@ -260,6 +271,9 @@ export function changedSettingFields(before: ConfigDocument, after: ConfigDocume
   // By effective value, so a file with no block that is saved with the defaults changed nothing.
   const [was, now] = [notificationPrefs(before), notificationPrefs(after)]
   for (const [name, key] of NOTIFICATION_FIELDS) if (was[key] !== now[key]) changed.push(name)
+
+  // Effective value too: absent means 1, so writing an explicit 1 is not a change.
+  if (effectiveFilterVersion(before) !== effectiveFilterVersion(after)) changed.push('filterVersion')
 
   const a = imapBlock(before)
   const b = imapBlock(after)

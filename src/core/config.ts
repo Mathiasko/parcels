@@ -19,6 +19,15 @@ export interface NotificationPrefs {
 
 export const DEFAULT_NOTIFICATIONS: NotificationPrefs = { progress: false, dailyReminder: true, delivered: true }
 
+/**
+ * The version of `gmail-filter.xml` this build ships. Gmail never updates a filter it has imported, so
+ * a person who set up with an older file keeps the old rules until they import the new one by hand;
+ * `Config.filterVersion` is what they last told us (or what downloading the file implied), and a
+ * number below this one is what makes Settings ask them to import again. Raise it whenever the
+ * filter changes in a way that needs re-importing, and say so in the release notes.
+ */
+export const CURRENT_FILTER_VERSION = 2
+
 export interface Config {
   dbPath: string
   port: number
@@ -33,6 +42,12 @@ export interface Config {
   mapPreview: boolean
   /** Which notifications are sent; always a full object, with the defaults filled in for absent keys. */
   notifications: NotificationPrefs
+  /**
+   * The version of the Gmail filter the person last imported; absent in the file means 1, the filter
+   * from before versions existed. Below `CURRENT_FILTER_VERSION` while Gmail is connected, Settings
+   * shows the re-import notice.
+   */
+  filterVersion: number
   /**
    * The Calendar.app calendar "Add to Calendar" puts pickups into, by name. Absent (or `""` in the file)
    * means the first writable calendar; the success notice always names the calendar it used, so a wrong
@@ -95,6 +110,9 @@ export function validateConfig(raw: ConfigDocument, label = 'config.json'): Conf
     throw new Error(`config ${label}: "mapPreview" must be true or false`)
   }
   const notifications = notificationPrefs(raw.notifications, label)
+  if (raw.filterVersion !== undefined && (!Number.isInteger(raw.filterVersion) || (raw.filterVersion as number) < 1)) {
+    throw new Error(`config ${label}: "filterVersion" must be a whole number from 1`)
+  }
   if (raw.pickupCalendar !== undefined && typeof raw.pickupCalendar !== 'string') {
     throw new Error(`config ${label}: "pickupCalendar" must be a calendar's name, or "" for the first writable calendar`)
   }
@@ -130,6 +148,7 @@ export function validateConfig(raw: ConfigDocument, label = 'config.json'): Conf
     notifier,
     mapPreview: (raw.mapPreview as boolean | undefined) ?? true,
     notifications,
+    filterVersion: (raw.filterVersion as number | undefined) ?? 1,
     ...(typeof raw.pickupCalendar === 'string' && raw.pickupCalendar.trim() !== '' && { pickupCalendar: raw.pickupCalendar.trim() }),
     imap,
   }

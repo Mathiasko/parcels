@@ -57,7 +57,7 @@ const NUMBERS = {
 
 const config: Config = {
   dbPath: ':memory:', port: 8787, defaultPostalCode: SECRETS.defaultPostcode,
-  notifier: 'auto', mapPreview: true, notifications: DEFAULT_NOTIFICATIONS,
+  notifier: 'auto', mapPreview: true, notifications: DEFAULT_NOTIFICATIONS, filterVersion: 1,
   imap: { host: 'imap.gmail.com', port: 993, user: SECRETS.email, pass: SECRETS.appPassword, mailbox: 'parcels' },
 }
 

@@ -1,4 +1,4 @@
-import { NOTIFIERS } from '../../core/config.js'
+import { CURRENT_FILTER_VERSION, NOTIFIERS } from '../../core/config.js'
 import type { ImapProbeResult } from '../../ingest/imap-probe.js'
 import { CalendarFailure } from '../../core/calendar-app.js'
 import type { SettingsValues } from '../settings.js'
@@ -237,6 +237,24 @@ function testTarget(v: SettingsValues): Html {
 const appFiles = html`<p class="meta">Parcels keeps its settings and data in Application Support/Parcels.</p>
 <p><button form="reveal-data" type="submit">Show in Finder</button></p>`
 
+/**
+ * Gmail never updates a filter it has imported, so someone who set up before the Czech rules existed
+ * is told once to import the file again. Shown only while mail is connected (a new setup has no old
+ * filter) and the version they last imported is behind this build's. The button belongs to its own
+ * empty form (`filterImportedForm`, below the page's forms) through the `form` attribute, for the same
+ * reason as `appFiles`: forms cannot nest, and it sits inside the settings form.
+ */
+const filterStale = (v: SettingsValues): boolean => v.imapConfigured && v.filterVersion < CURRENT_FILTER_VERSION
+
+const filterNotice = (v: SettingsValues): Html =>
+  filterStale(v)
+    ? notice('neutral', html`<p>Set up before 0.2.0? Import the filter again and delete the old one, so Czech mail is labelled too.</p>
+<p><button form="filter-imported" type="submit">Done, I imported it again</button></p>`)
+    : html``
+
+const filterImportedForm = (v: SettingsValues): Html =>
+  filterStale(v) ? html`<form method="post" action="/settings/filter-imported" id="filter-imported"></form>` : html``
+
 const revealForm = html`<form method="post" action="/app/reveal-data" id="reveal-data"></form>`
 
 /**
@@ -270,6 +288,7 @@ ${state.test && state.saved ? testResult(state.test, state.nextCheck && { at: st
 <form method="post" action="/settings">
 <h2>Gmail</h2>
 <p class="meta">The app reads the emails Gmail files under one label, signing in with an App Password rather than your Google password. To stop reading mail, clear these fields and the mail server under Advanced.</p>
+${filterNotice(v)}
 ${gmailGuide(v)}
 <div class="fields">
 <label class="wide">Gmail address<input type="email" name="imapUser" value="${v.imapUser}" autocomplete="username" placeholder="you@gmail.com" autocapitalize="off" spellcheck="false"></label>
@@ -312,5 +331,6 @@ ${app ? appFiles : html`<p class="meta">Fixed while the app is running:</p>
 ${state.test && !state.saved ? testResult(state.test) : ''}
 ${testTarget(v)}
 <form method="post" action="/settings/test#test"><button>${state.test ? 'Test again' : 'Test connection'}</button></form>
+${filterImportedForm(v)}
 ${app ? revealForm : ''}</div>`, ctx)
 }
