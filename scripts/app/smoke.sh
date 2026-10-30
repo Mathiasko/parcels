@@ -173,6 +173,13 @@ code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$
 [ "$code" = 200 ] || fail "/gmail-filter.xml answered $code: the server cannot read Contents/Resources"
 echo "smoke: /gmail-filter.xml answered 200 from Contents/Resources"
 
+# The theme fonts live in app.asar, not Contents/Resources: one answering proves the packaged server reads them.
+font="$(cd "$ROOT/assets/fonts" && ls -- *.woff2 2>/dev/null | head -n 1)"
+[ -n "$font" ] || fail "assets/fonts holds no .woff2 file to ask the server for"
+got="$(curl -sS -o /dev/null -w '%{http_code} %{content_type}' --max-time 5 "http://127.0.0.1:$port/fonts/$font")"
+[ "$got" = "200 font/woff2" ] || fail "/fonts/$font answered '$got', not '200 font/woff2': the server cannot read the fonts out of app.asar"
+echo "smoke: a theme font answered 200 from app.asar"
+
 grep -q "smoke run" "$logs/main.log" 2>/dev/null || fail "main.log under the temporary HOME does not mention the smoke run"
 [ -f "$support/data/parcels.db" ] || fail "the database was not created under the temporary HOME"
 [ -d "$support/Chromium" ] || fail "Chromium's state is not under the temporary HOME's support folder"

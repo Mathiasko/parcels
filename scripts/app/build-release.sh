@@ -9,8 +9,9 @@
 #      signs both apps with "Parcels Signing" through scripts/app/after-pack.mjs.
 #   2. release/SHA256SUMS over the four artifacts, as the updater reads it.
 #   3. Both .apps, and the app inside each .dmg: `codesign --verify --deep --strict`, the leaf
-#      certificate's SHA-256 equal to app/signing-cert.sha256, the fuses electron-builder.yml sets, and no
-#      `parcelsDevReleases` in its package.json (a test build, which may follow another release feed).
+#      certificate's SHA-256 equal to app/signing-cert.sha256, the fuses electron-builder.yml sets, no
+#      `parcelsDevReleases` in its package.json (a test build, which may follow another release feed),
+#      and every theme font of assets/fonts/ inside its app.asar (check-fonts.mjs).
 #   4. Each zip through check-release-zip.mjs: the updater's own checks, from dist/, against the
 #      committed certificate hash and this version.
 #   5. A smoke start of this Mac's app (smoke.sh --no-build).
@@ -48,9 +49,9 @@ step "Writing release/SHA256SUMS"
 (cd release && shasum -a 256 "${artifacts[@]}" > SHA256SUMS)
 cat release/SHA256SUMS
 
-# check_app <label> <path/to/Parcels.app>: the signature holds, it is ours, and the fuse is off.
+# check_app <label> <path/to/Parcels.app>: the signature holds, it is ours, the fuse is off, the fonts are in.
 check_app() {
-  local label="$1" app="$2" certs got
+  local label="$1" app="$2" certs got fonts
   codesign --verify --deep --strict "$app" || die "$label: codesign --verify failed"
   certs="$(mktemp -d)"
   codesign -d --extract-certificates="$certs/c" "$app" 2>/dev/null || { rm -rf "$certs"; die "$label: could not read its certificates"; }
@@ -66,7 +67,9 @@ check_app() {
     || die "$label: its fuses are not the ones electron-builder.yml sets"
   # A test build may follow a release feed other than GitHub's (ruling R16); it must never ship.
   "$NODE" scripts/app/dev-releases-flag.mjs "$app" >/dev/null || die "$label: this is a test build, not a release build"
-  echo "$label: signature valid, leaf $got, fuses set, not a test build"
+  # The server reads the theme fonts out of app.asar (/fonts/<file>); electron-builder.yml's files: must carry them.
+  fonts="$("$NODE" scripts/app/check-fonts.mjs "$app" 2>&1)" || die "$label: the theme fonts are not in its app.asar ($fonts)"
+  echo "$label: signature valid, leaf $got, fuses set, not a test build, theme fonts packaged"
 }
 
 step "Checking the signatures"

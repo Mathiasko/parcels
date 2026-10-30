@@ -205,7 +205,9 @@ check "  tagging only after the build"                bash -c "grep -n 'build-re
 # The function is lifted out of build-release.sh as it is and run against two fake bundles: one whose
 # package.json is a release build's, one whose names `parcelsDevReleases` (a test build, ruling R16).
 # codesign is a stub that "extracts" a leaf whose hash is the one wanted, and the fuse check (the one
-# `node -e`) is answered by a stub too, so the test-build check is what decides.
+# `node -e`) is answered by a stub too, so the test-build check is what decides. check-fonts.mjs is a
+# stub as well (its own test, test/app/check-fonts.test.ts, reads real asars): it fails for the bundle
+# named "nofonts", so the test shows check_app refuses an app without the theme fonts.
 CA="$TMP/check-app"
 mkdir -p "$CA/bin"
 echo "a leaf certificate" > "$CA/leaf"
@@ -220,11 +222,13 @@ REAL_NODE="$(find_node)"
 cat > "$CA/node" <<STUB
 #!/bin/bash
 [ "\$1" = "-e" ] && exit 0
+case "\$1" in */check-fonts.mjs) case "\$2" in */nofonts/*) echo "app.asar is missing the fonts"; exit 1 ;; *) exit 0 ;; esac ;; esac
 exec "$REAL_NODE" "\$@"
 STUB
 chmod +x "$CA/bin/codesign" "$CA/node"
-for kind in release test; do mkdir -p "$CA/$kind/Parcels.app/Contents/Resources/app"; done
+for kind in release test nofonts; do mkdir -p "$CA/$kind/Parcels.app/Contents/Resources/app"; done
 echo '{"name":"parcels","version":"0.9.0"}' > "$CA/release/Parcels.app/Contents/Resources/app/package.json"
+cp "$CA/release/Parcels.app/Contents/Resources/app/package.json" "$CA/nofonts/Parcels.app/Contents/Resources/app/package.json"
 echo '{"name":"parcels","version":"0.9.0","parcelsDevReleases":true}' > "$CA/test/Parcels.app/Contents/Resources/app/package.json"
 sed -n '/^check_app() {/,/^}/p' "$ROOT/scripts/app/build-release.sh" > "$CA/check_app.sh"
 run_check_app() { # run_check_app <bundle>
@@ -237,5 +241,8 @@ check "check_app passes a release build"         run_check_app "$CA/release/Parc
 out="$(run_check_app "$CA/test/Parcels.app" 2>&1)"; rc=$?
 check "check_app refuses a test build"           test "$rc" -ne 0
 check "  saying it is a test build"              grep -q 'this is a test build, not a release build' <<<"$out"
+out="$(run_check_app "$CA/nofonts/Parcels.app" 2>&1)"; rc=$?
+check "check_app refuses an app without the fonts" test "$rc" -ne 0
+check "  saying the fonts are not in app.asar"   grep -q 'the theme fonts are not in its app.asar' <<<"$out"
 
 exit "$fail"
