@@ -34,7 +34,7 @@ test('GET serves the page of this first run, with the stylesheet and the CSP', a
   expect(res.headers.get('content-security-policy')).toBe(PAGE_CSP)
   const body = await res.text()
   expect(body).toContain('<h1>Welcome to Parcels</h1>')
-  expect(body).toContain('--signal:#2a4bd1')
+  expect(body).toContain('--signal:light-dark(#2a4bd1,#98a9ff)')
   expect(body).not.toContain('{{')
   // The other first run's page is not served.
   expect((await s.handle(new Request('parcels://move-in/'))).status).toBe(404)
