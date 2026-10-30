@@ -3,6 +3,7 @@ import { COLOR_TOKENS, SHAPE_TOKENS, type Theme } from '../src/web/themes/types.
 import { DEFAULT_THEME, THEMES, themeById, themeCss } from '../src/web/themes/index.js'
 import { classic } from '../src/web/themes/classic.js'
 import { postal } from '../src/web/themes/postal.js'
+import { POSTAL_ORNAMENTS, RUBBER_OPACITY } from '../src/web/themes/postal-ornaments.js'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { DEFAULT_APPEARANCE, THEME_IDS } from '../src/core/appearance.js'
@@ -189,7 +190,8 @@ describe('Postal', () => {
 
   test('sets mono text a step larger, for Courier Prime\'s small x-height', () => {
     expect(postal.css ?? '').toContain(':root[data-theme="postal"] .mono{font-size:.875rem}')
-    expect(postal.css ?? '').not.toMatch(/\.code\b/)
+    // the plain .code line is left alone; the ornaments style only .code-plate (and its .code-l)
+    expect(postal.css ?? '').not.toMatch(/\.code(?![\w-])/)
     expect(themeCss(classic)).not.toContain('.875rem')
     expect(STYLE).not.toContain('</')
   })
@@ -203,6 +205,93 @@ describe('Postal', () => {
     // no "<" and no "#" (the ">" of a child combinator is fine); "</" would end the inline <style>
     expect(own).not.toMatch(/<|#/)
     expect(own).not.toContain('</')
+  })
+})
+
+/** `fg` laid over `bg` at `alpha`, as #rrggbb: what the eye sees of a translucent ink. */
+const over = (fg: string, bg: string, alpha: number): string => '#' + [1, 3, 5].map(i => {
+  const c = Math.round(alpha * parseInt(fg.slice(i, i + 2), 16) + (1 - alpha) * parseInt(bg.slice(i, i + 2), 16))
+  return c.toString(16).padStart(2, '0')
+}).join('')
+
+describe('Postal ornaments', () => {
+  const R = ':root[data-theme="postal"]'
+  const own = stripComments(POSTAL_ORNAMENTS)
+
+  test('are part of Postal\'s css, and of no other theme', () => {
+    expect(POSTAL_ORNAMENTS.length).toBeGreaterThan(0)
+    expect(postal.css ?? '').toContain(POSTAL_ORNAMENTS)
+    expect(themeCss(classic)).not.toMatch(/orn-|code-plate|\.gc\b/)
+  })
+
+  test('scope every selector to data-theme="postal"', () => {
+    const media = own.replace(/@media\([^)]*\)\{/g, '')
+    const sels = [...media.matchAll(/(?:^|\})([^{}]+)\{/g)].flatMap(m => m[1]!.split(','))
+    expect(sels.length).toBeGreaterThan(10)
+    for (const sel of sels) expect(sel.trim().startsWith(R), sel).toBe(true)
+  })
+
+  test('every data URL is percent-encoded, with no "<", "#" or "</", and decodes back to an SVG', () => {
+    expect(own).not.toMatch(/<|#/)
+    expect(own).not.toContain('</')
+    const urls = [...own.matchAll(/url\("data:image\/svg\+xml;utf8,([^"]*)"\)/g)].map(m => m[1]!)
+    expect(urls.length).toBeGreaterThan(0)
+    // no other kind of url() sneaks in (the SVGs' own filter references are inside their data)
+    expect(own.replace(/url\("data:image\/svg\+xml;utf8,[^"]*"\)/g, '')).not.toContain('url(')
+    for (const data of urls) {
+      expect(data).not.toMatch(/%(?![0-9A-F]{2})/)
+      const svg = decodeURIComponent(data)
+      expect(svg).toMatch(/^<svg xmlns='http:\/\/www\.w3\.org\/2000\/svg'/)
+      expect(svg.endsWith('</svg>')).toBe(true)
+    }
+  })
+
+  test('swap the glyphs: Classic\'s hidden, the Postal alternates shown', () => {
+    expect(own).toContain(`${R} .gc{display:none}`)
+    expect(own).toContain(`${R} .gp{display:inline}`)
+  })
+
+  test('show every hook they style', () => {
+    for (const hook of ['.orn-place', '.orn-rubber', '.orn-empty', '.orn-postmark']) {
+      expect(own, hook).toMatch(new RegExp(`\\${hook}\\{[^}]*display:(block|inline|inline-block)`))
+    }
+    for (const kind of ['box', 'counter', 'plain']) expect(own).toContain(`.code-plate[data-kind=${kind}]`)
+    for (const s of ['ready_for_pickup', 'out_for_delivery', 'delivered', 'collected']) expect(own).toContain(`[data-status=${s}]`)
+    expect(own).toContain('.card[data-status=out_for_delivery]::before')
+    expect(own).toContain('.card[data-status=failed_attempt]::before')
+  })
+
+  test('have no motion: no keyframes, animation or transition (Task 6 owns those)', () => {
+    expect(own).not.toMatch(/@keyframes|animation|transition/)
+  })
+
+  test('the postmark never takes a selection, and blends as ink in light only', () => {
+    expect(own).toMatch(/\.orn-postmark\{[^}]*user-select:none/)
+    expect(own).toMatch(/--orn-blend:multiply/)
+    expect(own).toMatch(/\[data-mode="dark"\]\{[^}]*--orn-blend:normal/)
+    expect(own).toMatch(/@media\(prefers-color-scheme:dark\)\{[^{}]*\[data-mode="system"\]\{[^}]*--orn-blend:normal/)
+  })
+
+  test('yellow is only ever a fill: no text is coloured --signal, and stamp text is --on-signal', () => {
+    expect(own).not.toMatch(/(^|[;{])color:var\(--signal\)/)
+    expect(own).toMatch(/\.code-plate\[data-kind=box\]\{[^}]*color:var\(--on-signal\)/)
+  })
+
+  test('the rubber stamp\'s warn ink, at its opacity over the card, keeps 4.5:1 in both modes', () => {
+    expect(RUBBER_OPACITY).toBeGreaterThan(0)
+    expect(RUBBER_OPACITY).toBeLessThanOrEqual(1)
+    expect(own).toContain(`opacity:${RUBBER_OPACITY}`)
+    for (const mode of MODES) {
+      const surface = postal.colors.surface[mode]
+      const ratio = contrast(over(postal.colors.warn[mode], surface, RUBBER_OPACITY), surface)
+      expect(ratio >= 4.5, `${mode}: rubber on surface is ${ratio.toFixed(2)}:1`).toBe(true)
+    }
+  })
+
+  test('the blend fixture lays a colour over another', () => {
+    expect(over('#000000', '#ffffff', 1)).toBe('#000000')
+    expect(over('#000000', '#ffffff', 0)).toBe('#ffffff')
+    expect(over('#ff0000', '#0000ff', 0.5)).toBe('#800080')
   })
 })
 

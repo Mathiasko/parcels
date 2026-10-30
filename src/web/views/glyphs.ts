@@ -45,7 +45,9 @@ const POSTAL: Partial<Record<GlyphName, string>> = {
  * The postmark's ring, from the mood board's `postmark`: two rough circles, the arc's words and the wavy
  * cancellation lines, drawn once here. The date and time differ per mark, so each postmark carries its
  * own two `<text>`s beside a `<use>` of this (see `postmark` in ornaments.ts). The board's town is
- * dropped from the arc. The filter and the arc path are document-wide ids, so they are prefixed `pm-`.
+ * dropped from the arc, so the words are spaced out (`textLength`, a little short of the arc's 251) to
+ * go all the way round instead of leaving a quarter of the ring bare. The filter and the arc path are
+ * document-wide ids, so they are prefixed `pm-`.
  * The font is a theme token through an inline style, because an SVG presentation attribute cannot read
  * a custom property; `style-src 'unsafe-inline'` allows it.
  */
@@ -58,7 +60,7 @@ const POSTMARK_DEFS = '<filter id="pm-rough" x="-10%" y="-10%" width="120%" heig
   + '<path id="pm-arc" d="M20 60a40 40 0 1 1 80 0a40 40 0 1 1 -80 0"/>'
   + '<symbol id="postmark-ring" viewBox="0 0 236 142"><g filter="url(#pm-rough)" fill="none" stroke="currentColor">'
   + '<circle cx="60" cy="71" r="52" stroke-width="4"/><circle cx="60" cy="71" r="34" stroke-width="1.6"/>'
-  + '<g transform="translate(0 11)"><text style="font-family:var(--font-body)" font-weight="800" font-size="11.5" letter-spacing="2.6" fill="currentColor" stroke="none">'
+  + '<g transform="translate(0 11)"><text style="font-family:var(--font-body)" font-weight="800" font-size="12" letter-spacing="2.6" textLength="243" lengthAdjust="spacing" fill="currentColor" stroke="none">'
   + '<textPath href="#pm-arc" startOffset="0">PARCELS ✶ COLLECTED ✶</textPath></text></g>'
   + '<path d="M118 44q14-10 28 0t28 0t28 0t28 0M118 62q14-10 28 0t28 0t28 0t28 0M118 80q14-10 28 0t28 0t28 0t28 0M118 98q14-10 28 0t28 0t28 0t28 0" stroke-width="3.4" stroke-linecap="round"/>'
   + '</g></symbol>'

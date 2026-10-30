@@ -65,8 +65,15 @@ export function postmark(at: Date, zone: string, oneShot: boolean): Html {
   const { date, time } = postmarkDate(at, zone)
   const cls = oneShot ? 'orn-postmark just-collected' : 'orn-postmark'
   return html`<span class="${cls}" aria-hidden="true"><svg viewBox="0 0 236 142"><use href="#postmark-ring"/>${
-    stampText(68, 21, date)}${stampText(88, 13, time)}</svg></span>`
+    stampText(74, 17, date, 60)}${stampText(90, 12, time, 50)}</svg></span>`
 }
 
-const stampText = (y: number, size: number, s: string): Html =>
-  html`<text x="60" y="${y}" text-anchor="middle" filter="url(#pm-rough)" style="font-family:var(--font-mono)" font-weight="700" font-size="${size}" fill="currentColor">${s}</text>`
+/**
+ * One line inside the inner ring (radius 34 around 60,71), at most `max` units wide where its line crosses
+ * the ring. The face is monospaced (0.6em a character), so the width is known here: a date too wide for
+ * the ring ("28·VIII·26") is condensed to fit, rather than run over the ring; a short one keeps its shape.
+ */
+const stampText = (y: number, size: number, s: string, max: number): Html => {
+  const fit = [...s].length * 0.6 * size > max ? html` textLength="${max}" lengthAdjust="spacingAndGlyphs"` : html``
+  return html`<text x="60" y="${y}" text-anchor="middle"${fit} filter="url(#pm-rough)" style="font-family:var(--font-mono)" font-weight="700" font-size="${size}" fill="currentColor">${s}</text>`
+}

@@ -145,11 +145,12 @@ describe('the code plate', () => {
 describe('rubber stamp, empty headline and the orn- rule', () => {
   type Db = ReturnType<typeof memDb>
   const ornTags = (body: string) => [...body.matchAll(/<[a-z0-9]+[^>]*class="(?:[^"]* )?orn-[^"]*"[^>]*>/g)].map(m => m[0])
+  /** The page without its inlined stylesheet, so Postal's ornament selectors cannot satisfy (or fail) an assertion. */
   const page = async (setup: (db: Db) => void, url = '/') => {
     const db = memDb()
     setup(db)
     const app = buildServer({ db, config, now: () => NOW, notifier: { send: async () => {} } })
-    return (await app.inject({ method: 'GET', url })).body
+    return (await app.inject({ method: 'GET', url })).body.replace(/<style>[\s\S]*?<\/style>/, '')
   }
   const failed = (description: string) => (db: Db) => {
     const id = insertParcel(db, { carrier: 'packeta', trackingNumber: 'Z1', source: 'email' })
@@ -251,6 +252,14 @@ describe('the postmark and the one-shot markers', () => {
     expect(out).toMatch(/<text [^>]*>6·XI·26<\/text><text [^>]*>14:05<\/text>/)
     expect(text(postmark(new Date('2026-11-06T13:05:00Z'), 'Europe/Bratislava', true)))
       .toMatch(/^<span class="orn-postmark just-collected" aria-hidden="true">/)
+  })
+  test('a date too wide for the inner ring is condensed to fit it; a time that fits keeps its shape', () => {
+    const out = text(postmark(new Date('2026-08-28T10:00:00Z'), 'UTC', false))
+    expect(out).toMatch(/<text [^>]*textLength="60" lengthAdjust="spacingAndGlyphs"[^>]*>28·VIII·26<\/text>/)
+    expect(out).toMatch(/<text (?![^>]*textLength)[^>]*>10:00<\/text>/)
+  })
+  test('the arc words are spaced to go all the way round the ring', () => {
+    expect(text(SPRITE)).toMatch(/<text [^>]*textLength="243" lengthAdjust="spacing"[^>]*><textPath href="#pm-arc"/)
   })
   test('the sprite has the ring, with its own filter and arc, and the arc names no town', () => {
     const sprite = text(SPRITE)

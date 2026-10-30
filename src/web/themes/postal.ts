@@ -1,10 +1,13 @@
 /**
  * Postal: cream paper with grain, DM Serif Display headings, Libre Franklin text, Courier Prime for the
- * mono bits. Tokens, fonts and a little scoped CSS over today's markup; no ornaments, motion or icons
- * (those are a later phase). The colours are the spec's §3.1 values, every §5 contrast pair checked by
- * test/themes.test.ts. The fonts are in assets/fonts/ (see its README for the licences and ranges).
+ * mono bits. Tokens, fonts and a little scoped CSS over today's markup, then the ornaments (stamps, badges,
+ * edges, the postmark: postal-ornaments.ts) that style the neutral hooks the views carry; no motion yet.
+ * The colours are the spec's §3.1 values, every §5 contrast pair checked by test/themes.test.ts. The
+ * fonts are in assets/fonts/ (see its README for the licences and ranges).
  */
 import type { Theme, ThemeFont } from './types.js'
+import { POSTAL_ORNAMENTS } from './postal-ornaments.js'
+import { svgUrl } from './svg-url.js'
 
 /** From assets/fonts/README.md, verbatim; every family and weight uses these two. */
 const LATIN = 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD'
@@ -18,16 +21,10 @@ const subsets = (family: string, stem: string, tail: string, style: ThemeFont['s
 
 /**
  * A grain tile as a CSS `url()`. The SVG source is the paper-grain rule of the Postal moodboard
- * (`.grain`, light; `.dk.grain`, dark): feTurbulence noise tinted by `matrix`. It is percent-encoded
- * (`%` first, then `<` `>` `#` `"`) so the stylesheet never contains `</`, which would end the inline
- * `<style>`, and so the data URL decodes back to exactly the SVG (a raw `%` is not a valid escape).
+ * (`.grain`, light; `.dk.grain`, dark): feTurbulence noise tinted by `matrix`, percent-encoded by `svgUrl`.
  */
-const grain = (matrix: string): string => {
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='${matrix}'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>`
-  // `%` first, so the escapes added after it are not themselves re-escaped.
-  const encoded = svg.replace(/%/g, '%25').replace(/[<>#"]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`)
-  return `url("data:image/svg+xml;utf8,${encoded}")`
-}
+const grain = (matrix: string): string =>
+  svgUrl(`<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='${matrix}'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>`)
 
 const GRAIN_LIGHT = grain('0 0 0 0 .35  0 0 0 0 .27  0 0 0 0 .15  0 0 0 .55 0')
 const GRAIN_DARK = grain('0 0 0 0 .95  0 0 0 0 .85  0 0 0 0 .7  0 0 0 .16 0')
@@ -95,5 +92,6 @@ export const postal: Theme = {
     `${ROOT} .mono{font-size:.875rem}`,
     `${ROOT}[data-mode="dark"]{${DARK}}`,
     `@media(prefers-color-scheme:dark){${ROOT}[data-mode="system"]{${DARK}}}`,
+    POSTAL_ORNAMENTS,
   ].join('\n'),
 }
