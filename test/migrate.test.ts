@@ -466,3 +466,20 @@ test('a current database made before the index gains it on its next open, with n
     after.close()
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
+
+test('an index left on an older predicate is rebuilt on the next open, so the count keeps using it', () => {
+  const dir = tmp()
+  try {
+    const path = join(dir, 'parcels.db')
+    const db = openDb(path, MIGRATIONS)
+    db.exec('DROP INDEX messages_pending')
+    db.exec('CREATE INDEX messages_pending ON messages(parcel_id) WHERE ignored = 1')
+    db.close()
+    const after = openDb(path, MIGRATIONS)
+    expect(plan(after, `SELECT COUNT(*) AS n FROM messages WHERE ${PENDING}`)).toMatch(/USING INDEX messages_pending/)
+    after.close()
+    const again = openDb(path, MIGRATIONS)           // an index already current is left as it is
+    expect(plan(again, `SELECT COUNT(*) AS n FROM messages WHERE ${PENDING}`)).toMatch(/USING INDEX messages_pending/)
+    again.close()
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})

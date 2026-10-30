@@ -18,7 +18,18 @@ const schema = readFileSync(new URL('./schema.sql', import.meta.url), 'utf8')
  * than a copy of its SQL; on `parcel_id` because `parcel_id IS NULL` is an equality the planner can
  * search it by, where on any other column it preferred `messages_parcel` and read every unassigned row.
  */
-const AFTER_MIGRATIONS = `CREATE INDEX IF NOT EXISTS messages_pending ON messages(parcel_id) WHERE ${PENDING};`
+const PENDING_INDEX = `CREATE INDEX messages_pending ON messages(parcel_id) WHERE ${PENDING}`
+
+/**
+ * Creates `messages_pending`, or rebuilds it when `PENDING` has changed since it was made: `IF NOT
+ * EXISTS` alone would keep an index on the old predicate, which the planner would then never use.
+ */
+function ensurePendingIndex(db: Database): void {
+  const row = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'messages_pending'`).get() as { sql: string } | undefined
+  if (row?.sql === PENDING_INDEX) return
+  if (row) db.exec('DROP INDEX messages_pending')
+  db.exec(PENDING_INDEX)
+}
 
 /**
  * The database holds more than tracking numbers: pickup addresses, the user's own postcode, the
@@ -57,7 +68,7 @@ export function openDb(path: string, migrations: Migration[] = MIGRATIONS): Data
     const fresh = isEmptyDatabase(db)
     db.exec(schema)
     applyMigrations(db, migrations, fresh)
-    db.exec(AFTER_MIGRATIONS)
+    ensurePendingIndex(db)
     assertSchemaCurrent(db)
   } catch (err) {
     db.close()
