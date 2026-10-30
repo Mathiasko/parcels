@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { extract } from '../src/ingest/extract.js'
+import { extract, mailText, pickupFromMail } from '../src/ingest/extract.js'
 import { ingestMessages } from '../src/ingest/ingest.js'
 import { allAdapters } from '../src/carriers/registry.js'
 import { fakeImap } from './imap-fake.js'
@@ -252,5 +252,24 @@ describe('F11: an e-shop mail naming two parcels of one carrier tracks both', ()
   test('numbers of two DIFFERENT carriers stay ambiguous: a question, not a guess', async () => {
     expect(await extract(eml('Shop <orders@shop.example>', 'Odoslané', 'Z 222 2222 205 a RR123456785SK')))
       .toMatchObject({ confidence: 'none' })
+  })
+})
+
+describe('F19: Packeta\'s Czech and English mail name the shop, and the Czech one gives the pickup point', () => {
+  test.each([
+    ['31-zasilkovna-cz-ready-iso8859-2', 'Čokoládovna Příkladná'],   // "od odesílatele … je pro vás"
+    ['67-packeta-com-english', 'LedLight Store'],                     // "the sender … has just handed over"
+  ])('%s -> %s', async (name, merchant) => {
+    expect((await extract(corpus(name))).merchant).toBe(merchant)
+  })
+
+  test('"Místo, kde je vaše zásilka uložena" is read like the Slovak block', async () => {
+    expect(pickupFromMail(await mailText(corpus('31-zasilkovna-cz-ready-iso8859-2')))).toMatchObject({
+      kind: 'zbox', name: 'Z-BOX Testovice, Hlavní 12 (Albert)', street: 'Hlavní 12', city: 'Testovice',
+    })
+  })
+
+  test('...but not the FUTURE tense ("kde bude"), a box the parcel has not reached', () => {
+    expect(pickupFromMail('Místo, kde bude vaše zásilka uložena\nZ-BOX Testovice, Hlavní 12\nHlavní 12 999 11 Testovice\n')).toBeUndefined()
   })
 })

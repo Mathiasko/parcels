@@ -436,7 +436,12 @@ function forwardedHeader(text: string): { from?: string; name?: string } | undef
 const MERCHANT: Partial<Record<CarrierId, RegExp[]>> = {
   // `.{1,400}?`, not `.+?`: the result is clipped to MERCHANT_MAX anyway, and an unbounded lazy group
   // scans to the end of the body from every repeat of the opening phrase (quadratic on hostile mail).
-  packeta: [/od odosielateľa\s+(.{1,400}?),?\s+(?:je pre vás|sme nemohli)/i, /odosielateľ\s+(.{1,400}?)\s+nám práve/i],
+  packeta: [
+    /od odosielateľa\s+(.{1,400}?),?\s+(?:je pre vás|sme nemohli)/i, /odosielateľ\s+(.{1,400}?)\s+nám práve/i,
+    // The same two sentences as Zásilkovna (packeta.cz / zasilkovna.cz) and packeta.com write them.
+    /od odesílatele\s+(.{1,400}?),?\s+(?:je pro vás|jsme nemohli)/i, /odesílatel\s+(.{1,400}?)\s+nám právě/i,
+    /from the sender\s+(.{1,400}?),?\s+is (?:ready|waiting)/i, /the sender\s+(.{1,400}?)\s+has just handed/i,
+  ],
   dpd: [/Odosielateľ:\s*(.{1,400}?)\s+Číslo balíka/i],
   sps: [/cislo\s+\S+\s+od\s+(.{1,400}?)\s+je\s+pripravená/i],
   // GLS prints `Odosielateľ:` and the shop in a cell of its own, followed by the next row's bullet
@@ -618,9 +623,9 @@ export interface MailPickupPoint {
  *   - GLS writes `Odberné miesto:` on a line of its own, with the block under it. The label must own
  *     its line and end in a colon, which is what keeps DPD's link text ("Zobraziť odberné miesto
  *     Pickup Station na mape") and SPS's sentence ("v odbernom mieste balíkovo Lekáreň ...") out.
- *   - Packeta heads the block `Miesto, kde je vaša zásielka uložená`. PRESENT tense only: the
- *     acceptance mail prints the same block under `Miesto, kde BUDE vaša zásielka uložená`, naming a
- *     box the parcel has not reached yet and may never reach.
+ *   - Packeta heads the block `Miesto, kde je vaša zásielka uložená` (in Czech `Místo, kde je vaše
+ *     zásilka uložena`). PRESENT tense only: the acceptance mail prints the same block under `Miesto,
+ *     kde BUDE vaša zásielka uložená`, naming a box the parcel has not reached yet and may never reach.
  *   - DPD writes `Adresa samoobslužného boxu Pickup Station:`.
  *
  * A template nobody has a real message for is deliberately absent (DHL, SPS): a guessed label reads a
@@ -629,6 +634,7 @@ export interface MailPickupPoint {
 const PICKUP_LABELS: readonly RegExp[] = [
   /^[ \t>]*odbern[ée]\s+miesto[ \t]*:/gim,
   /miesto,?[ \t]*kde[ \t]+je[ \t]+va[šs]a[ \t]+z[áa]sielka[ \t]+ulo[žz]en[áa]/gi,
+  /m[íi]sto,?[ \t]*kde[ \t]+je[ \t]+va[šs]e[ \t]+z[áa]silka[ \t]+ulo[žz]ena/gi,   // Zásilkovna's Czech
   /adresa[ \t]+samoobslu[žz]n[ée]ho[ \t]+boxu[^:\n]{0,40}:/gi,
 ]
 
