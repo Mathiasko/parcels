@@ -66,3 +66,23 @@ describe('F2: a GLS parcel is named after the shop GLS prints, never after GLS\'
     expect((await extract(real('gls-ready-for-pickup'))).merchant).toBe('Example Seller')
   })
 })
+
+describe('F6: a carrier\'s sample number ("Z 000 0000 000") is not a parcel', () => {
+  test('Packeta\'s promo mail explaining the number format: no parcel, a question for /attention', async () => {
+    expect(await extract(corpus('08-packeta-promo-sample-number'))).toEqual({
+      carrier: 'packeta', confidence: 'none', evidence: 'carrier-sender',
+    })
+  })
+
+  test('a placeholder printed before the real number does not hide it', async () => {
+    expect(await extract(eml('noreply@packeta.sk', 'Zásielka', 'Číslo v tvare Z 000 0000 000. Vaša zásielka: Z 222 2222 201')))
+      .toMatchObject({ carrier: 'packeta', number: 'Z2222222201', confidence: 'sender' })
+  })
+
+  test.each([
+    ['Packeta, from a shop', 'Odoslané cez Packeta: Z 000 0000 000'],
+    ['Slovenská pošta, from a shop', 'Podacie číslo: RR000000000SK'],
+  ])('%s: a number whose digits are all one digit is not taken', async (_, body) => {
+    expect((await extract(eml('Shop <orders@shop.example>', 'Odoslané', body))).number).toBeUndefined()
+  })
+})

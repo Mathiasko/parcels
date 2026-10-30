@@ -123,10 +123,16 @@ const EVENT_TEXT_MAX = 200
 const MAX_TEXT = 400_000
 const MAX_HTML = 1_000_000
 
+/**
+ * A number whose digits are all one digit (`Z 000 0000 000`, `RR000000000SK`): the sample a carrier
+ * prints to show what its numbers look like ("číslo zásielky v tvare Z 000 0000 000"), never one it
+ * issued. Taken as a parcel, it was polled forever and sat in flight as "No updates yet".
+ */
+const isPlaceholder = (normalized: string): boolean => /^[A-Z]*(\d)\1*[A-Z]*$/.test(normalized)
+
 const firstNumber = (carrier: CarrierId, haystack: string): string | undefined => {
   if (carrier === 'gls') return glsNumber(haystack)
-  const m = haystack.match(NUMBER[carrier])
-  return m ? normalizeNumber(m[0]) : undefined
+  return (haystack.match(NUMBER[carrier]) ?? []).map(normalizeNumber).find(n => !isPlaceholder(n))
 }
 
 /**
@@ -146,7 +152,7 @@ const PHONE_PREFIX = /^(?:42[01]|00421|00420|09\d{8}$)/
  * order, so within a rank the earlier one wins.
  */
 function glsNumber(haystack: string): string | undefined {
-  const candidates = [...haystack.matchAll(NUMBER.gls)].map(m => {
+  const candidates = [...haystack.matchAll(NUMBER.gls)].filter(m => !isPlaceholder(m[0])).map(m => {
     const before = haystack.slice(Math.max(0, m.index - 50), m.index)
     const phone = PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0])
     return { number: m[0], rank: GLS_LABEL.test(before) && !phone ? 0 : phone ? 2 : 1 }
@@ -179,7 +185,7 @@ function labelledNumber(carrier: keyof typeof STANDALONE, haystack: string): str
     // The label may sit on the line above (`Číslo objednávky:` / number), so it is the label's own
     // line that the NOT_TRACKING words are looked for in, not the empty start of the number's line.
     const sentence = before.replace(/:[ \t]*\r?\n[ \t>]*$/, ': ').split(/[.!?\n\d]/).pop() ?? ''
-    if (!GLS_LABEL.test(before) || PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0]) || NOT_TRACKING.test(sentence)) continue
+    if (!GLS_LABEL.test(before) || PHONE_LABEL.test(before) || PHONE_PREFIX.test(m[0]) || NOT_TRACKING.test(sentence) || isPlaceholder(m[0])) continue
     found.add(normalizeNumber(m[0]))
   }
   return found.size === 1 ? [...found][0] : undefined
@@ -415,7 +421,7 @@ export async function extract(raw: Buffer): Promise<Extraction> {
 
     // No hint from the sender: trust only a distinctive shape, and only if it is unambiguous.
     let found = Object.entries(DISTINCTIVE).flatMap(([c, re]) =>
-      [...new Set((haystack.match(re) ?? []).map(normalizeNumber))].map(n => ({ c: c as CarrierId, n })))
+      [...new Set((haystack.match(re) ?? []).map(normalizeNumber))].filter(n => !isPlaceholder(n)).map(n => ({ c: c as CarrierId, n })))
     // An e-shop's dispatch mail has no distinctive shape to go on, but it names the carrier and prints
     // a labelled number of that carrier's bare-digit shape. Both signals, or nothing.
     if (found.length === 0) found = namedBareNumbers(haystack)
