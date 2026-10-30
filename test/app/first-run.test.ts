@@ -226,6 +226,7 @@ describe('the pages', () => {
     const html = fillPage(page('welcome.html'), { error: '', postcode: '' }, STYLE)
     expect(html).toContain('<h1>Welcome to Parcels</h1>')
     expect(html).toContain('Parcels tracks your parcels from your shipping emails. First, the postcode some carriers ask for.')
+    expect(html).toContain('Next: connect Gmail (about ten minutes), or skip it and add parcels by hand.')
     expect(html).toMatch(/<form method="post" action="parcels:\/\/welcome\/">/)
     expect(html).toMatch(/name="postcode"/)
     expect(html).toContain(`<style>${STYLE}`)

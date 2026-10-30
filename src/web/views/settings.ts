@@ -4,6 +4,7 @@ import { CalendarFailure } from '../../core/calendar-app.js'
 import type { SettingsValues } from '../settings.js'
 import { glyph } from './glyphs.js'
 import { html, raw, type Html } from './html.js'
+import { formatClock, dayKey } from './format.js'
 import { layout, notice, type PageCtx } from './layout.js'
 
 /** The two fields a form cannot change, and the file they live in. Shown, with the reason, never editable. */
@@ -20,6 +21,12 @@ export interface SettingsState {
   saved?: boolean
   /** The result of a connection test made by the POST that rendered this page. */
   test?: ImapProbeResult
+  /**
+   * When the next scheduled check runs, given only to the page a save lands on. Its presence is what
+   * makes an `ok` result say when parcels will appear: "Test again" does not pass it, because that
+   * answer is about the connection and the person asking has already been told the time.
+   */
+  nextCheck?: Date
   /**
    * The file on disk does not load - it was edited by hand into a state this app rejects. The page
    * still renders (it is the one place that can explain and repair it), but nothing is tested until
@@ -85,9 +92,10 @@ function gmailGuide(v: SettingsValues): Html {
 <li>Click <strong>Choose File</strong>, pick <strong>gmail-filter.xml</strong> in Downloads, then click <strong>Open file</strong>.</li>
 <li>Gmail shows the filter it found. Tick <strong>Apply new filters to existing email</strong> — without it only mail that arrives from now on is labelled — then click <strong>Create filters</strong>.</li>
 <li>Open <a href="${GMAIL_LABELS}">Gmail’s label settings</a>, find <strong>parcels</strong> under Labels, and make sure <strong>Show in IMAP</strong> is ticked. IMAP is the way apps like this one read mail, and Gmail hides a label from it until you say otherwise.</li>
-</ol></li>
+</ol>
+<p class="meta">Sell online? Add <span class="mono">-from:yourshop.sk</span> to the filter so your customers’ dispatch copies are not tracked as your parcels.</p></li>
 <li><strong>Make an App Password</strong>
-<p class="meta">An App Password can read and send mail as your whole account. Parcels only reads the <span class="mono">parcels</span> label and never sends mail. You can revoke it any time at <a href="${APP_PASSWORDS}">myaccount.google.com/apppasswords</a>.</p>
+<p class="meta">An App Password is a separate password made just for this app. An App Password can read and send mail as your whole account. Parcels only reads the <span class="mono">parcels</span> label and never sends mail. You can revoke it any time at <a href="${APP_PASSWORDS}">myaccount.google.com/apppasswords</a>.</p>
 <ol>
 <li><a href="${TWO_STEP}">2-Step Verification</a> has to be on. If it is off, turn it on first.</li>
 <li>Open <a href="${APP_PASSWORDS}">App passwords</a>, type a name such as <strong>Parcels</strong>, and click <strong>Create</strong>.</li>
@@ -96,8 +104,7 @@ function gmailGuide(v: SettingsValues): Html {
 <li><strong>Paste it here</strong>
 <p>Enter your Gmail address and the App Password below and click <strong>Save settings</strong>. Saving tests the connection, and the answer appears at the top of this page.</p></li>
 </ol>
-<p class="meta">Company (Google Workspace) accounts work too; your admin may have to allow App Passwords.</p>
-<p class="meta">Sell online? Add <span class="mono">-from:yourshop.sk</span> to the filter so your customers’ dispatch copies are not tracked as your parcels.</p></details>${
+<p class="meta">Company (Google Workspace) accounts work too; your admin may have to allow App Passwords.</p></details>${
     v.imapConfigured ? '' : html`<p class="meta"><a href="/add">Skip for now — add a parcel by hand</a></p>`}`
 }
 
@@ -135,12 +142,24 @@ const option = (value: string, label: string, current: string): Html =>
 const why = (detail: string | undefined): Html =>
   detail ? html`<p class="meta">The server said: ${detail}</p>` : html``
 
+/** "Your parcels appear at the next check (15:00)": today's time, or `tomorrow 07:00` when the slot is on the next day (Ruling R12). */
+const nextCheckLine = (n: { at: Date; now: Date } | undefined): Html => {
+  if (!n) return html``
+  const when = dayKey(n.at) === dayKey(n.now) ? formatClock(n.at) : `tomorrow ${formatClock(n.at)}`
+  return html`<p>Your parcels appear at the next check (${when}) — or press Refresh now.</p>`
+}
+
 /**
  * The answer to the one question this page exists to answer. Every branch names what to do next,
  * because every one of these failures is otherwise silent: a wrong password shows up three polls
  * later on /health, and a label that is not ticked "Show in IMAP" is indistinguishable from no mail.
+ *
+ * Right after a save, both `ok` answers (connected, and connected but the label is empty) also say when
+ * the next check is, in the same words as the dashboard's schedule: nobody who has just finished ten
+ * minutes of setup should be left wondering whether to wait or to press something. The time is today's
+ * or "tomorrow", never a date, because the next slot is never further away than that.
  */
-function testResult(r: ImapProbeResult): Html {
+function testResult(r: ImapProbeResult, next?: { at: Date; now: Date }): Html {
   switch (r.kind) {
     case 'not_configured':
       return notice('neutral', html`<p><strong>No mail account is configured.</strong></p>
@@ -150,10 +169,13 @@ function testResult(r: ImapProbeResult): Html {
       return r.messages === 0
         ? notice('neutral', html`<p class="st t-3">${glyph('pre_transit')}Connected, nothing to read</p>
 <p><strong>${r.user}</strong> — the label <strong>${r.mailbox}</strong> exists, and it is empty.</p>
+${nextCheckLine(next)}
 <p class="meta">The connection, the password and the label are all fine, so this is not a fault: a Gmail filter that matches nothing looks exactly like this. Check that the filter's action is <strong>Apply the label: ${r.mailbox}</strong>, and that <strong>Apply new filters to existing email</strong> was ticked when you imported it (<strong>Also apply filter to matching conversations</strong>, on a filter made by hand), which is what fills the label with mail you already have.</p>`, true)
         : notice('neutral', html`<p class="st t-ok">${glyph('delivered')}Connected</p>
 <p><strong>${r.user}</strong> — the label <strong>${r.mailbox}</strong> has <strong>${r.messages}</strong> ${r.messages === 1 ? 'message' : 'messages'}.</p>
-<p class="meta">Signed in, the label is visible, and its emails can be read. Everything is in place: new shipping emails become parcels at the next hourly check.</p>`, true)
+${next
+  ? html`<p class="meta">Signed in, the label is visible, and its emails can be read. Everything is in place.</p>${nextCheckLine(next)}`
+  : html`<p class="meta">Signed in, the label is visible, and its emails can be read. Everything is in place: new shipping emails become parcels at the next hourly check.</p>`}`, true)
 
     case 'auth':
       return notice('warn', html`<p><strong>Authentication failed for ${r.user}.</strong></p>
@@ -245,7 +267,7 @@ ${state.configError ? notice('warn', html`<p><strong>The saved settings cannot b
 <p class="meta">Parcels are not being checked until this is fixed. Correcting the fields below and saving puts things right.</p>`) : ''}
 ${state.error ? notice('warn', html`<p>${state.error}</p><p class="meta">Nothing was saved.</p>`, true) : ''}
 ${state.saved ? notice('neutral', html`<p>Saved.</p>`, true) : ''}
-${state.test && state.saved ? testResult(state.test) : ''}
+${state.test && state.saved ? testResult(state.test, state.nextCheck && { at: state.nextCheck, now: ctx.now }) : ''}
 
 <form method="post" action="/settings">
 <h2>Gmail</h2>

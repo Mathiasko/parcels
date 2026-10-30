@@ -148,6 +148,10 @@ describe('the settings page speaks to the person setting up Gmail', () => {
     expect(pass).toContain('Spaces are fine')
     // Other setups.
     expect(guide).toContain('Company (Google Workspace) accounts work too; your admin may have to allow App Passwords.')
+    // The seller line sits in step 1, where the filter is imported, not after the last step.
+    expect(guide.indexOf('Sell online?')).toBeGreaterThan(guide.indexOf('Show in IMAP'))
+    expect(guide.indexOf('Sell online?')).toBeLessThan(guide.indexOf('Make an App Password'))
+    expect(guide).toContain('An App Password is a separate password made just for this app. An App Password can read and send')
     expect(guide).toContain('Sell online? Add <span class="mono">-from:yourshop.sk</span> to the filter so your customers’ dispatch copies are not tracked as your parcels.')
   })
 
@@ -226,6 +230,33 @@ describe('saving runs the connection test', () => {
     expect(h.seen).toHaveLength(1)
     // ...and the button now offers to test again.
     expect(page).toContain('<button>Test again</button>')
+  })
+
+  test('right after a save, the Connected answer says when parcels appear; Test again does not', async () => {
+    const line = (t: string) => `Your parcels appear at the next check (${t}) — or press Refresh now.`
+    const at = (iso: string) => ({ now: () => new Date(iso) })
+    // 14:20 in Bratislava: the next slot is 15:00 the same day.
+    const afternoon = harness({}, fakeImap([], { exists: 7 }), at('2026-10-26T14:20:00+01:00'))
+    const res = await afternoon.post('/settings', fields({ imapMailbox: 'zasielky' }))
+    const page = (await afternoon.get(String(res.headers.location))).body
+    expect(page).toContain(line('15:00'))
+    expect(page).not.toContain('next hourly check')
+    // After the last slot of the day it is the first slot tomorrow.
+    const night = harness({}, fakeImap([], { exists: 7 }), at('2026-10-26T22:00:00+01:00'))
+    const saved = await night.post('/settings', fields({ imapMailbox: 'zasielky' }))
+    expect((await night.get(String(saved.headers.location))).body).toContain(line('tomorrow 07:00'))
+    // "Test again" is about the connection only: no time.
+    const again = (await night.post('/settings/test')).body
+    expect(again).toMatch(/Connected/)
+    expect(again).not.toContain('Your parcels appear at the next check')
+  })
+
+  test('an empty label after a save says the time too', async () => {
+    const h = harness({}, fakeImap([], { exists: 0 }), { now: () => new Date('2026-10-26T14:20:00+01:00') })
+    const res = await h.post('/settings', fields({ imapMailbox: 'zasielky' }))
+    const page = (await h.get(String(res.headers.location))).body
+    expect(page).toContain('Connected, nothing to read')
+    expect(page).toContain('Your parcels appear at the next check (15:00) — or press Refresh now.')
   })
 
   test('a save that touched no mail setting does not dial the mail server', async () => {

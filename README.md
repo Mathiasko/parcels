@@ -39,8 +39,20 @@ instead of the [Terminal install](#install-from-terminal), not beside it.
 What you see next depends on the Mac:
 
 - **No Terminal install on this Mac:** a Welcome page asks for your postcode, then opens Settings,
-  where **How to connect Gmail** walks you through the rest, click by click. They are the same steps
-  as [What no script can do for you](#what-no-script-can-do-for-you).
+  where **How to connect Gmail** walks you through the rest, click by click. It takes about ten
+  minutes, on three Google pages, in three groups:
+  1. **Label your parcel mail in Gmail.** A filter is a Gmail rule that files mail under a label;
+     this one files your shipping emails under a label called `parcels`, and Parcels reads only that
+     label. You download the filter from Settings and import it in Gmail, then tick **Show in IMAP**
+     on the label (IMAP is the way apps like this one read mail).
+  2. **Make an App Password.** An App Password is a separate password made just for this app. It can
+     read and send mail as your whole account; Parcels only reads the `parcels` label and never
+     sends mail. You can revoke it any time at <https://myaccount.google.com/apppasswords>.
+  3. **Paste it here.** Your Gmail address and the App Password go into Settings; saving tests the
+     connection and says when your parcels will appear.
+
+  They are the same steps as [What no script can do for you](#what-no-script-can-do-for-you). Not
+  ready? **Skip for now — add a parcel by hand** is under the guide, and you can connect Gmail later.
 - **A Terminal install on this Mac:** a Move in page offers to bring it in; see
   [Moving from the Terminal install](#moving-from-the-terminal-install).
 
@@ -62,6 +74,22 @@ Settings → Advanced → **Show in Finder** opens the Application Support folde
 Open **Health** and press **Update now**. It downloads the new version and checks that it is signed by
 the same certificate as the one you have; then **Restart to update** closes Parcels and opens the new
 version, which takes a few seconds. If a check fails, Health says why and nothing is changed.
+
+## Uninstalling
+
+To remove the Mac app and everything it keeps:
+
+1. Quit Parcels from the menu bar: click its icon, then **Quit Parcels**.
+2. Move the app to the Trash: drag **Parcels** out of Applications.
+3. Delete its files: the folders `~/Library/Application Support/Parcels` (your settings, parcels and
+   mail) and `~/Library/Logs/Parcels` (the logs). In Finder, **Go** → **Go to Folder…** takes you to
+   either one.
+4. Revoke the App Password at <https://myaccount.google.com/apppasswords>.
+5. In Gmail, delete the filter (Settings → **Filters and Blocked Addresses**) and the `parcels` label
+   (Settings → **Labels**).
+
+Steps 1 to 3 remove Parcels from this Mac; steps 4 and 5 undo what it set up in your Google account.
+Deleting the folders in step 3 cannot be undone, and takes your parcel history with it.
 
 ## Moving from the Terminal install
 
@@ -195,7 +223,7 @@ A test asserts the script only ever *prints* that line, never runs it.
 
 These need a browser, a GUI prompt or a password, and the script lists them when it finishes.
 
-Connecting Gmail takes about five minutes. The Settings page shows these same steps with a link
+Connecting Gmail takes about ten minutes, on three Google pages. The Settings page shows these same steps with a link
 for each, and `setup.sh` opens it when it finishes. Do them in this order - the label has to exist,
 visible to IMAP, before the first connection test, or that test says "the mailbox is not there":
 
@@ -218,7 +246,7 @@ visible to IMAP, before the first connection test, or that test says "the mailbo
    (<https://myaccount.google.com/signinoptions/twosv>).
    1. Open <https://myaccount.google.com/apppasswords>.
    2. Type a name such as `Parcels` and click **Create**.
-   3. Copy the 16-letter password it shows. Google shows it once.
+   3. Copy the 16-character password it shows; spaces are fine. Google shows it once.
 3. **Paste it on the Settings page** (`/settings` on the dashboard): your Gmail address and the App
    Password, then **Save settings**. Saving tests the connection and answers in one line at the top
    of the page; that answer is the only thing that proves ingest works - a wrong password or a

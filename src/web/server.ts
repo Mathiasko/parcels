@@ -860,7 +860,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const query = req.query as Record<string, unknown>
     const testId = one(query.test)
     const test = saveTest !== undefined && testId === String(saveTest.id) ? saveTest.test : undefined
-    return settings(reply, current(), { saved: one(query.saved) === '1', ...(test && { test }) })
+    return settings(reply, current(), { saved: one(query.saved) === '1', ...(test && { test, nextCheck: nextSlot(now()) }) })
   })
 
   app.post('/settings', async (req, reply) => {
