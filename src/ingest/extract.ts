@@ -703,7 +703,11 @@ export function extractPickupCode(text: string): string | undefined {
     for (const m of flat.matchAll(pattern)) {
       const digits = m[1]!.replace(/\D/g, '')
       if (digits.length < 4 || digits.length > 10) continue
-      if (NOT_TRACKING.test(sentenceAround(text, at[m.index]!, at[m.index + m[0].length - 1]! + 1))) continue
+      // The sentence ends after the code's LAST DIGIT, not after the match: the digit group also
+      // swallows the space after the code, and in the flat text that space may stand for a line
+      // break, which would pull the next line (a "tel." footer, an order line) into the veto.
+      const lastDigit = m.index + m[0].trimEnd().length - 1
+      if (NOT_TRACKING.test(sentenceAround(text, at[m.index]!, at[lastDigit]! + 1))) continue
       return digits
     }
   }

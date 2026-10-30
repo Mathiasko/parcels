@@ -105,8 +105,24 @@ describe('pickup PINs for every carrier', () => {
     expect(extractPickupCode('PIN kód pro otevření schránky: 7 7 3 1 2 0')).toBe('773120')
   })
 
+  // The digits' trailing line break is swallowed into the match; the next line is a sentence of its
+  // own and must not veto the PIN above it.
   test.each([
-    ['a phone number with no PIN label', 'Zákaznícka linka 0905 123 456'],
+    ['PIN: 120477\nKontakt: tel. 0800 123 456', '120477'],
+    ['PIN kód: 402211\nObjednávka 123 bola odoslaná.', '402211'],
+  ])('a phone or order on the NEXT line does not refuse the PIN: %j', (text, code) => {
+    expect(extractPickupCode(text)).toBe(code)
+  })
+
+  test('a refused PIN candidate falls through to a later valid one', () => {
+    // Across labels: the vetoed `PIN:` and a later `PIN kód`.
+    expect(extractPickupCode('PIN: 0905123456 (telefón kuriéra).\nPIN kód 123456')).toBe('123456')
+    // Within one label: the next `PIN:` match is tried.
+    expect(extractPickupCode('PIN: 0905123456 (telefón kuriéra).\nPIN: 123456')).toBe('123456')
+  })
+
+  test.each([
+    ['a phone number with no PIN label','Zákaznícka linka 0905 123 456'],
     ['a tracking number', 'Číslo zásielky: 90444444401'],
     ['a "PIN" sentence that names a phone', 'PIN: 0905123456 (telefón kuriéra)'],
     ['a "PIN" sentence that names an order', 'Objednávka č. 123456, PIN kód 4711 nájdete v objednávke'],
