@@ -298,7 +298,7 @@ placeholders makes the poller fail against Gmail every hour. No block at all is 
 account configured" state, and it is what `setup.sh` writes.)
 
 After that first file exists, **`/settings` edits it for you** — the postcode, the notifier, the map
-preview, the calendar for pickups and the whole `imap` block, with a **Test mail connection** button that says in one line
+preview, the look of the pages, the calendar for pickups and the whole `imap` block, with a **Test mail connection** button that says in one line
 whether mail ingest actually works. Saving validates the result with the same rules `loadConfig`
 applies and writes the file atomically at `0600`, keeping any key it does not recognise, so the page
 cannot leave behind a `config.json` that stops the app from starting. `port` and `dbPath` are shown
@@ -316,6 +316,7 @@ at the start of every run, so a change reaches mail ingest and the carriers at t
 | `notifier` | `auto` (default), `terminal-notifier` or `osascript`. `auto` tries terminal-notifier and falls back to osascript. |
 | `mapPreview` | `true` (default) or `false`. The pickup-point map. `false` stops all geocoding and tile fetching and removes the map from the page. See [Pickup point maps](#pickup-point-maps). |
 | `pickupCalendar` | The Calendar.app calendar [Add to Calendar](#add-to-calendar) puts pickups into, by name. `""` (the default) or no key: the first calendar you can write to. |
+| `appearance` | Optional. `{ "theme": "postal" \| "classic", "mode": "system" \| "light" \| "dark" }`, both parts optional, defaulting to `postal` and `system`. See [Appearance](#appearance). |
 | `imap` | Optional. Without it, no mail is read and parcels are added by hand. See below. |
 
 ```json
@@ -330,6 +331,37 @@ at the start of every run, so a change reaches mail ingest and the carriers at t
 
 `mailbox` is the Gmail label name; nested labels are `parent/child`. Set `PARCELS_CONFIG` to use a
 config file somewhere else.
+
+### Appearance
+
+The pages come in two themes:
+
+- **Postal** is the default: cream paper with a faint grain, and a serif for the headings.
+- **Classic** is the look Parcels had before themes existed, in your Mac's own fonts.
+
+Each can be light, dark, or follow the Mac. Open **Settings → Appearance** and pick a **Theme** and a
+**Mode** (*Same as the Mac*, *Light* or *Dark*). They are saved with the rest of the form, and the new
+look shows the next time a page loads. The activity log notes that you changed the theme or the mode,
+by name.
+
+In the config file it is two optional keys, and leaving them out means Postal, following the Mac:
+
+```json
+"appearance": { "theme": "classic", "mode": "dark" }
+```
+
+A value that is not one of the names above stops the config from loading, with a message that names
+the key.
+
+Postal's three typefaces (DM Serif Display, Libre Franklin and Courier Prime) come with Parcels and
+are served by the app itself, so nothing is loaded from the internet. Classic loads no fonts at all.
+Where the fonts came from, and their licences, are in
+[`assets/fonts/README.md`](assets/fonts/README.md).
+
+**The browser you open it in.** The colours use the CSS function `light-dark()`, which needs Chromium
+123 or later (Chrome, Edge and the like), Safari 17.5 or later, or Firefox 120 or later. The Mac app's
+window is fine. If you open the dashboard from a Terminal install in an older browser, the page shows
+without its colours: update the browser.
 
 ## Mail ingest: parcels that add themselves
 
