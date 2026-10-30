@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon'
 import type { Database } from '../db/index.js'
 import type { CanonicalStatus, CarrierId, NewEvent } from '../core/types.js'
+import { DEFAULT_NOTIFICATIONS, type NotificationPrefs } from '../core/config.js'
 import { getParcel, markAnnounced, parcelName, pickupSummary, type Parcel } from '../db/parcels.js'
 import { carrierHealth, markCarrierNotified, type HealthRow } from '../db/health.js'
 import { getIngestStatus, markIngestNotified } from '../db/ingest-status.js'
@@ -63,11 +64,22 @@ function waitingDay(p: Parcel, now: Date): string {
  * - `newEvents` (this run's inserted events) is used only for a repeat failed attempt, where the
  *   status does not change but a new attempt happened.
  *
+ * `prefs` (the config's `notifications` switches) can make a transition SILENT: one to `pre_transit` or
+ * `in_transit` while `progress` is off, and one to `delivered` while `delivered` is off or once the
+ * user has marked the parcel themselves (a `user_marks` row: they already said they have it). A silent
+ * transition is still recorded with `markAnnounced`, so switching a switch on later releases no
+ * backlog of stale banners. It only stops the transition being a reason to speak: the same parcel's
+ * other reasons in the same run (a failed attempt, a new pickup point, the deadline, the reminder) are
+ * announced exactly as before, with the headline they would have had anyway.
+ *
  * Parcel updates beyond four collapse into one summary. Carrier alarms are infrastructure failures,
  * not parcel updates: they are never folded into that summary, so they can never be truncated out of it.
  */
-export function buildNotifications(db: Database, newEvents: NewEvent[], now: Date, port: number): Notification[] {
+export function buildNotifications(
+  db: Database, newEvents: NewEvent[], now: Date, port: number, prefs: NotificationPrefs = DEFAULT_NOTIFICATIONS,
+): Notification[] {
   const base = `http://127.0.0.1:${port}`
+  const marked = db.prepare('SELECT 1 FROM user_marks WHERE parcel_id = ?')
   const sent = db.prepare('INSERT INTO deadline_reminders (parcel_id, notified_at) VALUES (?, ?)')
   const reminded = db.prepare('SELECT 1 FROM deadline_reminders WHERE parcel_id = ?')
   const nudged = db.prepare('SELECT 1 FROM pickup_nudges WHERE parcel_id = ? AND slot_key = ?')
@@ -92,6 +104,12 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
       const mine = newEvents.filter(e => e.parcelId === id)
 
       const transitioned = p.status !== p.lastAnnouncedStatus && p.status !== 'unknown'
+      // A transition the switches keep quiet (see above): still recorded below, never a reason by itself.
+      const silenced = transitioned && (
+        (p.status === 'pre_transit' || p.status === 'in_transit') ? !prefs.progress
+          : p.status === 'delivered' ? !prefs.delivered || marked.get(id) !== undefined
+            : false)
+      const speaks = transitioned && !silenced
       // Only while the parcel is *currently* failed, so a long-ago attempt in a freshly added parcel's
       // backfilled history is not mistaken for a live one.
       const failedAttempt = p.status === 'failed_attempt' && (transitioned || mine.some(e => e.status === 'failed_attempt'))
@@ -103,7 +121,10 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
       // machine that was asleep all morning produces one reminder on waking, not a burst of the day's slots.
       const nudgeDue = p.status === 'ready_for_pickup' && dueSlot !== undefined
         && nudged.get(id, dueSlot) === undefined
-      if (!transitioned && !failedAttempt && !newPickup && !deadlineDue && !nudgeDue) continue
+      if (!speaks && !failedAttempt && !newPickup && !deadlineDue && !nudgeDue) {
+        if (silenced) markAnnounced(db, id, p.status, p.pickup !== undefined)
+        continue
+      }
 
       const showPickup = p.status === 'ready_for_pickup' || newPickup
       const parts = [
@@ -114,7 +135,7 @@ export function buildNotifications(db: Database, newEvents: NewEvent[], now: Dat
         parts.push(mine.at(-1)?.description || p.statusRaw || p.trackingNumber)
       }
 
-      const headline = transitioned || failedAttempt || newPickup
+      const headline = speaks || failedAttempt || newPickup
         ? STATUS_TITLE[p.status]
         : deadlineDue ? 'Pickup deadline approaching' : `Still waiting for you${waitingDay(p, now)}`
       parcelUpdates.push({

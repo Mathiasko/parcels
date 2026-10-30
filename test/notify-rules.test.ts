@@ -6,6 +6,8 @@ import { markAnnounced, updateParcelState, getParcel, type ParcelStateUpdate } f
 import { recordIngest } from '../src/db/ingest-status.js'
 import { recordUpdateCheck } from '../src/db/update-state.js'
 import { parseUpdateCheck } from '../src/core/update.js'
+import { DEFAULT_NOTIFICATIONS, type NotificationPrefs } from '../src/core/config.js'
+import { markCollected } from '../src/core/collected.js'
 import type { Database } from '../src/db/index.js'
 import type { CanonicalStatus, CarrierId, NewEvent, ParcelEvent } from '../src/core/types.js'
 import type { Notification, Notifier } from '../src/notify/types.js'
@@ -26,7 +28,10 @@ function parcelIn(db: Database, status: CanonicalStatus, extra: Partial<ParcelSt
 }
 const newEv = (parcelId: number, raw: string, status: CanonicalStatus): NewEvent => ({ ...ev(raw, status), parcelId })
 
-const build = (db: Database, events: NewEvent[] = [], now = NOW) => buildNotifications(db, events, now, PORT)
+const build = (db: Database, events: NewEvent[] = [], now = NOW, prefs: NotificationPrefs = DEFAULT_NOTIFICATIONS) =>
+  buildNotifications(db, events, now, PORT, prefs)
+/** The defaults with transit updates switched on, for the tests that are about a transit banner's shape. */
+const PROGRESS: NotificationPrefs = { ...DEFAULT_NOTIFICATIONS, progress: true }
 
 test('a status transition produces one notification', () => {
   const db = memDb()
@@ -162,14 +167,14 @@ test('groupKey is parcel-<id> so a later banner replaces the earlier one', () =>
   const db = memDb()
   const id = parcelIn(db, 'pre_transit')
   updateParcelState(db, id, { status: 'in_transit' })
-  expect(build(db)[0]!.groupKey).toBe(`parcel-${id}`)
+  expect(build(db, [], NOW, PROGRESS)[0]!.groupKey).toBe(`parcel-${id}`)
 })
 
 test('url points at http://127.0.0.1:<port>/parcel/<id>', () => {
   const db = memDb()
   const id = parcelIn(db, 'pre_transit')
   updateParcelState(db, id, { status: 'in_transit' })
-  expect(build(db)[0]!.url).toBe(`http://127.0.0.1:${PORT}/parcel/${id}`)
+  expect(build(db, [], NOW, PROGRESS)[0]!.url).toBe(`http://127.0.0.1:${PORT}/parcel/${id}`)
 })
 
 function fiveTransitions(db: Database, count: number) {
@@ -252,12 +257,12 @@ test('runPoll: a status change that arrives with no new event is announced', asy
   const deps = { db, http: bodyHttp(), adapters: [packeta], config, now: NOW, notifier }
 
   await runPoll(deps)
-  expect(notifier.sent).toHaveLength(1)   // unknown -> in_transit
+  expect(notifier.sent).toEqual([])   // unknown -> in_transit: quiet under the default switches
   status = 'ready_for_pickup'
   const report = await runPoll({ ...deps, now: new Date(NOW.getTime() + HOUR) })
   expect(report.newEvents).toEqual([])
-  expect(notifier.sent).toHaveLength(2)
-  expect(notifier.sent[1]!.message).toContain('Z-BOX')
+  expect(notifier.sent).toHaveLength(1)
+  expect(notifier.sent[0]!.message).toContain('Z-BOX')
 })
 
 test('runPoll: a gated carrier produces one alarm across consecutive runs', async () => {
@@ -518,4 +523,90 @@ test('any other mail failure keeps the generic message and points at Health', ()
   expect(n.message).not.toMatch(/App Password/)
   expect(n.message).toMatch(/3 runs in a row/)
   expect(n.url).toBe(`http://127.0.0.1:${PORT}/health`)
+})
+
+// --- the progress and delivered switches ----------------------------------------------------------
+
+test('a transition to in transit is quiet by default, recorded, and switching progress on later releases no backlog', () => {
+  const db = memDb()
+  const id = parcelIn(db, 'pre_transit')
+  updateParcelState(db, id, { status: 'in_transit' })
+  expect(build(db)).toEqual([])
+  expect(getParcel(db, id)!.lastAnnouncedStatus).toBe('in_transit')
+  // Turned on afterwards: the transition already happened and was recorded, so nothing is owed.
+  expect(build(db, [], NOW, PROGRESS)).toEqual([])
+  // What comes next is announced as usual.
+  updateParcelState(db, id, { status: 'out_for_delivery' })
+  expect(build(db).map(n => n.title)).toEqual(['Out for delivery — RA000000001SK'])
+})
+
+test('with progress on, registered and in transit are announced', () => {
+  const db = memDb()
+  const id = parcelIn(db, 'unknown')
+  updateParcelState(db, id, { status: 'pre_transit' })
+  expect(build(db, [], NOW, PROGRESS).map(n => n.title)).toEqual(['Registered — RA000000001SK'])
+  updateParcelState(db, id, { status: 'in_transit' })
+  expect(build(db, [], NOW, PROGRESS).map(n => n.title)).toEqual(['In transit — RA000000001SK'])
+})
+
+test('a quiet transition does not swallow a new pickup point in the same run', () => {
+  const db = memDb()
+  const id = parcelIn(db, 'pre_transit')
+  updateParcelState(db, id, { status: 'in_transit', pickup: ZBOX })
+  const out = build(db)
+  expect(out).toHaveLength(1)
+  expect(out[0]!.title).toBe('In transit — RA000000001SK')
+  expect(out[0]!.message).toContain('Z-BOX, Hlavna 12, Zilina')
+  expect(build(db)).toEqual([])
+})
+
+test('delivered is announced by default and is quiet, but recorded, with delivered off', () => {
+  const db = memDb()
+  const on = parcelIn(db, 'out_for_delivery', {}, 'posta', 'RA000000001SK')
+  const off = parcelIn(db, 'out_for_delivery', {}, 'posta', 'RA000000002SK')
+  updateParcelState(db, on, { status: 'delivered' })
+  expect(build(db).map(n => n.title)).toEqual(['Delivered — RA000000001SK'])
+
+  updateParcelState(db, off, { status: 'delivered' })
+  expect(build(db, [], NOW, { ...DEFAULT_NOTIFICATIONS, delivered: false })).toEqual([])
+  expect(getParcel(db, off)!.lastAnnouncedStatus).toBe('delivered')
+  expect(build(db)).toEqual([])   // switched back on: nothing owed
+})
+
+test('delivered is quiet, but recorded, for a parcel the user already said they have', () => {
+  const db = memDb()
+  const id = parcelIn(db, 'ready_for_pickup', { pickup: ZBOX })
+  expect(markCollected(db, id).ok).toBe(true)
+  // The mark records its own announcement; rewind it, as if the delivered status was never stamped
+  // as said, so only the user_marks row stands between the transition and a banner.
+  markAnnounced(db, id, 'ready_for_pickup', true)
+  expect(getParcel(db, id)!.status).toBe('delivered')
+  expect(build(db)).toEqual([])
+  expect(getParcel(db, id)!.lastAnnouncedStatus).toBe('delivered')
+})
+
+test.each([
+  ['ready_for_pickup', 'Ready for pickup'],
+  ['failed_attempt', 'Delivery attempt failed'],
+  ['returning', 'Returning to sender'],
+] as const)('%s is still announced with progress off', (status, title) => {
+  const db = memDb()
+  const id = parcelIn(db, 'in_transit')
+  updateParcelState(db, id, { status })
+  expect(build(db, [], NOW, { ...DEFAULT_NOTIFICATIONS, progress: false }).map(n => n.title))
+    .toEqual([`${title} — RA000000001SK`])
+})
+
+test('runPoll passes the config\'s switches: in transit is quiet under the defaults and announced with progress on', async () => {
+  const run = async (notifications: NotificationPrefs) => {
+    const db = memDb()
+    addParcel(db, 'packeta', 'Z0000000001')
+    const packeta = stubAdapter('packeta', ins => ins.map(i =>
+      okResult(i.number, [ev('2026-10-25 09:00:00', 'in_transit', 20)], { status: 'in_transit' })))
+    const notifier = recordingNotifier()
+    await runPoll({ db, http: bodyHttp(), adapters: [packeta], config: { ...config, notifications }, now: NOW, notifier })
+    return notifier.sent.map(n => n.title)
+  }
+  expect(await run(DEFAULT_NOTIFICATIONS)).toEqual([])
+  expect(await run(PROGRESS)).toEqual(['In transit — Z0000000001'])
 })
