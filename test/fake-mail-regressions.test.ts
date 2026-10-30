@@ -486,3 +486,29 @@ describe('F28: an unnamed parcel\'s card prints its number once', () => {
     expect(await page(db, '/')).toContain('EB666666025SK')
   })
 })
+
+describe('ordinary dispatch wording is not taken for an order, a customer or a product number', () => {
+  test.each([
+    ['Odoslané cez GLS', 'Milý zákazník, Vaša zásielka č. 1234567890 bola odoslaná.', 'gls', '1234567890'],
+    ['Odoslané cez GLS', 'Vážený zákazník, číslo zásielky je 1234567890', 'gls', '1234567890'],
+    ['Shipped with GLS', 'Dear customer, your parcel 1234567890 is on its way.', 'gls', '1234567890'],
+    ['Shipped with DPD', 'Your item is on its way, tracking number 01505666666605', 'dpd', '01505666666605'],
+    ['Odoslané cez GLS', 'Sledovací kód zásielky: 1234567890', 'gls', '1234567890'],
+    ['Odoslané cez GLS', 'Kód zásielky: 1234567890', 'gls', '1234567890'],
+    ['Odoslané cez GLS', 'Prosím doručte zásielku 1234567890', 'gls', '1234567890'],
+    ['Odoslané cez GLS', 'Vaša objednávka bola odoslaná, zásielka č. 1234567890', 'gls', '1234567890'],
+    ['Shipped with GLS', 'Your order has shipped, parcel no. 1234567890', 'gls', '1234567890'],
+  ])('%s: "%s"', async (subject, body, carrier, number) => {
+    expect(await extract(eml('Shop <orders@shop.example>', subject, body))).toMatchObject({ carrier, number })
+  })
+
+  test('a carrier\'s mail greeting its customer still lists every parcel', async () => {
+    const { parcels } = await ingest(eml('DPD <noreply@dpd.sk>', 'Zásielky', 'Dear customer, parcels 01505666666605, 01505666666606 are coming.'))
+    expect(parcels.map(p => (p as { number: string }).number)).toEqual(['01505666666605', '01505666666606'])
+  })
+
+  test('a numbered label separated from its number by a no-break space still lists both parcels', async () => {
+    const r = await ingest(eml('CykloParts <expedicia@shop.example>', 'Odoslané cez DPD', 'Parcel 1: 01505666666605\nParcel 2: 01505666666606'))
+    expect(r.parcels.map(p => (p as { number: string }).number)).toEqual(['01505666666605', '01505666666606'])
+  })
+})

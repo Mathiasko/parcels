@@ -218,7 +218,7 @@ const PARCEL_LABEL = /(?:parcel|package|tracking|track|zásielk\w*|zasielk\w*|z[
  * punctuation, so neither the leading group of a number printed in groups (`Parcel 12 3456789012`,
  * `Parcel 12-3456789012`) nor a three-digit "ordinal" is read as one.
  */
-const ORDINAL = String.raw`[ \t]*(?:č\.|#|no\.)?[ \t]*\d{1,2}[ \t]*[:.)\-–]`
+const ORDINAL = String.raw`[ \t\u00a0]*(?:č\.|#|no\.)?[ \t\u00a0]*\d{1,2}[ \t\u00a0]*[:.)\-–]`
 /**
  * A label that numbers its PARCEL, so the mail is listing several: `Parcel 1:`, `Balík č. 1:`,
  * `Tracking number 1:`, `Číslo zásielky 2:`. Only a word that says parcel may carry the ordinal, never a
@@ -227,14 +227,16 @@ const ORDINAL = String.raw`[ \t]*(?:č\.|#|no\.)?[ \t]*\d{1,2}[ \t]*[:.)\-–]`
  * the next line: `Balík 1: darčekové balenie, kód 123456789012` numbers a gift box, not a parcel.
  */
 const NUMBERED_LABEL = new RegExp(String.raw`(?:parcel|tracking|zásielk\w*|zasielk\w*|z[áa]silk\w*|balík\w*|balik\w*|sledovac\w*)`
-  + String.raw`(?:[ \t]+(?:number|číslo|cislo))?${ORDINAL}(?:[ \t]+|[ \t]*\r?\n[ \t>]*)$`, 'i')
+  + String.raw`(?:[ \t]+(?:number|číslo|cislo))?${ORDINAL}(?:[ \t\u00a0]+|[ \t\u00a0]*\r?\n[ \t>]*)$`, 'i')
 /** A label's ordinal at the end of the text before its number, to drop it before the label's words are judged. */
 const ORDINAL_AT_END = new RegExp(String.raw`${ORDINAL}[ \t]*(?:\r?\n[ \t>]*)?$`, 'i')
 /**
  * Where the sentence a label stands in begins: after a full stop, `!`, `?`, a line break or a digit. Not
- * after the full stop of `Tel.`, `č.` or `No.`, which would cut the very word that says what the number is.
+ * after the full stop of `Tel.`, which would cut the very word that says what the number is. `č.` and
+ * `No.` do end it: an ordinal is already dropped (`ORDINAL_AT_END`), and keeping them would join an
+ * order to its parcel ("objednávka bola odoslaná, zásielka č. 1234567890") and refuse the parcel.
  */
-const SENTENCE_BREAK = /(?<!(?<!\p{L})(?:tel|fax|mob|č|no|nr))\.|[!?\n\d]/iu
+const SENTENCE_BREAK = /(?<!(?<!\p{L})(?:tel|fax|mob))\.|[!?\n\d]/iu
 const PHONE_LABEL = /(?:tel\w*|phone|mobil\w*|call|fax|zavolajte|volajte|\+)[^\n\d]{0,15}$/i
 // 10 digits is also the length of a Slovak national-format mobile number (0900123456).
 const PHONE_PREFIX = /^(?:42[01]|00421|00420|09\d{8}$)/
@@ -263,11 +265,12 @@ const STANDALONE = {
 } as const
 
 /**
- * Words that mark a number as something other than a tracking number: the shop's own (an order, a
- * product, an item, a catalogue or customer number, an EAN or a product code), an invoice, a receipt,
- * an account, a phone.
+ * Words that mark a number as something other than a tracking number: an order, an invoice, a payment
+ * reference, a phone, a company or bank number. Kept to these: dispatch mail greets its "zákazník" /
+ * "customer", says "item" and "Sledovací kód zásielky", and asks to "doručte", so wider words would
+ * refuse real parcels. Numbered product, catalogue and customer lists are refused by `NUMBERED_LABEL`.
  */
-const NOT_TRACKING = /objedn|order|fakt[uú]r|invoice|variabil|referenc|tel\b|telef|phone|mobil|ičo|dič|iban|\bean\b|k[óo]d\b|produkt[uo]?\b|product\b|\bitem\b|katal|z[áa]kazn|customer|receipt|[úu]č(?:et|t)/i
+const NOT_TRACKING = /objedn|order|fakt[uú]r|invoice|variabil|referenc|tel\b|telef|phone|mobil|ičo|dič|iban/i
 
 /**
  * The tracking number a non-carrier mail prints for a bare-digit carrier (gls, dpd), or undefined.
