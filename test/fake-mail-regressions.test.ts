@@ -535,3 +535,30 @@ describe('Czech Zásilkovna mail', () => {
     expect(pickupFromMail(await mailText(corpus('78-zasilkovna-cz-accepted')))).toBeUndefined()
   })
 })
+
+describe('PPL mail', () => {
+  // Mails 82-85. PPL's 11 digits are also GLS's shape, so a number is PPL only when ppl.cz sent the mail
+  // or a shop names PPL beside it; a stranger's labelled 11-digit number with no carrier named is a question.
+  test('82: a ppl.cz acceptance mail is PPL parcel 40888888801 by its sender', async () => {
+    expect(await extract(corpus('82-ppl-accepted'))).toMatchObject({ carrier: 'ppl', number: '40888888801', confidence: 'sender' })
+  })
+
+  test('83: the ready mail is the same parcel, with its PIN and the ParcelShop it prints', async () => {
+    const buf = corpus('83-ppl-ready-parcelshop-pin')
+    expect(await extract(buf)).toMatchObject({ carrier: 'ppl', number: '40888888801', confidence: 'sender' })
+    const text = await mailText(buf)
+    expect(extractPickupCode(text)).toBe('402211')
+    expect(pickupFromMail(text)).toMatchObject({ name: 'PPL Parcelshop Testovice', street: 'Hlavní 1', postalCode: '999 11', city: 'Testovice' })
+  })
+
+  test('84: a Czech shop dispatch with "Dopravce: PPL" above a labelled 11-digit number is a PPL parcel by shape', async () => {
+    expect(await extract(corpus('84-eshop-cz-dispatch-names-ppl'))).toMatchObject({ carrier: 'ppl', number: '40888888802', confidence: 'shape', merchant: 'Cyklo Fiktivní' })
+  })
+
+  test('85: a stranger\'s labelled 11-digit number with no carrier named is not a PPL parcel (it goes to attention)', async () => {
+    const r = await ingest('85-eshop-cz-11-digit-no-carrier')
+    expect(await extract(corpus('85-eshop-cz-11-digit-no-carrier'))).toMatchObject({ confidence: 'none', evidence: 'tracking-shape' })
+    expect(r.parcels).toEqual([])
+    expect(r.notes).toHaveLength(1)
+  })
+})

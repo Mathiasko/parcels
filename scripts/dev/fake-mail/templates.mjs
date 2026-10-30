@@ -78,6 +78,25 @@ export function zasilkovna({ kind, number, sender, place, code, deadline }) {
 }
 
 // ------------------------------------------------------------------------------------------------
+// PPL CZ (ppl.cz): text only, Czech. No real PPL mail has been seen (src/carriers/ppl.ts says so), so this
+// is the shape the mail ingest is written for, not a copy of a real one: the number under "Číslo zásilky:",
+// and the ParcelShop block under the same "Místo, kde je vaše zásilka uložena" label `pickupFromMail`
+// already reads for Zásilkovna (no PPL-only label was added), with the PIN under "PIN pro vyzvednutí:".
+// ------------------------------------------------------------------------------------------------
+export function ppl({ kind, number, sender, place, pin, deadline }) {
+  const intro = {
+    accepted: `vaši zásilku od odesílatele ${sender} jsme převzali od odesílatele a je na cestě k vám. Doručíme ji na výdejní místo PPL Parcelshop.`,
+    ready: `vaše zásilka od odesílatele ${sender} je pro vás připravena k vyzvednutí na výdejním místě PPL Parcelshop.`,
+  }[kind]
+  const block = place && kind === 'ready'
+    ? `Místo, kde je vaše zásilka uložena\n${place.name}\n${place.street} ${place.zip} ${place.city}\n${deadline ? `Vyzvedněte nejpozději do ${deadline}.\n` : ''}\n`
+    : ''
+  const pinLine = pin && kind === 'ready' ? `PIN pro vyzvednutí: ${pin}\n\n` : ''
+  const text = `PPL CZ\n\nDobrý den,\n${intro}\n\n${pinLine}${block}Číslo zásilky: ${number}\nSledovat zásilku: https://www.ppl.cz/vyhledat-zasilku?shipmentId=${number}\n\nTento e-mail byl vygenerován automaticky, neodpovídejte na něj.\nPPL CZ s.r.o.\n`
+  return { text }
+}
+
+// ------------------------------------------------------------------------------------------------
 // DPD Slovakia (dpd.sk): html only, base64, the way the real Pickup Station mails arrive.
 // ------------------------------------------------------------------------------------------------
 export function dpd({ kind, number, sender, window, pin, deadline, station, numbers, courier, extra = '' }) {

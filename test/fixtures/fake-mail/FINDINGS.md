@@ -22,6 +22,13 @@ test). Not fixed: F17 (see its status). The rest are questionable / design choic
 The three real company details the templates had carried (DPD SK's and Slovenská pošta's head-office addresses and
 infolines, a DHL service number) were replaced with invented ones; the run's results did not change.
 
+**After the Czech Zásilkovna (78-81) and PPL (82-85) mails were added (re-run 2026-10-30):** 85 mails → 84 stored.
+38 parcels: 22 in flight, 13 delivered, 1 returned, 2 archived on arrival. 10 on /attention, 1 ignored, 48
+notifications, 776 carrier polls, 0 network attempts. **1 of 85** mails did not do what the corpus expected:
+`52-…` (F9, unchanged). The four PPL mails all behave as expected: 82/83 are PPL by sender (83 carries the
+`PIN pro vyzvednutí:` code and the ParcelShop block), 84 is PPL because the shop names it beside the number, and
+85 (a stranger's labelled 11-digit number, no carrier named) is not a parcel but a question on /attention.
+
 **Severity**: High = a parcel is lost, invented, or the UI tells the user something false about it;
 Medium = wrong or misleading in a way a user will meet; Low = cosmetic, or rare. **Kind**: *bug*, or
 *questionable / design choice* (where the code's comments say it is deliberate, that is noted).

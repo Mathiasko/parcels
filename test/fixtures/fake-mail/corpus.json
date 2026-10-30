@@ -837,5 +837,46 @@
       "parcel": "packeta:Z2222222216"
     },
     "bytes": 1023
+  },
+  {
+    "file": "82-ppl-accepted.eml",
+    "date": "2026-10-27 10:00",
+    "arrival": "2026-10-27 10:00",
+    "exercises": "PPL 1/2: from ppl.cz, 11 bare digits under \"Číslo zásilky:\" (GLS's shape, PPL by sender)",
+    "expect": {
+      "parcel": "ppl:40888888801"
+    },
+    "bytes": 1016
+  },
+  {
+    "file": "83-ppl-ready-parcelshop-pin.eml",
+    "date": "2026-10-28 14:00",
+    "arrival": "2026-10-28 14:00",
+    "exercises": "PPL 2/2: ready at a ParcelShop; \"PIN pro vyzvednutí:\" (402211), pickup block under the Zásilkovna-style \"Místo, kde je vaše zásilka uložena\" label",
+    "expect": {
+      "parcel": "ppl:40888888801",
+      "code": "402211"
+    },
+    "bytes": 1219
+  },
+  {
+    "file": "84-eshop-cz-dispatch-names-ppl.eml",
+    "date": "2026-10-29 11:00",
+    "arrival": "2026-10-29 11:00",
+    "exercises": "Czech e-shop dispatch: \"Dopravce: PPL\" on the line above a labelled 11-digit number -> PPL by the shop naming it beside the number",
+    "expect": {
+      "parcel": "ppl:40888888802"
+    },
+    "bytes": 954
+  },
+  {
+    "file": "85-eshop-cz-11-digit-no-carrier.eml",
+    "date": "2026-10-29 17:00",
+    "arrival": "2026-10-29 17:00",
+    "exercises": "a stranger's mail with a labelled 11-digit number and no carrier named: never a PPL parcel (11 digits alone is no evidence); the extractor sends it to /attention (\"something shaped like a tracking number\") rather than guessing GLS or PPL",
+    "expect": {
+      "attention": true
+    },
+    "bytes": 835
   }
 ]

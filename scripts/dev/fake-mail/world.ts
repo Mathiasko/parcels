@@ -27,6 +27,7 @@ const PROSE_ONLY = new Set<CarrierId>(['packeta', 'gls', 'sps'])
 
 const Z = (n: number) => `Z22222222${String(n).padStart(2, '0')}`
 const DPD = (n: number) => `015053333333${String(n).padStart(2, '0')}`
+const PPL = (n: number) => `408888888${String(n).padStart(2, '0')}`
 const GLS = (n: number) => `904444444${String(n).padStart(2, '0')}`
 
 const ZBOX_A: PickupPoint = { kind: 'zbox', name: 'Z-BOX Testovo, Hlavná 5 (OC Fiktív)', street: 'Hlavná 5', city: 'Testovo' }
@@ -91,6 +92,19 @@ export const WORLD: Record<string, WorldParcel> = {
     pk('2026-10-21 11:00', 'pre_transit', 'Zásilka byla podána.'),
     pk('2026-10-22 12:00', 'ready_for_pickup', 'Zásilka je připravena k vyzvednutí na výdejním místě.'),
     pk('2026-10-29 08:30', 'returning', 'Zásilka nebyla vyzvednuta v úložní době, vracíme ji odesílateli.'),
+  ] },
+  // PPL (mails 82-83): accepted, in transit, ready at a ParcelShop, collected
+  [PPL(1)]: { carrier: 'ppl', retainedTill: '2026-11-04 23:59', pickup: { kind: 'parcelshop', name: 'PPL Parcelshop Testovice' }, events: [
+    pk('2026-10-27 09:50', 'pre_transit', 'Zásilka byla předána k přepravě.'),
+    pk('2026-10-27 18:30', 'in_transit', 'Zásilka je na cestě.'),
+    pk('2026-10-28 13:50', 'ready_for_pickup', 'Zásilka byla uložena na výdejním místě PPL Parcelshop.'),
+    pk('2026-10-29 16:20', 'delivered', 'Zásilka byla vyzvednuta.'),
+  ] },
+  // PPL (mail 84, a shop dispatch): still on its way, then ready at the same ParcelShop on the last day
+  [PPL(2)]: { carrier: 'ppl', retainedTill: '2026-11-06 23:59', pickup: { kind: 'parcelshop', name: 'PPL Parcelshop Testovice' }, events: [
+    pk('2026-10-29 10:50', 'pre_transit', 'Zásilka byla předána k přepravě.'),
+    pk('2026-10-30 06:10', 'in_transit', 'Zásilka je na cestě.'),
+    pk('2026-10-30 11:40', 'ready_for_pickup', 'Zásilka byla uložena na výdejním místě PPL Parcelshop.'),
   ] },
   // DPD
   [DPD(1)]: { carrier: 'dpd', events: [
