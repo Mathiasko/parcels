@@ -163,12 +163,20 @@ test('GET /fonts/<allowlisted> serves the font with the font headers and the CSP
 })
 
 test('fonts off the allowlist, traversal, a missing file and a directory are 404s that read nothing', async () => {
-  const planted = mkdtempSync(join(tmpdir(), 'parcels-planted-fonts-'))
+  // The font dir is <tmp>/fonts and <tmp> holds a config.json and a package.json, so a "../" that got
+  // past the allowlist would land on a real file and serve PLANTED instead of 404ing on nothing.
+  const root = mkdtempSync(join(tmpdir(), 'parcels-planted-fonts-'))
+  for (const name of ['config.json', 'package.json']) writeFileSync(join(root, name), 'PLANTED')
+  const planted = join(root, 'fonts')
+  mkdirSync(planted)
   for (const name of ['secret.woff2', 'OFL.txt', 'README.md']) writeFileSync(join(planted, name), 'PLANTED')
   mkdirSync(join(planted, 'sub'))
   writeFileSync(join(planted, 'sub', FONT), 'PLANTED')
   const s = setup({ kind: 'welcome' }, { ok: true }, undefined, planted)
-  for (const path of ['OFL.txt', 'README.md', 'secret.woff2', '..%2fpackage.json', '%2e%2e%2fpackage.json', '', `sub%2f${FONT}`, '../x.woff2']) {
+  // A literal "../" or "%2e%2e/" never reaches the handler: the URL parser resolves dot segments, so
+  // parcels://welcome/fonts/../config.json arrives as /config.json (a page 404). Only an encoded
+  // slash keeps the name inside /fonts/, and it is handed on still encoded.
+  for (const path of ['OFL.txt', 'README.md', 'secret.woff2', '..%2fconfig.json', '..%2fpackage.json', '%2e%2e%2fpackage.json', '%2E%2E%2Fconfig.json', '', `sub%2f${FONT}`]) {
     const res = await s.handle(new Request(`parcels://welcome/fonts/${path}`))
     expect(res.status, path).toBe(404)
     expect(await res.text()).not.toMatch(/PLANTED/)

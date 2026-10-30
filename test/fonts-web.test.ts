@@ -13,9 +13,18 @@ const FONT = 'courier-prime-latin-400-normal.woff2'
 const get = (url: string, extra: Partial<WebDeps> = {}) =>
   buildServer({ db: memDb(), config, now: () => NOW, ...extra }).inject({ method: 'GET', url })
 
-/** A font dir holding things that must never be served: a planted .woff2 off the list, a licence, a readme. */
+/**
+ * A font dir holding things that must never be served: a planted .woff2 off the list, a licence, a
+ * readme, a font in a subfolder. The dir is `<tmp>/fonts`, and `<tmp>` holds a `config.json` and a
+ * `package.json`, so a `../` that escaped the allowlist would land on a real file and serve PLANTED
+ * (rather than 404 because there is nothing there).
+ */
 function plantedDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'parcels-fonts-'))
+  const root = mkdtempSync(join(tmpdir(), 'parcels-fonts-'))
+  writeFileSync(join(root, 'config.json'), 'PLANTED-config-bytes')
+  writeFileSync(join(root, 'package.json'), 'PLANTED-package-bytes')
+  const dir = join(root, 'fonts')
+  mkdirSync(dir)
   writeFileSync(join(dir, 'secret.woff2'), 'PLANTED-secret-bytes')
   writeFileSync(join(dir, 'OFL.txt'), 'PLANTED-licence-bytes')
   writeFileSync(join(dir, 'README.md'), 'PLANTED-readme-bytes')
@@ -38,7 +47,7 @@ describe('the font allowlist', () => {
 
   test('readFont reads only allowlisted names', () => {
     const dir = plantedDir()
-    for (const name of ['secret.woff2', 'OFL.txt', 'README.md', `sub/${FONT}`, `../${FONT}`, '', FONT]) {
+    for (const name of ['secret.woff2', 'OFL.txt', 'README.md', `sub/${FONT}`, `../${FONT}`, '../config.json', '../package.json', '', FONT]) {
       expect(readFont(dir, name), name).toBeUndefined()
     }
   })
