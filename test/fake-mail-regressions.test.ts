@@ -140,3 +140,15 @@ describe('F7: a sender dressed up as a carrier, writing from someone else\'s dom
       .toMatchObject({ carrier: 'packeta', number: 'Z2222222299', confidence: 'sender' })
   })
 })
+
+describe('F10: Slovenská pošta\'s own mail about an inbound international item (…CN, …DE) is tracked', () => {
+  test('customs notice from posta.sk for RB666666042CN', async () => {
+    expect(await extract(corpus('57-posta-customs-foreign-s10'))).toMatchObject({
+      carrier: 'posta', number: 'RB666666042CN', confidence: 'sender',
+    })
+  })
+
+  test('from anyone else, a foreign S10 is still not trusted on its shape alone', async () => {
+    expect((await extract(eml('Shop <orders@shop.example>', 'Odoslané', 'Číslo zásielky: RB666666042CN'))).number).toBeUndefined()
+  })
+})

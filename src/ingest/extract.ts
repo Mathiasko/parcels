@@ -95,6 +95,15 @@ const NUMBER: Record<CarrierId, RegExp> = {
 }
 
 /**
+ * Wider shapes for when the sender already is the carrier. Slovenská pošta also writes about inbound
+ * international items, whose UPU S10 numbers end in the country they were posted in (`RB…CN`,
+ * `CP…DE`). Only from posta.sk: from a stranger, `NUMBER.posta`'s `SK` suffix stays the test.
+ */
+const SENDER_NUMBER: Partial<Record<CarrierId, RegExp>> = {
+  posta: /(?<![A-Z0-9])[A-Z]{2}\d{9}[A-Z]{2}(?![A-Z0-9])/g,
+}
+
+/**
  * Shapes distinctive enough to trust without a sender hint, and the pattern that may be trusted for
  * each. Bare digits (dpd, gls) are not, and neither is DHL's `000…` form, which is why dhl appears
  * here with only its lettered prefixes: `JJD…`, `JVGL…` and `3S…` cannot be anything else, while a
@@ -135,7 +144,7 @@ const isPlaceholder = (normalized: string): boolean => /^[A-Z]*(\d)\1*[A-Z]*$/.t
 
 const firstNumber = (carrier: CarrierId, haystack: string): string | undefined => {
   if (carrier === 'gls') return glsNumber(haystack)
-  return (haystack.match(NUMBER[carrier]) ?? []).map(normalizeNumber).find(n => !isPlaceholder(n))
+  return (haystack.match(SENDER_NUMBER[carrier] ?? NUMBER[carrier]) ?? []).map(normalizeNumber).find(n => !isPlaceholder(n))
 }
 
 /**
