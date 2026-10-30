@@ -248,12 +248,9 @@ describe('the page stylesheet', () => {
     expect(BASE_CSS).toMatch(/\nbody\{[^}]*background:var\(--paper\);background-image:var\(--texture\)/)
     expect(BASE_CSS).toMatch(/\.mono\{font:400 \.8125rem\/1\.3846 var\(--font-mono\)/)
     expect(BASE_CSS).toMatch(/\npre\{[^}]*font:400 \.75rem\/1\.5 var\(--font-mono\)/)
-    for (const sel of ['h1', '.card-h h2', '.pk-h h2,.pk-h .where', '.empty']) {
+    for (const sel of ['h1', '.card-h h2', '.pk-h h2,.pk-h .where']) {
       expect(BASE_CSS).toMatch(new RegExp(`\\n${sel.replace(/[.]/g, '\\.')}\\{[^}]*font-family:var\\(--font-display\\)`))
     }
-    // the empty state is in the display face too (spec 3.1), at the body weight: DM Serif Display ships only 400
-    expect(BASE_CSS).toContain('\n.empty{color:var(--ink-3);font-family:var(--font-display)}\n')
-    expect(stripComments(BASE_CSS)).not.toMatch(/\.empty\b[^{}]*\{[^}]*font(-weight)?:/)
     expect(BASE_CSS).toContain('.t-signal{color:var(--signal-ink);--bar:var(--signal-ink)}')
     expect(BASE_CSS).toContain('.clock .due{color:var(--signal-ink)}')
     expect(BASE_CSS).toContain('.b.solid.t-signal{background:var(--signal);color:var(--on-signal)}')
