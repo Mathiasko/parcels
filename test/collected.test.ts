@@ -506,16 +506,23 @@ describe('POST /parcel/:id/collected and /uncollected', () => {
 })
 
 describe('where the button appears', () => {
-  test('dashboard: on a ready parcel\'s card, and not on one in transit', async () => {
+  test('dashboard: "collected" on a ready parcel\'s card, "received" on one in transit', async () => {
     const db = memDb()
     const ready = parcelIn(db, 'ready_for_pickup', { label: 'Topánky' })
     const moving = parcelIn(db, 'in_transit', { carrier: 'gls', number: '12345678901', label: 'Moving' })
     const body = await get(db, '/')
     const cardOf = (name: string) => cards(body).find(c => c.includes(`>${name}</a></h2>`))!
     expect(cardOf('Topánky')).toContain(markButton(ready, 'Mark as collected', 'Topánky', true))
-    expect(cardOf('Moving')).not.toContain('<form class="got"')
-    expect(body).not.toContain(`/parcel/${moving}/collected`)
-    expect(body).not.toContain('Mark as received')
+    expect(cardOf('Moving')).toContain(markButton(moving, 'Mark as received', 'Moving', true))
+    expect(cardOf('Moving')).not.toContain('Mark as collected')
+  })
+
+  test.each<CanonicalStatus>(['out_for_delivery', 'failed_attempt', 'unknown'])('dashboard: a %s card offers "Mark as received"', async status => {
+    const db = memDb()
+    const id = parcelIn(db, status, { label: 'Topánky' })
+    const body = await get(db, '/')
+    expect(body).toContain(markButton(id, 'Mark as received', 'Topánky', true))
+    expect(body.match(/<form class="got"/g)).toHaveLength(1)
   })
 
   test('dashboard: a card that groups parcels at one place has one button per parcel, each in its own block', async () => {

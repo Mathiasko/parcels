@@ -1,4 +1,5 @@
 import { isDormant } from '../../core/backoff.js'
+import { canMark, markKindFor } from '../../core/collected.js'
 import { postcodeRejected, type Parcel } from '../../db/parcels.js'
 import type { StoredEvent, UserMark } from '../../db/events.js'
 import type { CanonicalStatus, CarrierId, PickupPoint } from '../../core/types.js'
@@ -161,7 +162,8 @@ export function pickupCodeLine(code: string | undefined, kind: PickupPoint['kind
 }
 
 /**
- * "Mark as collected", as a form because the page has no script. A quiet secondary button, never
+ * "Mark as collected" (or "as received", on a card that is not at a pickup point: the parcel came to the
+ * door, or the carrier never closes it), as a form because the page has no script. A quiet secondary button, never
  * `--signal`: the chip already says the parcel is waiting on you, and blue on the button as well would be
  * the second use that wears the colour out. Lifted above the card's stretched link (`.got`), so it takes
  * its own click and the rest of the card still opens the parcel.
@@ -379,7 +381,7 @@ function cardEntry(c: Card, e: Entry, ctx: PageCtx): Html {
     : html` · <span class="mono sel">${p.trackingNumber}</span>`}</span>
 ${sentence}${pickupClock(e, ctx.now, calendarForm(p, ctx.now, e.cal, 'home')).out}${pickupCodeLine(e.code, p.pickup?.kind, p.carrier)}${postcodeRejected(p)
     ? html`<p class="meta t-warn">${glyph('problem')} Postcode needed: <a class="sel" href="/parcel/${p.id}">set one</a> to resume full tracking.</p>`
-    : ''}${p.status === 'ready_for_pickup' ? markForm(p, 'Mark as collected', 'home') : ''}</li>`
+    : ''}${canMark(p) ? markForm(p, markKindFor(p) === 'collected' ? 'Mark as collected' : 'Mark as received', 'home') : ''}</li>`
 }
 
 /** The header: a place, said plainly, or the one parcel's name, which is then the card's link. */

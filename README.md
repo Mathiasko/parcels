@@ -1148,9 +1148,9 @@ the poller still sends *Still waiting since Tue* every morning at 08:00. Some pa
 all (a shop's own delivery, a tracking number that went quiet), and the only way off the page used to be
 Delete, which throws their history away.
 
-**Mark as collected** says you have it. It is on every parcel waiting for collection on the dashboard
-(one per parcel on a card that groups several at one place), and on the parcel page of every parcel
-still in flight - there it reads **Mark as received** when the parcel was not at a pickup point.
+**Mark as collected** says you have it. It is on every parcel still in flight, on the dashboard (one per
+parcel on a card that groups several at one place) and on the parcel page. It reads **Mark as received**
+when the parcel was not at a pickup point.
 
 - **It is an event, not a status overwrite.** One `delivered` event at the moment you clicked, reading
   `Collected — marked by you` (or `Received — …`), is added to the parcel's timeline, and a row in
