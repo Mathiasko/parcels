@@ -9,7 +9,7 @@ import {
   statusIndicator,
 } from './format.js'
 import { glyph } from './glyphs.js'
-import { codeKind, placeLine, postmark, rubberStamp } from './ornaments.js'
+import { checkedStamp, codeKind, placeLine, postmark, rubberStamp } from './ornaments.js'
 import { html, raw, type Html } from './html.js'
 import { layout, notice, type PageCtx } from './layout.js'
 import { calendarForm, calendarNotice, calendarOffered, type CalendarFormState, type CalendarOutcome } from './calendar-form.js'
@@ -436,6 +436,12 @@ function inFlightClause(total: number, act: Array<{ n: number; one: string; many
 const mailClause = (n: number): Html =>
   html`${String(n)} ${n === 1 ? 'email needs' : 'emails need'} a look (see <a href="/attention">Attention</a>).`
 
+/** The app has stopped looking, in plain words with the time it last did: "the poller" is the name of a background job. */
+function notCheckedClause(ctx: PageCtx): Html {
+  const last = ctx.poller?.lastPollAt
+  return html`Not checked ${last ? `since ${formatDateTime(last, ctx.now)}` : 'lately'}, so this may be out of date — see <a href="/health">Health</a>.`
+}
+
 /** The index lede: what is known, and a calm all-clear only when the data can support it. See design-language §5.2. */
 export function indexLede(entries: Entry[], ctx: PageCtx): Html {
   const { health, now } = ctx
@@ -465,12 +471,7 @@ export function indexLede(entries: Entry[], ctx: PageCtx): Html {
   if (dormant) parts.push(html`${dormant} ${dormant === 1 ? 'is' : 'are'} no longer polled (see <a href="/attention">Attention</a>).`)
   if (unclassified) parts.push(`${unclassified} ${unclassified === 1 ? 'has' : 'have'} no status; read ${unclassified === 1 ? 'its' : 'their'} latest message.`)
   if (failing.length) parts.push(`${listNames(failing)} ${failing.length === 1 ? 'is' : 'are'} failing, so this may be out of date.`)
-  // Said in plain words with the time it last looked: "the poller" is the name of a background job,
-  // which is not something the person reading this should need to know exists.
-  if (overdue) {
-    const last = ctx.poller?.lastPollAt
-    parts.push(html`Not checked ${last ? `since ${formatDateTime(last, now)}` : 'lately'}, so this may be out of date — see <a href="/health">Health</a>.`)
-  }
+  if (overdue) parts.push(notCheckedClause(ctx))
   // The all-clear is earned: nothing waiting, nothing unreadable or unpolled, and nothing it depends on is broken.
   if (!act && !mail && !unclassified && !failing.length && !noPostcode && !dormant && !overdue) parts.push('Nothing needs you.')
   return html`${parts.flatMap((p, i) => (i === 0 ? [p] : [' ', p]))}`
@@ -487,6 +488,8 @@ const MAIL_SETUP = html`<p><strong>Gmail is not connected yet.</strong></p>
 export interface IndexOptions {
   /** Whether a mail account is saved. False shows the "connect Gmail" notice. Absent counts as set up. */
   mailConfigured?: boolean
+  /** The last run could not read the mailbox. `last_poll` is stamped regardless, so it cannot say this. */
+  mailFailing?: boolean
   /** A parcel just marked collected from this page: the notice with its Undo (see `collectedNotice`). */
   collected?: { parcel: Parcel; mark: Pick<UserMark, 'kind' | 'at'> }
   /** Parcels that turned ready with a code during the finished run on `?run=N`: their cards get `just-arrived`. */
@@ -495,6 +498,29 @@ export interface IndexOptions {
   calendar?: { outcome: CalendarOutcome; parcel: Parcel }
   /** An "Add to Calendar" submission refused for a parcel that no longer shows the form to say it in. */
   calendarRefused?: string
+}
+
+/**
+ * What an empty dashboard says before its sentence: "0 in flight" says nothing, so the line appears only
+ * for something the reader should know about the empty page itself.
+ */
+function emptyLede(ctx: PageCtx, opts: IndexOptions): Html {
+  const parts: Html[] = []
+  if (ctx.attention) parts.push(mailClause(ctx.attention))
+  if (ctx.poller?.overdue) parts.push(notCheckedClause(ctx))
+  if (opts.mailFailing) parts.push(html`Gmail could not be read, so this may be out of date — see <a href="/health">Health</a>.`)
+  return parts.length === 0 ? html`` : html`<p class="lede">${parts.flatMap((p, i) => (i === 0 ? [p] : [html` `, p]))}</p>`
+}
+
+/**
+ * When the empty dashboard may say "Nothing to collect": the time of the check that supports it, or nothing.
+ * It is a claim about the world (design-language §1 rule 6), so it needs a mailbox that is connected and was
+ * read, a check that really happened and is recent, no mail waiting on the reader, and a refresh that did
+ * not just fail.
+ */
+function allClearAt(ctx: PageCtx, note: RefreshNote | undefined, opts: IndexOptions): Date | undefined {
+  if (opts.mailConfigured === false || opts.mailFailing || ctx.attention || note?.error) return undefined
+  return ctx.poller?.overdue ? undefined : ctx.poller?.lastPollAt
 }
 
 export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote, opts: IndexOptions = {}): Html {
@@ -506,14 +532,19 @@ export function indexPage(entries: Entry[], ctx: PageCtx, note?: RefreshNote, op
     : html`<p class="empty">Nothing in flight. Parcels appear here when a shipping email arrives, or when you <a href="/add">add one</a>.</p>`
   const marked = html`${collectedNotice(opts.collected)}${calendarNotice(opts.calendar?.outcome, opts.calendar?.parcel, ctx.now)}${
     opts.calendarRefused ? notice('warn', html`<p>${opts.calendarRefused}</p>`, true) : ''}`
-  // The lede is the page's first sentence, right under the h1, before any notice or banner. With
-  // nothing in flight there is none ("0 in flight" says nothing), unless mail is waiting: that is the
-  // one thing an empty dashboard must still say.
-  const lede = entries.length > 0 ? html`<p class="lede">${indexLede(entries, ctx)}</p>`
-    : ctx.attention ? html`<p class="lede">${mailClause(ctx.attention)}</p>` : ''
+  // The lede is the page's first sentence, right under the h1, before any notice or banner.
+  const lede = entries.length > 0 ? html`<p class="lede">${indexLede(entries, ctx)}</p>` : emptyLede(ctx, opts)
+  const clearAt = entries.length === 0 ? allClearAt(ctx, note, opts) : undefined
+  // The hero is `.allclear`, which only a theme styles; its headline, stamp and Checked line are hidden by
+  // the base, so without them this is the same plain sentence.
+  const emptyState = clearAt
+    ? html`<div class="allclear"><p class="orn-empty" aria-hidden="true">Nothing<br>to collect</p>${checkedStamp(clearAt, DISPLAY_ZONE)}<div class="allclear-f">${empty}<p class="checked">Checked ${formatDateTime(clearAt, ctx.now)}</p></div></div>`
+    : empty
   return layout('In flight', '/', html`
 <div class="col"><div class="head"><h1>In flight</h1>
   <form class="inline" method="post" action="/refresh"><button>Refresh now</button></form></div>
 ${lede}${mailOff ? notice('neutral', MAIL_SETUP, false, 'mail-setup') : ''}${refreshBanner(note, ctx.now, REFRESH_DOES)}${marked}${
-  entries.length === 0 ? html`<p class="orn-empty" aria-hidden="true">Nothing needs you</p>${empty}` : cards.map(c => card(c, ctx, opts.justArrived))}</div>`, ctx)
+  entries.length === 0 ? emptyState : cards.map(c => card(c, ctx, opts.justArrived))}</div>`, ctx,
+    // A theme shows this one or the page's own, never both; only this one loses "now" on a phone.
+    html`<form class="hd-refresh" method="post" action="/refresh"><button>Refresh<span class="hd-now"> now</span></button></form>`)
 }

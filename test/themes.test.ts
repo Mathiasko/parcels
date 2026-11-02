@@ -292,7 +292,7 @@ describe('Postal ornaments', () => {
   })
 
   test('show every hook they style', () => {
-    for (const hook of ['.orn-place', '.orn-rubber', '.orn-empty', '.orn-postmark']) {
+    for (const hook of ['.orn-place', '.orn-rubber', '.orn-empty', '.orn-stamp', '.orn-postmark']) {
       expect(own, hook).toMatch(new RegExp(`\\${hook}\\{[^}]*display:(block|inline|inline-block)`))
     }
     for (const kind of ['box', 'counter', 'plain']) expect(own).toContain(`.code-plate[data-kind=${kind}]`)

@@ -10,6 +10,7 @@ import { appendEvents } from '../src/db/events.js'
 import { recordPickupCode } from '../src/db/pickup-codes.js'
 import { codeKind, placeName, postmark, postmarkDate, rubberText } from '../src/web/views/ornaments.js'
 import { markCollected } from '../src/core/collected.js'
+import { recordPoll } from '../src/core/sleepgap.js'
 import { failRun, finishRun, startRun } from '../src/db/poll-runs.js'
 import { pickupCodeLine } from '../src/web/views/index.js'
 import { readdirSync, readFileSync } from 'node:fs'
@@ -186,10 +187,6 @@ describe('rubber stamp, empty headline and the orn- rule', () => {
     })
     expect(body).not.toContain('orn-rubber')
   })
-  test('the empty dashboard has the headline right before the sentence', async () => {
-    const body = await page(() => {})
-    expect(body).toContain('<p class="orn-empty" aria-hidden="true">Nothing needs you</p><p class="empty">')
-  })
   test('a dashboard with cards has no empty headline', async () => {
     expect(await page(failed('x'))).not.toContain('orn-empty')
   })
@@ -204,7 +201,13 @@ describe('rubber stamp, empty headline and the orn- rule', () => {
   })
   test('every orn- element on the pages is aria-hidden', async () => {
     const collected = (db: Db) => { withCode(db); markCollected(db, 1, { actor: 'web', at: NOW }) }
-    const bodies = [await page(() => {}), await page(failed('Adresát nezastihnutý')), await page(withCode),
+    const checked = memDb()
+    recordPoll(checked, NOW.getTime() - 60_000)
+    const imap = { host: 'imap.example.com', port: 993, user: 'u@example.com', pass: 'pw', mailbox: 'parcels' }
+    const clear = (await buildServer({ db: checked, config: { ...config, imap }, now: () => NOW, notifier: { send: async () => {} } })
+      .inject({ method: 'GET', url: '/' })).body.replace(/<style>[\s\S]*?<\/style>/, '')
+    expect(clear).toContain('orn-stamp')
+    const bodies = [clear, await page(failed('Adresát nezastihnutý')), await page(withCode),
       await page(collected, '/parcel/1?collected=1'), await page(collected, '/?collected=1')]
     const tags = bodies.flatMap(ornTags)
     expect(tags.filter(t => t.includes('orn-postmark'))).toHaveLength(2)
@@ -219,7 +222,7 @@ describe('rubber stamp, empty headline and the orn- rule', () => {
   })
   test('the view sources use only deliberate orn- class names', () => {
     // A class that starts with orn- is hidden under Classic; anything unplanned would silently vanish.
-    const allowed = ['orn-place', 'orn-rubber', 'orn-empty', 'orn-postmark']
+    const allowed = ['orn-place', 'orn-rubber', 'orn-empty', 'orn-postmark', 'orn-stamp']
     const src = [...readdirSync(viewsDir)].filter(f => f.endsWith('.ts')).map(f => readFileSync(join(viewsDir, f), 'utf8')).join('\n')
     for (const m of src.matchAll(/class="([^"]*)"/g)) {
       for (const tok of m[1]!.split(/\s+/)) if (tok.startsWith('orn-')) expect(allowed).toContain(tok)

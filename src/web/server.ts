@@ -444,6 +444,7 @@ export function buildServer(deps: WebDeps): FastifyInstance {
     const justArrived = r.finished && arrivedIn(r.finished, entries, c.now)
     return send(reply, indexPage(entries, { ...c, reloadIn: r.reloadIn }, r.note, {
       mailConfigured: config.imap !== undefined, collected: justCollected(query, c.now), justArrived,
+      mailFailing: config.imap !== undefined && (getIngestStatus(db)?.consecutiveFailures ?? 0) > 0,
       calendar: calendarResult(query, c.now),
       calendarRefused: refusedElsewhere(refused, active),
     }), status)

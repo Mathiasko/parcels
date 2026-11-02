@@ -47,7 +47,7 @@ between two runs (the settings page shows the database path). A full run takes a
 | Scene | URL | What it shows |
 |---|---|---|
 | `dash` | `/` | Eight cards: ready Z-BOX + code, ready locker + code, ready ParcelShop + PIN, ready post office + PIN (due tomorrow), ready with no pickup kind + PIN, out for delivery, failed attempt ("Adresát nezastihnutý"), in transit |
-| `dash-empty` | `/` | Nothing in flight |
+| `dash-empty` | `/` | Nothing in flight, on a normal day: the app has just checked, so Postal shows `Nothing to collect` and its stamp |
 | `dash-collected-notice` | `/?collected=<id>` | The "Marked … as collected" notice for a mark 10 minutes old (`just-collected` with a postmark), above the eight cards |
 | `dash-arrived` | `/?run=<id>` | A run that finished 2 minutes ago and moved the Z-BOX parcel to ready: its card is `just-arrived` |
 | `parcel-box` | `/parcel/<zbox>` | Box code plate |

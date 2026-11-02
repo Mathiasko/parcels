@@ -51,6 +51,15 @@ const POSTAL: Partial<Record<GlyphName, string>> = {
  * The font is a theme token through an inline style, because an SVG presentation attribute cannot read
  * a custom property; `style-src 'unsafe-inline'` allows it.
  */
+/** The ring and its cancellation lines, with the words around the arc: what the postmark records. */
+const postmarkRing = (id: string, arc: string): string =>
+  `<symbol id="${id}" viewBox="0 0 236 142"><g filter="url(#pm-rough)" fill="none" stroke="currentColor">`
+  + '<circle cx="60" cy="71" r="52" stroke-width="4"/><circle cx="60" cy="71" r="34" stroke-width="1.6"/>'
+  + '<g transform="translate(0 11)"><text style="font-family:var(--font-body)" font-weight="800" font-size="12" letter-spacing="2.6" textLength="243" lengthAdjust="spacing" fill="currentColor" stroke="none">'
+  + `<textPath href="#pm-arc" startOffset="0">${arc}</textPath></text></g>`
+  + '<path d="M118 44q14-10 28 0t28 0t28 0t28 0M118 62q14-10 28 0t28 0t28 0t28 0M118 80q14-10 28 0t28 0t28 0t28 0M118 98q14-10 28 0t28 0t28 0t28 0" stroke-width="3.4" stroke-linecap="round"/>'
+  + '</g></symbol>'
+
 const POSTMARK_DEFS = '<filter id="pm-rough" x="-10%" y="-10%" width="120%" height="120%">'
   + '<feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7" result="t"/>'
   + '<feDisplacementMap in="SourceGraphic" in2="t" scale="2.6" result="d"/>'
@@ -58,12 +67,7 @@ const POSTMARK_DEFS = '<filter id="pm-rough" x="-10%" y="-10%" width="120%" heig
   + '<feColorMatrix in="s" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.4 2.05" result="sm"/>'
   + '<feComposite in="d" in2="sm" operator="in"/></filter>'
   + '<path id="pm-arc" d="M20 60a40 40 0 1 1 80 0a40 40 0 1 1 -80 0"/>'
-  + '<symbol id="postmark-ring" viewBox="0 0 236 142"><g filter="url(#pm-rough)" fill="none" stroke="currentColor">'
-  + '<circle cx="60" cy="71" r="52" stroke-width="4"/><circle cx="60" cy="71" r="34" stroke-width="1.6"/>'
-  + '<g transform="translate(0 11)"><text style="font-family:var(--font-body)" font-weight="800" font-size="12" letter-spacing="2.6" textLength="243" lengthAdjust="spacing" fill="currentColor" stroke="none">'
-  + '<textPath href="#pm-arc" startOffset="0">PARCELS ✶ COLLECTED ✶</textPath></text></g>'
-  + '<path d="M118 44q14-10 28 0t28 0t28 0t28 0M118 62q14-10 28 0t28 0t28 0t28 0M118 80q14-10 28 0t28 0t28 0t28 0M118 98q14-10 28 0t28 0t28 0t28 0" stroke-width="3.4" stroke-linecap="round"/>'
-  + '</g></symbol>'
+  + postmarkRing('postmark-ring', 'PARCELS ✶ COLLECTED ✶') + postmarkRing('postmark-ring-checked', 'PARCELS ✶ CHECKED ✶')
 
 export const SPRITE: Html = raw(`<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false"><defs>${POSTAL_MASK}${POSTMARK_DEFS}${
   (Object.keys(SYMBOLS) as GlyphName[]).map(n => `<symbol id="g-${n}" viewBox="0 0 16 16">${SYMBOLS[n]}</symbol>`).join('')

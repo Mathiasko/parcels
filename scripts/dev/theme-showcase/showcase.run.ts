@@ -31,6 +31,7 @@ import { insertParcel, updateParcelState } from '../../../src/db/parcels.js'
 import { appendEvents } from '../../../src/db/events.js'
 import { recordPickupCode } from '../../../src/db/pickup-codes.js'
 import { finishRun, startRun } from '../../../src/db/poll-runs.js'
+import { recordPoll } from '../../../src/core/sleepgap.js'
 import { markCollected } from '../../../src/core/collected.js'
 import { buildServer } from '../../../src/web/server.js'
 import type { CanonicalStatus, CarrierId, HttpClient, ParcelEvent, PickupPoint } from '../../../src/core/types.js'
@@ -128,6 +129,8 @@ function seed(world: World, dbPath: string): Seeded {
   }
   finishRun(db, run, { counts: { polled: world === 'board' ? 8 : 0, newEvents: world === 'board' ? 1 : 0, failures: 0 }, summary: '' },
     new Date(NOW.getTime() - 2 * MIN))
+  // What lets the empty dashboard say so: a completed check that the mailbox answered.
+  recordPoll(db, NOW.getTime() - 2 * MIN)
   ids.run = run
   return { db, ids }
 }

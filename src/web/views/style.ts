@@ -19,14 +19,15 @@ body{margin:0;background:var(--paper);background-image:var(--texture);color:var(
 .g{flex:none;display:block}
 .gp{display:none}
 [class^="orn-"],[class*=" orn-"]{display:none}
+.hd-refresh,.checked{display:none}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--edge);text-decoration-thickness:1px;text-underline-offset:3px}
 a:hover{text-decoration-color:var(--ink)}
 :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
-.frame{max-width:64rem;margin:0 auto;padding:3rem 1.5rem 4.5rem}
+.frame{max-width:64rem;margin:0 auto;padding:0 1.5rem 4.5rem}
 .col{max-width:42rem}
-header{max-width:42rem;margin-bottom:2rem}
-nav{display:flex;flex-wrap:wrap;gap:0 1.5rem;align-items:baseline}
+header{max-width:64rem;margin:0 auto 2rem;padding:3rem 1.5rem 0}
+nav{max-width:42rem;display:flex;flex-wrap:wrap;gap:0 1.5rem;align-items:baseline}
 nav a.brand{color:var(--ink);font-weight:600;margin-right:.5rem}
 nav a{display:inline-flex;flex-direction:column;align-items:flex-start;white-space:nowrap;color:var(--ink-3);text-decoration:none;padding:.25rem 0}
 /* the bold current item would widen by a few px and nudge its neighbours: reserve its bold width on every item */

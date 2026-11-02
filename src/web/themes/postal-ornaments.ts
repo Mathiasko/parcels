@@ -115,6 +115,19 @@ export const POSTAL_ORNAMENTS = [
   // viewport), so the line keeps room for "— marked by you ·" and Undo on one row.
   `@media(max-width:40rem){${MARKED_STATUS}{--pm-w:6rem;padding-right:calc(var(--pm-w) - 1rem)}${R} .status>.orn-postmark{right:-1.25rem}${MARKED_NOTICE}{--pm-w:6.5rem;padding-left:5.25rem}}`,
 
-  // The empty dashboard's headline (board .empty h3, 257-262), above the sentence that says it in full.
-  `${R} .orn-empty{display:block;margin:1.25rem 0 .375rem;color:var(--ink);font-family:var(--font-display);font-size:2.125rem;font-weight:400;line-height:1.1;text-wrap:balance}`,
+  // The empty dashboard, as a poster: the headline large and the stamp of the last check beside it, then a
+  // heavy rule over the sentence and the time. The stamp sits in the headline's right-hand half however wide
+  // the column is, so it can only ever touch the words; on a phone it moves above them.
+  `${R} .allclear{position:relative;margin-top:3.75rem}`,
+  `${R} .orn-empty{display:block;margin:0;color:var(--ink);font-family:var(--font-display);font-size:4.5rem;font-weight:400;line-height:.98;letter-spacing:-.01em}`,
+  `${R} .orn-stamp{display:block;position:absolute;top:-1.5rem;right:-.5rem;width:min(21.5rem,52%);color:var(--ok);opacity:.88;transform:rotate(-9deg);mix-blend-mode:var(--orn-blend);pointer-events:none;-webkit-user-select:none;user-select:none}`,
+  `${R} .orn-stamp svg{display:block;width:100%;height:auto;overflow:visible}`,
+  `${R} .allclear-f{display:flex;justify-content:space-between;align-items:baseline;gap:2rem;margin-top:2rem;padding-top:.875rem;border-top:2px solid var(--ink)}`,
+  `${R} .allclear-f .empty{margin:0;max-width:27rem;color:var(--ink-2)}`,
+  `${R} .checked{display:block;margin:0;flex:none;color:var(--ink-2);font-family:var(--font-mono);font-size:.875rem}`,
+  // The stamp's rotated box reaches past a phone's edge, and it is decoration: clip it rather than scroll.
+  `${R} .frame:has(.allclear){overflow-x:clip}`,
+  `@media(max-width:40rem){${R} .allclear{margin-top:9.5rem}${R} .orn-empty{font-size:3.5rem}${R} .orn-stamp{top:-9.25rem;right:-1rem;width:16rem}${R} .allclear-f{flex-direction:column;gap:.75rem}}`,
+  // When the empty page cannot say that, what it says instead takes the headline's place.
+  `${R} .col>.lede:has(~.empty){margin:1.75rem 0 1rem;color:var(--ink);font-family:var(--font-display);font-size:2.125rem;line-height:1.15}`,
 ].join('\n')

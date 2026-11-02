@@ -375,6 +375,7 @@ Real examples, with the data as it is today:
 | same, but Packeta is failing | `2 in flight. Packeta is failing, so this may be out of date.` |
 | six pickups at three places, one out for delivery | `9 in flight, 6 ready for pickup and 1 out for delivery.` |
 | zero | **no lede.** The empty state says `Nothing in flight. Parcels appear here when an email arrives or when you add one.` (not "0 in flight" above it) |
+| zero, but mail waits, it has stopped checking, or Gmail could not be read | the matching sentence of each, and nothing else: `1 email needs a look (see Attention).`, `Not checked since 09:00, so this may be out of date — see Health.`, `Gmail could not be read, so this may be out of date — see Health.` |
 
 A parcel with **no events** at all (a brand-new GLS parcel) does *not* block "Nothing needs you": there is nothing that could be waiting.
 
@@ -960,12 +961,17 @@ Everything above is **Classic**: the look the dashboard had before themes, uncha
 - `data-status="<status>"` on the badge (`.b`, `.st`) and on the card.
 - `.code-plate[data-kind=box|counter|plain]`, and `.orn-place` inside it (`Z-BOX · Packeta`).
 - Each status glyph is drawn twice: `.gc` (Classic) and `.gp` (Postal), because CSS cannot change a `<use href>`.
-- `.orn-rubber` (the carrier's own words on a failed card, at most three words and 24 characters, else `Not delivered`), `.orn-postmark` (the collect date and time) and `.orn-empty` (the empty dashboard's headline).
+- `.orn-rubber` (the carrier's own words on a failed card, at most three words and 24 characters, else `Not delivered`), `.orn-postmark` (the collect date and time), and `.orn-empty` and `.orn-stamp` (the empty dashboard's headline and its stamp).
+- `.hd-refresh` (the dashboard's Refresh, in the header's row) and `.checked` (the time of the last check). Both are real content, so they are not `aria-hidden`: the base hides them with `display:none`, which removes them for everyone under Classic.
 - `just-collected` and `just-arrived`, the one-shot markers. The server adds them only on the page an event redirects to, and only for an hour after it (`COLLECTED_NOTICE_MS`), so a reload within that hour replays them. `just-collected` goes on the postmark in two places: on the parcel page (`/parcel/<id>?collected=1`) and in the dashboard's "Marked … as collected" notice (`/?collected=<id>`). `just-arrived` goes on the cards a finished refresh brought in (`/?run=<id>`). They are never added on the self-reloading pages shown while a refresh runs.
 
 **The base hides them**: `style.ts` carries `.gp{display:none}` and `[class^="orn-"],[class*=" orn-"]{display:none}`, so a theme has to opt in to each one. A new theme that forgets an ornament shows nothing, rather than a stray postmark. The rule for any new hook is the same: add it to the markup hidden, and let a theme reveal it.
 
 **The badge set.** Each status keeps its word; Postal changes the colour and the shape. `ready_for_pickup` is a yellow perforated stamp (and a box code is a larger one, tilted); `out_for_delivery` is outlined with chevrons, and its card gets a red-and-blue airmail top edge; `failed_attempt` is a voided ring, with a hatched red left edge and a rubber stamp of the carrier's reason; `in_transit` is an envelope; `delivered`, `collected` and `received` are a blue ring with a postmark glyph. The other five keep Classic's glyphs.
+
+**The header.** A full-width navy band with a perforated lower edge (`postal-band.ts`), navy in both modes rather than following `--ink`, which turns cream in dark. The name, with the app's stamp mark, and the actions share the first row; the pages are on the second, with Health and Settings apart at the right. It restyles the same `<nav>` as Classic: the rows come from flex `order` and a line break in `nav::before`, so the document order does not change. `<header>` sits outside `.frame` so it can run the width of the window, and its links line up with the page's column at every width. On the dashboard the band takes over Refresh, and the title row is hidden, since the current page already names it; the `h1` stays for a screen reader.
+
+**The empty dashboard.** A poster: `Nothing to collect` large, and a stamp reading `PARCELS ✶ CHECKED ✶` with the date and time of the last check, then a heavy rule over the plain sentence and `Checked Fri 6 Nov, 14:15`. The headline is a claim about the world (§1 rule 6), so all of it appears only when a mailbox is connected and was read on the last run, the app has checked and is not overdue, no mail waits on Attention, and the refresh just shown did not fail. Otherwise the page says what it knows: the lede of §5.2 takes the headline's place, and the sentence stays. Classic shows only the sentence, in every case except that lede. The all-clear in the lede of a page WITH parcels is still `Nothing needs you.`
 
 **Motion.** CSS only, in `postal-motion.ts`, and all of it inside `@media (prefers-reduced-motion: no-preference)`:
 

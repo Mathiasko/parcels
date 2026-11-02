@@ -56,7 +56,15 @@ function attentionLabel(label: string, waiting: number): Html {
   return html`<span class="lb">${label}<span class="vh">, </span><span class="n">${String(waiting)}</span><span class="vh"> ${waiting === 1 ? 'email' : 'emails'} waiting</span></span>`
 }
 
-export function layout(title: string, current: string, body: Html, ctx: PageCtx): Html {
+/** Health with its trouble dot: one span, for the same reason as Attention's count, so the dot stays beside the word. */
+const healthLabel = (label: string): Html =>
+  html`<span class="lb">${label}<span class="dot"></span><span class="vh"> carrier problem</span></span>`
+
+/**
+ * `actions` is a control for the page's own header row, beside Add parcel (the dashboard's Refresh). The base
+ * stylesheet hides it and a theme that wants it shows it, so a theme can keep the control in the page instead.
+ */
+export function layout(title: string, current: string, body: Html, ctx: PageCtx, actions?: Html): Html {
   const trouble = carrierTrouble(ctx.health)
   const waiting = ctx.attention ?? 0
   const a = ctx.appearance ?? DEFAULT_APPEARANCE
@@ -65,11 +73,10 @@ export function layout(title: string, current: string, body: Html, ctx: PageCtx)
 <meta name="viewport" content="width=device-width, initial-scale=1">
 ${ctx.reloadIn ? html`<meta http-equiv="refresh" content="${ctx.reloadTo ? `${ctx.reloadIn};url=${ctx.reloadTo}` : ctx.reloadIn}">` : ''}<title>${title} - Parcels</title>
 <style>${raw(STYLE)}</style></head>
-<body>${SPRITE}<div class="frame">
-<header><nav aria-label="Main"><a class="brand" href="/">Parcels</a>${NAV.map(([href, label]) =>
-    html`<a href="${href}" data-t="${label}"${href === current ? raw(' aria-current="page"') : ''}>${href === '/attention' ? attentionLabel(label, waiting) : label}${href === '/health' && trouble ? html`<span class="dot"></span><span class="vh"> carrier problem</span>` : ''}</a>`)
-  }<a class="add" href="/add" data-t="Add parcel"${current === '/add' ? raw(' aria-current="page"') : ''}>Add parcel</a></nav></header>
-<main>${body}</main></div></body></html>
+<body>${SPRITE}<header><nav aria-label="Main"><a class="brand" href="/">Parcels</a>${NAV.map(([href, label]) =>
+    html`<a href="${href}" data-t="${label}"${href === current ? raw(' aria-current="page"') : ''}>${href === '/attention' ? attentionLabel(label, waiting) : href === '/health' && trouble ? healthLabel(label) : label}</a>`)
+  }${actions ?? ''}<a class="add" href="/add" data-t="Add parcel"${current === '/add' ? raw(' aria-current="page"') : ''}>Add parcel</a></nav></header>
+<div class="frame"><main>${body}</main></div></body></html>
 `
 }
 
